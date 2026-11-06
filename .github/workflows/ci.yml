@@ -20,6 +20,9 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install --no-self-update
+      - name: sans dépendance (aucun paquet venu d'un registre ou d'un dépôt git)
+        if: runner.os == 'Linux'
+        run: test "$(cargo metadata --format-version 1 --locked | jq '[.packages[] | select(.source != null)] | length')" = 0
       - run: cargo fmt --check
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
