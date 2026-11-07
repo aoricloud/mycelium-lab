@@ -193,11 +193,20 @@ boutonPas80.addEventListener("click", () => {
     return;
   }
   const temps = module.mycelium_temps() >>> 0;
-  if (temps >= PAS_REFERENCE) {
-    etat.textContent = `La colonie est déjà au pas ${temps}.`;
-    return;
+  let passe;
+  if (temps < PAS_REFERENCE) {
+    module.mycelium_avancer(PAS_REFERENCE - temps);
+    passe = `Pas ${PAS_REFERENCE} atteint : la colonie est en pause.`;
+  } else if (temps === PAS_REFERENCE) {
+    // Déjà sur la référence : il n'y a rien à avancer.
+    passe = `La colonie est déjà au pas ${PAS_REFERENCE} : elle reste en pause.`;
+  } else {
+    // La simulation a dépassé la référence : on repart de zéro avec la même graine puis on
+    // avance exactement de PAS_REFERENCE pas ; le déterminisme redonne l'état de référence.
+    demarrer(graineCourante);
+    module.mycelium_avancer(PAS_REFERENCE);
+    passe = `La colonie dépassait le pas ${PAS_REFERENCE} : repartie de zéro, elle est revenue au pas ${PAS_REFERENCE} et reste en pause.`;
   }
-  module.mycelium_avancer(PAS_REFERENCE - temps);
   // On s'arrête au pas de la référence : l'empreinte affichée reste celle du dépôt.
   enPause = true;
   majBoutonPause();
@@ -205,7 +214,7 @@ boutonPas80.addEventListener("click", () => {
   dessiner();
   afficherMesures();
   rafraichirEmpreinte();
-  etat.textContent = `Pas ${PAS_REFERENCE} atteint : la colonie est en pause.`;
+  etat.textContent = passe;
 });
 
 curseurVitesse.addEventListener("input", () => {
@@ -293,10 +302,16 @@ function preparerSubstrat() {
   if (largeur === 0 || hauteur === 0) {
     return null;
   }
-  if (coucheSubstrat.width !== largeur || coucheSubstrat.height !== hauteur) {
+  if (
+    coucheSubstrat.width !== largeur ||
+    coucheSubstrat.height !== hauteur ||
+    pixelsSubstrat === null
+  ) {
     coucheSubstrat.width = largeur;
     coucheSubstrat.height = hauteur;
-    contexteSubstrat = coucheSubstrat.getContext("2d");
+    if (contexteSubstrat === null) {
+      contexteSubstrat = coucheSubstrat.getContext("2d");
+    }
     pixelsSubstrat = contexteSubstrat.createImageData(largeur, hauteur);
   }
   return { largeur, hauteur };
