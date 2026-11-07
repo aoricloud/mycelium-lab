@@ -25,7 +25,14 @@ fn simuler(graines: RangeInclusive<u64>) -> Vec<Vec<f64>> {
     graines
         .map(|graine| {
             let mut colonie = Colonie::depuis_spore((0.0, 0.0), parametres, graine);
-            colonie.avancer_n(PAS_TEMPS);
+            for _ in 0..PAS_TEMPS {
+                colonie.avancer();
+                assert!(
+                    colonie.pointes() <= 500,
+                    "graine {graine} : {} pointes, la ramification s'emballe",
+                    colonie.pointes()
+                );
+            }
             colonie.rayons().to_vec()
         })
         .collect()
@@ -159,8 +166,9 @@ fn verifier_jeu(jeu: &[Vec<f64>], premiere_graine: u64, pas: f64) {
     );
 }
 
-/// 1. La figure 3 sur le jeu A : croissance linéaire du rayon, pente proche de 0,86, et meilleur ajustement
-///    linéaire que logarithmique.
+/// 1. La figure 3 sur le jeu A : croissance linéaire du rayon, pente sous 1 et dans `[0.80 ; 0.97]` en moyenne
+///    (le prototype donne 0,915 ; la valeur publiée, 0,86, est dans l'intervalle mais n'est pas la cible), et
+///    meilleur ajustement linéaire que logarithmique.
 #[test]
 #[cfg_attr(not(feature = "etape-3"), ignore)]
 fn figure_3_croissance_lineaire_du_rayon() {
