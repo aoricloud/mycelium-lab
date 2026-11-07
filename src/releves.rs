@@ -32,7 +32,20 @@ pub const ENTETE_CSV: &str = "temps,biomasse,pointes,ramifications,anastomoses,r
 /// ligne, rien d'autre. Les sauts de ligne sont des `\n` : pas de `\r`, pas de BOM. Le texte se relit sans
 /// perte : chaque nombre reparsé redonne la valeur du relevé (Display d'un `f64` produit sa forme la plus
 /// courte qui se relit à l'identique).
-#[allow(unused_variables)] // le corps est `todo!()` jusqu'à la vague suivante
 pub fn en_csv(releves: &[Releve]) -> String {
-    todo!()
+    let mut texte = String::from(ENTETE_CSV);
+    texte.push('\n');
+    for releve in releves {
+        texte.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            releve.temps,
+            releve.biomasse,
+            releve.pointes,
+            releve.ramifications,
+            releve.anastomoses,
+            releve.rayon,
+            releve.substrat
+        ));
+    }
+    texte
 }
