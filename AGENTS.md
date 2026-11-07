@@ -26,6 +26,7 @@ toute main. Le plan est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations 
    pas à leurs fichiers (`FEUILLE-DE-ROUTE.md`, « Les tests avant les mains »).
 6. **Chaque mécanisme arrive avec sa référence publiée** (un article, une figure ou une équation), nommée dans
    `MODELE.md`.
-7. **Rien sous `.github/`** : la CI et la fusion restent à l'humain.
+7. **Rien sous `.github/`** : la CI et la fusion restent à l'humain. **Aucun `.cargo/`** : la CI le refuse, car sa
+   configuration peut changer ce que `cargo test` joue.
 
 Rien n'est critique dans ce dépôt.

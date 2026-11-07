@@ -72,8 +72,9 @@ l'étiquette `aurait-refuse` sur une PR fusionnée qu'il aurait refusée ; Krake
 issue de correction.
 
 **La fusion, sans une ligne de Kraken** : l'auto-fusion du dépôt est permise, et la règle de `main` exige la CI (Linux
-et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `kraken/` du dépôt, déclenché par
-`pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert.
+et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `kraken/` du dépôt vers `main`,
+déclenché par `pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert. La même CI refuse
+qu'une dépendance ou un `.cargo/` entre.
 
 **Le plan vit dans le dépôt** : ce document, et ses étapes en issues. Tant que Kraken ne prend pas encore ses issues
 seul, ses vagues sont lancées d'office, une étape après l'autre.
