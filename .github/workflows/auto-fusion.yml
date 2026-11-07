@@ -1,0 +1,28 @@
+# Demande à GitHub de fusionner une PR de Kraken dès que la CI que la règle de main exige est verte : seule une PR
+# d'une branche kraken/ de ce dépôt vers main, jamais d'un fork, et rien de la PR ne se lance ici (ni checkout, ni
+# code). Déclenché par pull_request, jamais pull_request_target. Une PR d'une autre branche, ou vers une autre base,
+# saute ce job : hors de main, aucune vérification n'est exigée, et gh fusionnerait tout de suite.
+name: auto-fusion
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  demander:
+    if: github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'kraken/')
+    runs-on: ubuntu-latest
+    # Un échec ne rougit pas le run, que Kraken lit comme un check de la PR : elle reste ouverte et verte, sans fusion
+    # demandée, et c'est à la session de le voir.
+    continue-on-error: true
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - run: gh pr merge "$PR" --auto --merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}

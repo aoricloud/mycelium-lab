@@ -1,0 +1,178 @@
+# Mycelium Lab — la feuille de route de la V0
+
+Ce document est le plan de la V0. Ses étapes deviennent des issues, et il change par PR, comme le code. Seules
+l'autonomie de Kraken et ses trois limites sont décidées par l'humain ; le reste est proposé, et se corrige en route.
+
+## Ce que c'est
+
+Un moteur de simulation de croissance mycélienne, libre, en Rust, orienté recherche, avec une interface visuelle
+claire : un labo virtuel. Il simule la croissance d'un réseau (extension des apex, ramification, anastomose,
+translocation des nutriments, tropismes, stress), explore l'espace des paramètres, se calibre sur des données
+réelles, en tire des mesures (biomasse, densité, topologie, dimension fractale) et compare des scénarios. Le visuel se
+tient entre le scientifique élégant, crédible pour un labo, et l'organique un peu hypnotique, qu'on laisse tourner pour
+le plaisir de regarder.
+
+« Outil de recherche » se gagne : sans chercheur qui l'utilise ni donnée réelle, ce serait un très joli jouet. Le
+critère sérieux, dès la V0 : reproduire une figure publiée, en nombres. C'est aussi la meilleure épreuve pour Kraken,
+parce que cette preuve ne dépend de l'avis d'aucun agent.
+
+## Ce que la V0 est, et ce qu'elle n'est pas
+
+- **Elle est** : une colonie qui pousse en 2D sur une boîte de Petri depuis une spore ; des nutriments qui diffusent sur
+  une grille ; une graine fixe, donc même graine, même colonie ; des mesures en nombres ; une figure publiée reproduite.
+- **Elle n'est pas encore** : la 3D, des liaisons Python, un salon de discussion, une prépublication, la calibration
+  sur des images. Tout cela attend une V0 qui tourne, ou un chercheur qui le demande.
+
+## Les principes
+
+1. **Rust sans dépendance**, comme Kraken : générateur pseudo-aléatoire, écrivain PNG et empreinte écrits dans le
+   dépôt. La CI reste simple et rien n'est à auditer.
+2. **Déterministe sur toutes les machines** : même graine, même état, sous Linux comme sous Windows. Donc pas de
+   `sin`, `cos`, `exp` ou `ln` de `f64`, qui passent par la bibliothèque mathématique du système et peuvent différer
+   d'un système à l'autre : des tables de directions ou des versions écrites dans le dépôt. Pas de `HashMap` parcourue
+   (son ordre change d'une exécution à l'autre) : des `Vec` ou des `BTreeMap`. Un ordre de mise à jour fixe.
+3. **La preuve, c'est l'état et les nombres** : l'empreinte de l'état simulé, par scénario et par graine
+   (`references/<scenario>.empreinte`), et des mesures avec une tolérance. Les tests d'acceptation d'une vague sont
+   écrits avant elle (voir « Les tests avant les mains »).
+4. **Le rendu, c'est pour l'œil** : les aperçus (la colonie, la carte des nutriments, les images d'une animation) sont
+   commités dans `apercus/` pour se voir dans le diff de la PR, y compris sur un téléphone, et restent libres
+   d'évoluer : ils ne sont pas une preuve. Embellir le rendu ne touche aucune référence.
+5. **Un changement voulu de l'état** (un mécanisme ajouté) met à jour l'empreinte de référence ; la PR nomme ce
+   fichier, et c'est là que l'humain juge, l'image d'avant et d'après et les mesures côte à côte. Quand l'empreinte ne
+   bouge pas, la simulation est identique et seul le rendu a changé.
+6. **Chaque mécanisme arrive avec sa référence** publiée (article, figure ou équation) et sa reproduction en nombres.
+
+## Les modules
+
+| Module | Rôle |
+|---|---|
+| `alea` | générateur pseudo-aléatoire (PCG32 ou xorshift64*), la graine |
+| `grille` | la boîte de Petri (un disque sur une grille carrée), ses champs |
+| `croissance` | les apex : extension, marche persistante, ramification, anastomose |
+| `substrat` | les nutriments : diffusion (schéma explicite, pas de temps stable), consommation, conservation |
+| `mesures` | biomasse, nombre de pointes, densité de ramification, longueur par pointe, profil radial, vitesse radiale, dimension fractale par comptage de boîtes, conservation de la masse |
+| `scenario` | les paramètres (un fichier texte simple), la graine, la durée |
+| `empreinte` | l'empreinte de l'état, sur une écriture canonique |
+| `image` | l'écrivain PNG (blocs deflate stockés, CRC32, Adler32) |
+| `rendu` | les aperçus et les images d'animation |
+| binaire `mycelium` | `mycelium lancer <scénario> --graine <n> --sortie <dossier>` : l'empreinte, les mesures en CSV, les aperçus |
+
+## L'autonomie de Kraken
+
+Kraken mène Mycelium Lab en autonomie totale, dans trois limites décidées par l'humain :
+1. la preuve et le mur restent : Kraken rejoue lui-même chaque preuve, et les mains travaillent derrière le mur ;
+2. ce seul dépôt : un jeton limité à Mycelium Lab ; les réglages du dépôt (règles, vérifications exigées, Pages) restent
+   à l'humain, et Kraken ne peut pas lever ses propres garde-fous (il ne pousse jamais `.github/`, n'a aucun droit
+   d'administration) ;
+3. seulement les issues de l'humain ou celles de Kraken : sur un dépôt public, le texte d'un inconnu ne devient jamais
+   la consigne d'une main.
+
+Le reste est libre : écrire ses issues, choisir l'ordre, fusionner, enchaîner. Proposé, non décidé : l'humain pose
+l'étiquette `aurait-refuse` sur une PR fusionnée qu'il aurait refusée ; Kraken la compte comme un raté et ouvre une
+issue de correction.
+
+**La fusion, sans une ligne de Kraken** : l'auto-fusion du dépôt est permise, et la règle de `main` exige la CI (Linux
+et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `kraken/` du dépôt vers `main`,
+déclenché par `pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert. La même CI refuse
+qu'une dépendance ou un `.cargo/` entre.
+
+**Le plan vit dans le dépôt** : ce document, et ses étapes en issues. Tant que Kraken ne prend pas encore ses issues
+seul, ses vagues sont lancées d'office, une étape après l'autre.
+
+## Les tests avant les mains
+
+Chaque étape a deux vagues. La première écrit les signatures publiques de l'étape (des corps qui paniquent) et ses
+tests d'acceptation, d'après l'issue et sa référence ; elle déclare la fonctionnalité `etape-<n>` dans `Cargo.toml`,
+sans l'activer, et chaque test porte `#[cfg_attr(not(feature = "etape-<n>"), ignore)]`. Elle est fusionnée comme les
+autres. La seconde remplit les corps et ajoute `etape-<n>` aux fonctionnalités par défaut, ce qui lève les `ignore`
+sans toucher aux tests : ses tâches n'ont pas les fichiers de tests dans leurs `fichiers`, et Kraken refuse une main
+qui y touche. C'est la meilleure parade d'ImpossibleBench : des tests en lecture seule.
+
+## Les règles que les mains ne lisent pas encore
+
+Une main de Kraken ne reçoit pas encore les consignes du dépôt (`AGENTS.md`, `CLAUDE.md`). Chaque issue redit donc les
+règles qui comptent pour son étape : le déterminisme (ni `sin` ni `exp` du système, ni `HashMap` parcourue), les tests
+qu'on ne touche pas, le « sans dépendance ». La CI sous Linux et sous Windows attrape un état qui différerait d'un
+système à l'autre : l'empreinte de référence n'y serait plus la même.
+
+## Les vagues
+
+Chaque vague part par Kraken sur une issue (`kraken lancer mycelium --issue <n> --decouper --verifier "<preuve>" --pr
+main`), sous le profil `mycelium` : le mur exigé, Sonnet aux mains. GitHub fusionne ce qui est vert. La preuve :
+`cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`.
+
+| Étape | Tâches (en parallèle dans une vague) | Tests d'acceptation | Aperçu |
+|---|---|---|---|
+| 0, le socle | (a) `alea`, `grille`, `scenario`, `empreinte` et le binaire qui lance un scénario vide ; (b) `image` et un premier aperçu | même graine, même empreinte ; deux graines, deux empreintes ; PNG relu octet par octet (signature, CRC, Adler) | la boîte vide |
+| 1, trois branches | (a) croissance : apex, pas, marche persistante, ramification ; (b) substrat : diffusion, bords sans flux, conservation ; (c) mesures, sur des images synthétiques | (a) longueur d'un apex = pas × temps, intervalle de ramification moyen à quelques pour cent du paramètre, isotropie sur plusieurs graines ; (b) masse conservée, variance d'un pic qui croît comme 2Dt, symétrie ; (c) carré plein → 2, segment → 1, tapis de Sierpinski → ln 8 / ln 3 ≈ 1,893 | un arbre d'hyphes ; un pic qui s'étale ; les images synthétiques |
+| 2, le couplage | (a) la colonie : les apex consomment, l'extension dépend du substrat, une spore au centre ; (b) l'anastomose ; (c) les mesures branchées sur la simulation, en CSV par pas de temps | substrat + biomasse conservés ; rayon linéaire après une latence (R² au-dessus d'un seuil sur la fenêtre tardive) ; anastomoses nulles quand l'option est coupée, reproductibles sinon ; empreintes de référence | la colonie, et son animation |
+| 3, la référence | (a) reproduire la figure choisie (voir plus bas), avec une tolérance ; (b) `MODELE.md` : équations, hypothèses, limites, d'où vient chaque valeur | la figure en nombres | la figure refaite, à côté de l'originale |
+| 4, la vitrine | une page web où la simulation tourne en direct : cible `wasm32-unknown-unknown` sans dépendance, quelques fonctions exportées, un canvas en JavaScript | la page charge et l'empreinte d'une graine est la même qu'en natif | la page elle-même |
+
+Chaque ligne est une étape, en deux vagues : ses tests d'abord, son code ensuite (voir « Les tests avant les mains »).
+La vitrine se publie sur GitHub Pages une fois que l'humain l'a ouvert, son geste, une fois ; ensuite chaque fusion la
+republie. Elle donne aussi la matière d'une vidéo.
+
+## Après la V0, dans l'ordre, chacune avec sa référence
+
+1. Les tropismes (chimiotropisme vers les nutriments, thigmotropisme contre les obstacles).
+2. Les milieux hétérogènes et les obstacles : la lignée de Boswell (2003, 2007), Hopkins et Boswell (2012).
+3. Les stress simples.
+4. Le balayage de paramètres en local (un mode par lots).
+5. La documentation scientifique du modèle, complète.
+
+Attendent une V0 qui tourne, ou un chercheur : la 3D, Python, un salon, une prépublication, la calibration sur images,
+la compétition entre espèces.
+
+## La référence de la V0
+
+D'après la réimpression de l'article, le modèle de Meškauskas, Fricker et Moore (2004) est **en 3D** ; leurs colonies
+« de boîte de Petri » sont du 3D tenu en couche mince (4 unités) par un tropisme horizontal (constante 0,002), sans
+vrai 2D. L'article n'a aucun tableau, et la plupart de ses figures sont des images. Une seule figure chiffrée se refait
+en 2D : la **figure 3**, où le rayon de la colonie croît linéairement avec le temps, avec une pente d'environ 0,86 fois
+la vitesse d'un apex (« The slope of the line in both cases in Fig. 3 is about 0.86 ») ; l'écart à 1 vient des apex
+qui ne partent pas droit vers l'extérieur. Les paramètres donnés : la vitesse d'un apex (1), l'autotropisme négatif
+(facteur de persistance k = 0,1), la ramification selon la densité (seuil 0,06, champ de densité de portée 20, 40 % par
+itération). Manquent la formule exacte du champ de densité et de l'autotropisme, l'angle de ramification, le nombre
+d'apex au départ ; le programme Java est cité, pas son code. Les figures 6 et 7 dépendent du passage du 3D au plat et ne
+se refont pas en 2D. L'article ne donne aucune mesure de vraies colonies.
+
+Pour la V0, donc :
+- **La cible** : la figure 3, en nombres : une croissance linéaire, pas exponentielle, et une pente de 0,86 fois la
+  vitesse d'un apex, à une tolérance à fixer (par exemple 0,05), avec les paramètres publiés ; ce qui manque est choisi
+  et écrit dans `MODELE.md`. C'est une reproduction dans l'esprit de la figure, en 2D, pas sa copie exacte, et
+  `MODELE.md` le dit.
+- **Une seconde vérification**, qui ne dépend d'aucun réglage : la vitesse radiale constante prédite par Edelstein
+  (1982).
+- **Les mesures de vraies colonies** viennent d'ailleurs (par exemple une dimension fractale d'environ 1,94 pour une
+  colonie entière d'Ashbya gossypii, Ritz et Crawford 1990) et servent de garde-fous larges, pas de cible.
+- **Les mesures unifiées** : biomasse (longueur totale), nombre de pointes, densité de ramification, longueur par
+  pointe (l'« unité de croissance hyphale » de l'article), dimension fractale, rayon et vitesse radiale, profil radial,
+  conservation du substrat et de la biomasse.
+- **Les nutriments** de la V0 ne viennent pas de cet article : ils suivent la lignée de Boswell, à lire avant la
+  vague 2.
+
+## Les rejeux, pour Kraken
+
+Chaque milestone de Kraken se mesure en rejouant des étapes déjà faites, à base et issue gelées. Un rejeu part d'un
+dépôt neuf qui ne porte que l'arbre de la base, sans l'historique ni les branches de la suite : sinon une main lirait la
+solution dans git (`git log --all`, les objets du dépôt). Les issues y sont recopiées. Des issues piégées, dont le test
+contredit le texte, ne servent qu'aux rejeux.
+
+## Les gestes de l'humain
+
+Faits, une fois : le dépôt, public, sous MIT ; un jeton limité à lui ; l'auto-fusion et la règle de `main` ; la
+première PR (la CI et `auto-fusion.yml`). Reste : ouvrir Pages pour la vitrine. Plus aucune fusion ensuite ; son œil
+revient après coup.
+
+## Ce qui existe déjà (non revérifié)
+
+mycorust (Rust, MIT, plutôt ludique) ; pycelium (Python, le plus proche du positionnement, sans licence) ; Mycemulator
+(Python, une équipe étudiante, 2020). La place « rigoureux, reproductible, beau, en Rust » est libre.
+
+## Sources
+
+- Meškauskas, Fricker et Moore (2004), Mycological Research 108(11):1241–1256 ; réimpression :
+  https://davidmoore.org.uk/cyberweb/images_2016/Manuscripts/Meskauskas_etal_simulating_coloniesNS02.pdf
+- Boswell et al. (2003), Bull. Math. Biol. ; Boswell et al. (2007), DOI 10.1007/s11538-005-9056-6 ; Hopkins et
+  Boswell (2012), Fungal Ecology ; Edelstein (1982), J. Theor. Biol. 98 ; https://arxiv.org/pdf/q-bio/0402004.
