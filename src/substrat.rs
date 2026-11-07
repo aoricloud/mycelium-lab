@@ -98,8 +98,12 @@ impl Substrat {
     /// Contrat : le résultat n'excède jamais ce que la case contenait, et la masse totale baisse d'autant.
     /// Panique si la case est hors de la grille, ou si `quantite` n'est pas finie ou est négative.
     pub fn retirer(&mut self, x: usize, y: usize, quantite: f64) -> f64 {
-        let _ = (x, y, quantite);
-        todo!()
+        assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
+        assert!(quantite.is_finite() && quantite >= 0.0, "quantité invalide : {quantite}");
+        let i = y * self.largeur + x;
+        let retire = quantite.min(self.cases[i]);
+        self.cases[i] -= retire;
+        retire
     }
 
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
