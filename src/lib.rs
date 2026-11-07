@@ -29,3 +29,4 @@ pub mod releves;
 pub mod scenario;
 pub mod simulation;
 pub mod substrat;
+pub mod voisinage;
