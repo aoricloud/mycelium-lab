@@ -13,8 +13,9 @@
 //! # Les garanties
 //!
 //! Le module ne dépend de rien hors de la bibliothèque standard et n'utilise, parmi les fonctions de `f64`, que
-//! `sqrt` ; tout est déterministe d'une machine à l'autre. L'[`Index`] possède ses segments et les rend dans
-//! l'ordre de leur ajout ; aucun parcours de `HashMap` ni de `HashSet` n'intervient.
+//! `sqrt`, `floor` et `clamp` ; ce sont des opérations exactes (racine correctement arrondie, arrondi vers le bas,
+//! bornes) et déterministes, et tout est déterministe d'une machine à l'autre. L'[`Index`] possède ses segments et
+//! les rend dans l'ordre de leur ajout ; aucun parcours de `HashMap` ni de `HashSet` n'intervient.
 
 use crate::croissance::Segment;
 
@@ -35,7 +36,7 @@ pub struct Reglage {
 /// jamais la distance à la droite qui prolonge le segment. Un segment réduit à un point rend la distance à ce
 /// point. Une distance nulle signifie que le point est sur le segment.
 ///
-/// Le calcul n'utilise que `+`, `-`, `*`, `/` et `sqrt`.
+/// Le calcul n'utilise que `+`, `-`, `*`, `/`, `clamp` et `sqrt`.
 pub fn distance_au_segment(x: f64, y: f64, segment: &Segment) -> f64 {
     let dx = segment.x1 - segment.x0;
     let dy = segment.y1 - segment.y0;

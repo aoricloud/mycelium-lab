@@ -189,7 +189,37 @@ pub struct Ajustement {
 /// tous égaux (la pente serait indéfinie).
 #[allow(unused_variables)]
 pub fn ajuster(x: &[f64], y: &[f64]) -> Ajustement {
-    todo!()
+    assert_eq!(x.len(), y.len(), "x et y n'ont pas la même longueur");
+    assert!(x.len() >= 2, "il faut au moins deux points");
+
+    let n = x.len() as f64;
+    let mut somme_x = 0.0;
+    let mut somme_y = 0.0;
+    let mut somme_xx = 0.0;
+    let mut somme_xy = 0.0;
+    for (&xi, &yi) in x.iter().zip(y.iter()) {
+        somme_x += xi;
+        somme_y += yi;
+        somme_xx += xi * xi;
+        somme_xy += xi * yi;
+    }
+
+    let denominateur = n * somme_xx - somme_x * somme_x;
+    assert!(denominateur != 0.0, "les x sont tous égaux : la pente est indéfinie");
+    let pente = (n * somme_xy - somme_x * somme_y) / denominateur;
+    let ordonnee = (somme_y - pente * somme_x) / n;
+
+    let moyenne_y = somme_y / n;
+    let mut scr = 0.0;
+    let mut sct = 0.0;
+    for (&xi, &yi) in x.iter().zip(y.iter()) {
+        let residu = yi - (pente * xi + ordonnee);
+        scr += residu * residu;
+        let ecart = yi - moyenne_y;
+        sct += ecart * ecart;
+    }
+
+    Ajustement { pente, ordonnee, r2: 1.0 - scr / sct }
 }
 
 /// Régression du rayon sur le temps, pour les temps `t` dans `]t_debut, t_fin]`. Le rayon au temps `t` est
@@ -201,7 +231,17 @@ pub fn ajuster(x: &[f64], y: &[f64]) -> Ajustement {
 /// `rayons`.
 #[allow(unused_variables)]
 pub fn ajuster_rayon(rayons: &[f64], t_debut: u32, t_fin: u32) -> Ajustement {
-    todo!()
+    assert!((t_fin as usize) <= rayons.len(), "t_fin = {t_fin} hors des bornes de rayons");
+    assert!(t_debut < t_fin, "fenêtre vide : ]{t_debut}, {t_fin}]");
+    assert!(t_fin - t_debut >= 2, "il faut au moins deux points dans ]{t_debut}, {t_fin}]");
+
+    let mut temps = Vec::with_capacity((t_fin - t_debut) as usize);
+    let mut valeurs = Vec::with_capacity((t_fin - t_debut) as usize);
+    for t in (t_debut + 1)..=t_fin {
+        temps.push(t as f64);
+        valeurs.push(rayons[(t - 1) as usize]);
+    }
+    ajuster(&temps, &valeurs)
 }
 
 /// Pentes de régressions du rayon sur le temps, sur des fenêtres de `largeur` pas décalées de `pas`, dans
@@ -215,7 +255,22 @@ pub fn ajuster_rayon(rayons: &[f64], t_debut: u32, t_fin: u32) -> Ajustement {
 /// Panique si `largeur` ou `pas` vaut 0, ou si une fenêtre sort des bornes de `rayons`.
 #[allow(unused_variables)]
 pub fn vitesses_glissantes(rayons: &[f64], t_debut: u32, t_fin: u32, largeur: u32, pas: u32) -> Vec<f64> {
-    todo!()
+    assert!(largeur > 0, "largeur nulle");
+    assert!(pas > 0, "pas nul");
+
+    let mut vitesses = Vec::new();
+    let mut debut = t_debut;
+    while let Some(fin) = debut.checked_add(largeur) {
+        if fin > t_fin {
+            break;
+        }
+        vitesses.push(ajuster_rayon(rayons, debut, fin).pente);
+        match debut.checked_add(pas) {
+            Some(suivant) => debut = suivant,
+            None => break,
+        }
+    }
+    vitesses
 }
 
 /// Exposant `a` de la loi de puissance `serie(t) ~ t^a`, estimé par moindres carrés de `ln serie` sur `ln t`,
@@ -227,5 +282,15 @@ pub fn vitesses_glissantes(rayons: &[f64], t_debut: u32, t_fin: u32, largeur: u3
 /// Panique si la fenêtre contient moins de deux points ou si elle sort des bornes de `serie`.
 #[allow(unused_variables)]
 pub fn exposant(serie: &[f64], t_debut: u32, t_fin: u32) -> f64 {
-    todo!()
+    assert!((t_fin as usize) <= serie.len(), "t_fin = {t_fin} hors des bornes de serie");
+    assert!(t_debut < t_fin, "fenêtre vide : ]{t_debut}, {t_fin}]");
+    assert!(t_fin - t_debut >= 2, "il faut au moins deux points dans ]{t_debut}, {t_fin}]");
+
+    let mut temps = Vec::with_capacity((t_fin - t_debut) as usize);
+    let mut valeurs = Vec::with_capacity((t_fin - t_debut) as usize);
+    for t in (t_debut + 1)..=t_fin {
+        temps.push(crate::mesures::logarithme(t as f64));
+        valeurs.push(crate::mesures::logarithme(serie[(t - 1) as usize]));
+    }
+    ajuster(&temps, &valeurs).pente
 }
