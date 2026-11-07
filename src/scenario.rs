@@ -48,10 +48,44 @@ pub enum ErreurScenario {
     LigneInvalide(usize),
 }
 
+/// Lit un entier décimal non signé (chiffres seulement).
+fn entier(mot: &str) -> Option<u32> {
+    if mot.is_empty() || !mot.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    mot.parse().ok()
+}
+
 impl Scenario {
     /// Lit un scénario depuis son texte (format décrit dans la doc du module).
-    #[allow(unused_variables)]
     pub fn lire(texte: &str) -> Result<Scenario, ErreurScenario> {
-        todo!()
+        let mut boite: Option<(u32, u32)> = None;
+        let mut spores = Vec::new();
+        for (i, ligne) in texte.lines().enumerate() {
+            let numero = i + 1;
+            if ligne.is_empty() || ligne.starts_with('#') {
+                continue;
+            }
+            let mots: Vec<&str> = ligne.split(' ').collect();
+            match mots.as_slice() {
+                ["boite", l, h] => {
+                    let (l, h) = match (entier(l), entier(h)) {
+                        (Some(l), Some(h)) if l > 0 && h > 0 => (l, h),
+                        _ => return Err(ErreurScenario::LigneInvalide(numero)),
+                    };
+                    if boite.is_some() {
+                        return Err(ErreurScenario::BoiteEnDouble);
+                    }
+                    boite = Some((l, h));
+                }
+                ["spore", x, y] => match (entier(x), entier(y)) {
+                    (Some(x), Some(y)) => spores.push(Spore { x, y }),
+                    _ => return Err(ErreurScenario::LigneInvalide(numero)),
+                },
+                _ => return Err(ErreurScenario::LigneInvalide(numero)),
+            }
+        }
+        let (largeur, hauteur) = boite.ok_or(ErreurScenario::BoiteAbsente)?;
+        Ok(Scenario { largeur, hauteur, spores })
     }
 }
