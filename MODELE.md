@@ -56,8 +56,9 @@ D_i(t) = Σ_{s ∈ S(t), σ(s) ≠ σ_i(t)}
           [d_s(x_i(t)) ≤ portee] · (lc / n(σ(s))) · 1 / (d_s(x_i(t))² + ε²)
 ```
 
-Le point important pour un biologiste : le champ est **la somme des hyphes voisines**, pondérée par la longueur de
-leur internode ; il est donc plus fort dans un réseau dense. Deux adoucissements sont ceux du code :
+Le point important pour un biologiste : le champ est **la somme des hyphes voisines** ; chaque section y contribue
+pour un poids total constant `lc`, réparti sur ses segments (`lc / n` par segment) ; il est donc plus fort dans un
+réseau dense. Deux adoucissements sont ceux du code :
 
 - `ε` (`epsilon = 1,0`) évite la divergence quand une pointe passe à distance nulle d'un segment ;
 - `portee` (`60,0`) est une coupure : les segments plus loin ne comptent pas. L'article n'a pas cette coupure ; c'est
@@ -65,7 +66,8 @@ leur internode ; il est donc plus fort dans un réseau dense. Deux adoucissement
 
 La section courante de la pointe est exclue : **une pointe ne se repousse pas elle-même**. Les internodes plus anciens
 de la même hyphe, eux, sont des voisins comme les autres. `n(σ(s))` est le nombre de segments de la section au moment
-de la lecture, pas au moment où le segment a été déposé : le poids d'une section diminue à mesure qu'elle s'allonge.
+de la lecture, pas au moment où le segment a été déposé : le poids d'un segment diminue à mesure que l'internode
+s'allonge.
 
 ### 2.3 Le vecteur d'évitement (équation 11)
 
@@ -77,8 +79,9 @@ E_i(t) = Σ_{s ∈ S(t), σ(s) ≠ σ_i(t)}
           [d_s(x_i(t)) ≤ portee] · (lc / n(σ(s))) · (x_i(t) − q_s(x_i(t))) / (d_s(x_i(t))² + ε²)³
 ```
 
-Comme le poids contient déjà un facteur `1 / (d² + ε²)`, la décroissance à grande distance est en `1/d⁶` : ce sont
-les segments très proches qui dominent. `E_i` est un vecteur ; sa norme n'est pas utilisée telle quelle, puisque
+Le poids scalaire contient déjà un facteur `1 / (d² + ε²)`, donc il décroît en `1/d⁶` à grande distance ; la norme
+du vecteur, elle, décroît en `1/d⁵`, car le numérateur contient en plus `(x_i − q_s)`, de longueur `d`. Ce sont les
+segments très proches qui dominent. `E_i` est un vecteur ; sa norme n'est pas utilisée telle quelle, puisque
 l'équation suivante le normalise.
 
 ### 2.4 Le cap (équation 13)
@@ -256,7 +259,8 @@ mais ne se ramifient qu'au pas suivant.
 Le champ de densité est une somme de noyaux isotropes `1 / (d² + ε²)` dans le plan. À grande distance, il décroît
 comme `1/d²`. C'est le noyau en `1/d²` du modèle publié, conservé en 2D avec l'adoucissement `ε` et la coupure
 `portee` ; ce n'est pas la solution d'une équation de diffusion 2D, et le modèle ne prétend pas en dériver. Le vecteur
-d'évitement utilise le même noyau élevé au cube, donc une décroissance en `1/d⁶`.
+d'évitement utilise le même noyau élevé au cube : son poids scalaire décroît en `1/d⁶`, mais la norme du vecteur
+décroît en `1/d⁵`, car le numérateur contient en plus `(x_i − q_s)`, de longueur `d`.
 
 ### 4.6 Autres hypothèses de fait
 
@@ -396,7 +400,7 @@ publiée 0,86 est dans l'intervalle mais n'est pas la cible.
 | Pente du rayon, par graine | 0,80 à 1,00 | feuille de route (pente sous 1) et marge du test |
 | Pente moyenne du jeu | 0,80 à 0,97 | feuille de route |
 | Exposant, par graine | 0,85 à 1,15 | test d'acceptation (tolérance autour de 1) |
-| R² linéaire moyen − R² logarithmique moyen | ≥ 0,004 | test d'acceptation (le linéaire doit mieux ajuster qu'une loi de puissance) |
+| R² linéaire moyen − R² logarithmique moyen | ≥ 0,004 | test d'acceptation (le linéaire doit mieux ajuster qu'une exponentielle, `ln r` ajusté sur `t`) |
 | Écart des pentes moyennes entre les jeux A et B | ≤ 0,03 | test d'acceptation (indépendance à la graine) |
 | Écart-type des pentes | ≤ 0,06 | test d'acceptation |
 | Étendue des pentes (max − min) | ≤ 0,25 | test d'acceptation |
