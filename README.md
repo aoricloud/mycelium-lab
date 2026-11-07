@@ -5,8 +5,11 @@ croissance d'un réseau d'hyphes (extension des apex, ramification, anastomose, 
 mesures (biomasse, densité, topologie, dimension fractale) et compare des scénarios, avec un rendu qu'on prend
 plaisir à regarder.
 
-**Où il en est** : rien ne tourne encore. La V0, une colonie qui pousse en 2D sur une boîte de Petri depuis une spore,
-est décrite dans [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md).
+**Où il en est** : les étapes 0 et 1 de la V0 (voir [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md)) sont faites — la
+graine, l'empreinte, l'écrivain PNG et le binaire `mycelium lancer` ; la colonie, le substrat qui diffuse, les mesures
+(biomasse, dimension fractale par comptage de boîtes), avec leurs tests d'acceptation et leurs aperçus dans `apercus/`.
+Les étapes suivantes — le couplage de la colonie et du substrat, la figure de référence, la vitrine en WebAssembly —
+sont dans la feuille de route.
 
 ## Ce qui le tient
 
@@ -14,6 +17,24 @@ est décrite dans [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md).
 - La preuve est l'état simulé et des nombres, et une figure publiée refaite en nombres ; les images sont pour l'œil.
 - Les règles du dépôt sont dans [AGENTS.md](AGENTS.md) ; le modèle, ses équations et ses limites, dans
   [MODELE.md](MODELE.md).
+
+## L'essayer
+
+Sur un clone :
+
+```sh
+# la preuve complète : les tests, le lint et le format
+cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check
+
+# réécrit les trois aperçus de l'étape 1 dans apercus/
+cargo run --example apercus_etape_1
+
+# un scénario de l'étape 0 tient en une ligne, boite 64 48
+echo 'boite 64 48' > boite.txt
+cargo run -- lancer boite.txt --graine 1 --sortie sortie
+```
+
+La dernière commande écrit `empreinte.txt` et `apercu.png` dans `sortie/`.
 
 ## Comment il se construit
 
