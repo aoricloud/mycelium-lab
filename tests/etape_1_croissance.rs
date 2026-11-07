@@ -90,25 +90,35 @@ fn intervalle_moyen_de_ramification() {
     assert!((mesure - intervalle).abs() <= 0.05 * intervalle, "intervalle mesuré {mesure}, attendu {intervalle}");
 }
 
-/// 3. Isotropie : sur 200 colonies parties d'une spore au centre, la direction moyenne des apex est proche de zéro.
+/// 3. Isotropie : sur des colonies parties d'une spore au centre, la direction moyenne des apex est proche de zéro.
 ///
-/// Pour chaque colonie, on prend le vecteur moyen des directions unitaires de ses apex, puis la moyenne de ces
-/// vecteurs sur les graines. La direction initiale de chaque colonie est uniforme, et le modèle est invariant par
-/// rotation : le vecteur moyen d'une colonie est d'espérance nulle, de norme au plus 1, donc de variance totale
-/// `E|m|² <= 1`. Les 200 colonies sont indépendantes (les apex d'une même colonie, eux, sont corrélés : on ne compte
-/// pas sur eux). La moyenne `M` de `K = 200` vecteurs indépendants a donc `E|M|² <= 1/K = 0,005`, soit une norme de
-/// l'ordre de 0,07 ; pour une loi proche de la gaussienne, `P(|M| > t) ≈ exp(-t²·K)`. Le seuil `t = 0,25` donne
-/// `exp(-12,5) ≈ 4×10⁻⁶` : un modèle isotrope ne le dépasse pas, un biais sensible (une direction préférée) oui.
+/// Parmi 200 colonies, on garde les ramifiées. Pour chacune, on prend le vecteur moyen des directions unitaires de
+/// ses apex, puis la moyenne de ces vecteurs sur les graines. La direction initiale de chaque colonie est uniforme, et
+/// le modèle est invariant par rotation : le vecteur moyen d'une colonie est d'espérance nulle, de norme au plus 1,
+/// donc de variance totale `E|m|² <= 1`. Les colonies sont indépendantes (les apex d'une même colonie, eux, sont corrélés : on ne compte pas
+/// sur eux). La moyenne `M` de `K` vecteurs indépendants a donc `E|M|² <= 1/K`. On attend `K ≈ 190` colonies ramifiées
+/// sur 200, soit une norme de l'ordre de 0,07 ; pour une loi proche de la gaussienne, `P(|M| > t) ≈ exp(-t²·K)`. Le
+/// seuil `t = 0,25` donne `exp(-11,9) ≈ 7×10⁻⁶` : un modèle isotrope ne le dépasse pas, un biais sensible (une
+/// direction préférée) oui.
+///
+/// Une colonie peut ne pas se ramifier du tout : à l'intervalle 10, un apex se ramifie à chaque pas avec la
+/// probabilité 0,1, donc 30 pas passent sans ramification avec la probabilité `0,9³⁰ ≈ 4,2 %` (environ 8 colonies sur
+/// 200). Ces colonies, réduites à leur apex initial, ne comptent pas dans la moyenne : la ramification ne dépend pas
+/// de la direction, donc les écarter ne biaise rien. Leur part est mesurée à part, par le test suivant.
 #[test]
 #[cfg_attr(not(feature = "etape-1"), ignore)]
 fn isotropie_de_la_direction_moyenne() {
     let parametres = avec_ramification(10.0);
     let k = 200usize;
     let (mut somme_x, mut somme_y) = (0.0, 0.0);
+    let mut ramifiees = 0usize;
     for graine in 0..k as u64 {
         let mut colonie = Colonie::depuis_spore((0.0, 0.0), parametres, graine);
         colonie.avancer_n(30);
-        assert!(colonie.apex().len() > 1, "graine {graine} : la colonie ne s'est jamais ramifiée");
+        if colonie.apex().len() == 1 {
+            continue;
+        }
+        ramifiees += 1;
         let (mut mx, mut my) = (0.0, 0.0);
         for a in colonie.apex() {
             assert!(a.direction < NB_DIRECTIONS);
@@ -119,9 +129,41 @@ fn isotropie_de_la_direction_moyenne() {
         somme_x += mx / n;
         somme_y += my / n;
     }
-    let (mx, my) = (somme_x / k as f64, somme_y / k as f64);
+    assert!(ramifiees >= 170, "trop peu de colonies ramifiées pour mesurer : {ramifiees} sur {k}");
+    let (mx, my) = (somme_x / ramifiees as f64, somme_y / ramifiees as f64);
     let norme = (mx * mx + my * my).sqrt();
-    assert!(norme < 0.25, "direction moyenne ({mx}, {my}), norme {norme}");
+    assert!(norme < 0.25, "direction moyenne ({mx}, {my}), norme {norme} ({ramifiees} colonies ramifiées)");
+}
+
+/// 3 bis. La part des colonies sans ramification : après 30 pas à l'intervalle 10, une colonie reste réduite à son
+/// apex initial avec la probabilité `0,9³⁰ ≈ 4,2 %` (chaque pas ramifie l'apex avec la probabilité `1/10`).
+///
+/// Mesure sur 2000 graines : l'écart-type de la part mesurée est `sqrt(0,042 × 0,958 / 2000) ≈ 0,0045`, soit une
+/// tolérance de 0,02 à plus de quatre écarts-types. Le modèle ne force pas la première ramification : ni plus tôt, ni à
+/// une date butoir.
+#[test]
+#[cfg_attr(not(feature = "etape-1"), ignore)]
+fn part_des_colonies_sans_ramification() {
+    let intervalle = 10.0;
+    let parametres = avec_ramification(intervalle);
+    let (graines, pas) = (2000u64, 30u32);
+    let mut sans_ramification = 0u64;
+    for graine in 0..graines {
+        let mut colonie = Colonie::depuis_spore((0.0, 0.0), parametres, graine);
+        colonie.avancer_n(pas);
+        if colonie.apex().len() == 1 {
+            sans_ramification += 1;
+        }
+    }
+    let mut attendu = 1.0;
+    for _ in 0..pas {
+        attendu *= 1.0 - 1.0 / intervalle;
+    }
+    let mesure = sans_ramification as f64 / graines as f64;
+    assert!(
+        (mesure - attendu).abs() <= 0.02,
+        "part sans ramification {mesure} ({sans_ramification} sur {graines}), attendue {attendu}"
+    );
 }
 
 /// 4. Même graine, même colonie à l'octet ; deux graines, deux colonies.
