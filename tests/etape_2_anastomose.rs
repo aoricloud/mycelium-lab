@@ -316,3 +316,107 @@ fn l_index_ne_ment_pas_avec_des_segments_longs() {
         assert_eq!(trouve, attendu, "requête {i} : ({x}, {y}), apex {apex}");
     }
 }
+
+// ------------------------------------------------------------------------------------------------------------------
+// Tests ajoutés par le juge des tests (voir l'issue #14) : ils ferment des trous où un index faux passait tous les
+// tests ci-dessus (rayon plus petit que les segments sur les deux axes et les diagonales, résultats `None`, rayon
+// lu loin du point).
+// ------------------------------------------------------------------------------------------------------------------
+
+/// 400 segments longs (2,4 à 3), orientés de quatre façons (horizontal, vertical, deux diagonales de pente 4/3 et
+/// -4/3), sur une grille de pas 4,8 décalée d'un rang à l'autre, dans la boîte 100 × 100. Le milieu d'un segment est à
+/// plus de 2,1 de tout autre segment, et à au moins 1,2 de ses propres extrémités. Les apex (9 valeurs) et les temps
+/// (13 valeurs) varient.
+fn segments_longs_en_grille() -> Vec<Segment> {
+    let mut segments = Vec::new();
+    for j in 0..20usize {
+        for i in 0..20usize {
+            let k = j * 20 + i;
+            let longueur = 2.4 + 0.2 * ((i + 2 * j) % 4) as f64;
+            let (dx, dy) = match (i + j) % 4 {
+                0 => (longueur, 0.0),
+                1 => (0.0, longueur),
+                2 => (0.6 * longueur, 0.8 * longueur),
+                _ => (0.6 * longueur, -0.8 * longueur),
+            };
+            let cx = 4.8 * i as f64 + 3.0 + 0.37 * (i % 3) as f64;
+            let cy = 4.8 * j as f64 + 3.0 + 0.29 * (j % 5) as f64;
+            segments.push(Segment {
+                apex: (k % 9) as u32,
+                temps: (k % 13) as u32,
+                x0: cx - dx / 2.0,
+                y0: cy - dy / 2.0,
+                x1: cx + dx / 2.0,
+                y1: cy + dy / 2.0,
+            });
+        }
+    }
+    segments
+}
+
+/// D. L'index ne ment pas non plus quand le rayon est plus petit que les segments, comme dans la simulation (rayon
+///    0,5, segments de 1). Les requêtes sont posées au MILIEU des segments, hors de portée des deux extrémités (à 1,2
+///    ou plus, pour un rayon de 0,5 ou de 1,0) : seul le corps du segment est à portée, donc un index qui ne range un
+///    segment que près de son début ou de sa fin le manque. Quatre sortes de requêtes, à parts égales : un apex
+///    étranger et un segment assez ancien (le segment est trouvé), le même apex (rien : zone dense, mais le seul segment
+///    à portée est ignoré), un segment trop jeune d'un pas (rien), un segment d'exactement l'âge du délai (trouvé). Le
+///    résultat est contrôlé deux fois : contre la valeur attendue ci-dessus, et contre le parcours exhaustif.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn l_index_ne_ment_pas_a_petit_rayon() {
+    let segments = segments_longs_en_grille();
+    let mut index = Index::new(100, 100);
+    for (numero, segment) in segments.iter().enumerate() {
+        assert_eq!(index.ajouter(*segment), numero);
+    }
+
+    let delai = 5;
+    for rayon in [0.5, 1.0] {
+        let reglage = Reglage { rayon, delai };
+        let (mut trouves, mut rien) = (0, 0);
+        for (k, segment) in segments.iter().enumerate() {
+            let (x, y) = ((segment.x0 + segment.x1) / 2.0, (segment.y0 + segment.y1) / 2.0);
+            let (apex, temps, attendu) = match k % 4 {
+                0 => (segment.apex + 1, 60, Some(k)),
+                1 => (segment.apex, 60, None),
+                2 => (segment.apex + 1, segment.temps + delai - 1, None),
+                _ => (segment.apex + 1, segment.temps + delai, Some(k)),
+            };
+            let trouve = index.chercher(x, y, apex, temps, &reglage);
+            let exhaustif = chercher_exhaustif(&segments, x, y, apex, temps, &reglage);
+            assert_eq!(trouve, attendu, "rayon {rayon}, requête {k} : ({x}, {y}), apex {apex}, temps {temps}");
+            assert_eq!(trouve, exhaustif, "rayon {rayon}, requête {k} : l'index diffère du parcours exhaustif");
+            if trouve.is_some() {
+                trouves += 1;
+            } else {
+                rien += 1;
+            }
+        }
+        assert_eq!((trouves, rien), (200, 200), "rayon {rayon}");
+    }
+}
+
+/// D (suite). Le rayon est vraiment lu : un segment à 9 (le bout `(41, 50)` depuis `(50, 50)`) est trouvé à partir du
+///    rayon 9 et pas avant, loin de la case du point ; le plus proche de deux segments gagne même quand le plus
+///    lointain est aussi à portée ; un rayon trop court pour les deux ne rend rien.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn chercher_lit_le_rayon_loin_du_point() {
+    let mut index = Index::new(100, 100);
+    index.ajouter(Segment { apex: 1, temps: 0, x0: 40.0, y0: 50.0, x1: 41.0, y1: 50.0 });
+    index.ajouter(Segment { apex: 1, temps: 0, x0: 10.0, y0: 10.0, x1: 11.0, y1: 10.0 });
+    let avec = |rayon: f64| Reglage { rayon, delai: 0 };
+
+    assert_eq!(index.chercher(50.0, 50.0, 0, 0, &avec(9.0)), Some(0));
+    assert_eq!(index.chercher(50.0, 50.0, 0, 0, &avec(8.999)), None);
+    assert_eq!(index.chercher(50.0, 50.0, 0, 0, &avec(1000.0)), Some(0));
+
+    // Depuis le coin (100, 100) : le premier segment est à sqrt(59² + 50²) ≈ 77,3, le second à plus de 126.
+    assert_eq!(index.chercher(100.0, 100.0, 0, 0, &avec(77.0)), None);
+    assert_eq!(index.chercher(100.0, 100.0, 0, 0, &avec(78.0)), Some(0));
+    assert_eq!(index.chercher(100.0, 100.0, 0, 0, &avec(150.0)), Some(0));
+    // Depuis le coin (0, 0) : le second segment, à sqrt(10² + 10²) ≈ 14,1, est le plus proche.
+    assert_eq!(index.chercher(0.0, 0.0, 0, 0, &avec(14.0)), None);
+    assert_eq!(index.chercher(0.0, 0.0, 0, 0, &avec(14.2)), Some(1));
+    assert_eq!(index.chercher(0.0, 0.0, 0, 0, &avec(150.0)), Some(1));
+}
