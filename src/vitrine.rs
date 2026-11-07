@@ -34,80 +34,111 @@
 //! [`mycelium_segment`] rend `NaN` pour un segment ou une coordonnée hors de portée, [`mycelium_substrat`] pour
 //! une case hors de la boîte, et [`mycelium_empreinte_mot`] rend 0 pour un mot d'indice 8 ou plus.
 
+use std::sync::{Mutex, MutexGuard};
+
+use crate::simulation::{Simulation, lire_scenario};
+
+/// Le scénario que fait tourner la vitrine, embarqué dans le module.
+const SCENARIO: &str = include_str!("../scenarios/couplage.txt");
+
+/// La simulation en cours, ou `None` tant que [`mycelium_demarrer`] n'a pas été appelé.
+static SIMULATION: Mutex<Option<Simulation>> = Mutex::new(None);
+
+/// Prend le verrou de l'état global ; un appel qui a paniqué en le tenant ne bloque pas les suivants.
+fn verrou() -> MutexGuard<'static, Option<Simulation>> {
+    SIMULATION.lock().unwrap_or_else(|empoisonne| empoisonne.into_inner())
+}
+
 /// (Re)construit la simulation du scénario embarqué avec cette graine ; le temps vaut 0.
 ///
 /// Remplace entièrement l'état précédent : rappelée après des pas, elle repart de zéro.
-#[allow(unused_variables)]
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_demarrer(graine: u32) {
-    todo!()
+    let (reglages, _duree) = lire_scenario(SCENARIO).expect("le scénario embarqué est valide");
+    let simulation = Simulation::nouvelle(reglages, u64::from(graine)).expect("les réglages sont valides");
+    *verrou() = Some(simulation);
 }
 
 /// Avance la simulation de `n` pas de temps ; sans effet si `n` vaut 0 ou si rien n'est démarré.
-#[allow(unused_variables)]
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_avancer(n: u32) {
-    todo!()
+    if let Some(simulation) = verrou().as_mut() {
+        simulation.avancer_n(n);
+    }
 }
 
 /// Le nombre de pas joués depuis le démarrage ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_temps() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, Simulation::temps)
 }
 
 /// La largeur de la boîte, en cases ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_largeur() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, |simulation| simulation.substrat().largeur() as u32)
 }
 
 /// La hauteur de la boîte, en cases ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_hauteur() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, |simulation| simulation.substrat().hauteur() as u32)
 }
 
 /// Le nombre de segments laissés par la colonie ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_nb_segments() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, |simulation| simulation.segments().len() as u32)
 }
 
 /// Une coordonnée du segment `i` : `k` vaut 0, 1, 2 ou 3 pour `x0`, `y0`, `x1` ou `y1`.
 ///
 /// Rend `NaN` si `i >= mycelium_nb_segments()` ou si `k > 3`, et avant tout démarrage.
-#[allow(unused_variables)]
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_segment(i: u32, k: u32) -> f64 {
-    todo!()
+    if k > 3 {
+        return f64::NAN;
+    }
+    let verrou = verrou();
+    let Some(segment) = verrou.as_ref().and_then(|simulation| simulation.segments().get(i as usize)) else {
+        return f64::NAN;
+    };
+    [segment.x0, segment.y0, segment.x1, segment.y1][k as usize]
 }
 
 /// La quantité de substrat dans la case `(x, y)`.
 ///
 /// Rend `NaN` si la case est hors de la boîte, et avant tout démarrage.
-#[allow(unused_variables)]
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_substrat(x: u32, y: u32) -> f64 {
-    todo!()
+    let verrou = verrou();
+    let Some(simulation) = verrou.as_ref() else {
+        return f64::NAN;
+    };
+    let substrat = simulation.substrat();
+    let (x, y) = (x as usize, y as usize);
+    if x >= substrat.largeur() || y >= substrat.hauteur() {
+        return f64::NAN;
+    }
+    substrat.valeur(x, y)
 }
 
 /// La biomasse de la colonie (la somme des longueurs de ses segments) ; `NaN` avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_biomasse() -> f64 {
-    todo!()
+    verrou().as_ref().map_or(f64::NAN, Simulation::biomasse)
 }
 
 /// Le nombre de pointes (apex vivants) ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_pointes() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, |simulation| simulation.pointes() as u32)
 }
 
 /// Le nombre cumulé d'anastomoses ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_anastomoses() -> u32 {
-    todo!()
+    verrou().as_ref().map_or(0, |simulation| simulation.anastomoses() as u32)
 }
 
 /// Le `i`-ième mot (0 à 7) de 32 bits, en gros-boutiste, du SHA-256 de l'écriture canonique de l'état.
@@ -117,8 +148,16 @@ pub extern "C" fn mycelium_anastomoses() -> u32 {
 /// `i >= 8` et avant tout démarrage.
 ///
 /// Chaque appel recalcule l'empreinte de l'état : la page ne la lit pas à chaque image.
-#[allow(unused_variables)]
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_empreinte_mot(i: u32) -> u32 {
-    todo!()
+    if i >= 8 {
+        return 0;
+    }
+    let verrou = verrou();
+    let Some(simulation) = verrou.as_ref() else {
+        return 0;
+    };
+    let empreinte = simulation.empreinte();
+    let debut = i as usize * 8;
+    u32::from_str_radix(&empreinte[debut..debut + 8], 16).expect("un mot d'empreinte est de l'hexadécimal")
 }
