@@ -5,11 +5,9 @@ croissance d'un réseau d'hyphes (extension des apex, ramification, anastomose, 
 mesures (biomasse, densité, topologie, dimension fractale) et compare des scénarios, avec un rendu qu'on prend
 plaisir à regarder.
 
-**Où il en est** : les étapes 0 et 1 de la V0 (voir [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md)) sont faites — la
-graine, l'empreinte, l'écrivain PNG et le binaire `mycelium lancer` ; la colonie, le substrat qui diffuse, les mesures
-(biomasse, dimension fractale par comptage de boîtes), avec leurs tests d'acceptation et leurs aperçus dans `apercus/`.
-Les étapes suivantes — le couplage de la colonie et du substrat, la figure de référence, la vitrine en WebAssembly —
-sont dans la feuille de route.
+**Où il en est** : les étapes 0 à 4 de la V0 (voir [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md)) sont faites — la
+simulation, le couplage de la colonie et du substrat, la figure de référence refaite en nombres avec son écart dit
+dans [MODELE.md](MODELE.md), la vitrine — avec leurs tests d'acceptation et leurs aperçus dans `apercus/`.
 
 ## Ce qui le tient
 
@@ -35,6 +33,10 @@ cargo run -- lancer boite.txt --graine 1 --sortie sortie
 ```
 
 La dernière commande écrit `empreinte.txt` et `apercu.png` dans `sortie/`.
+
+La vitrine est dans `docs/` — le dossier que GitHub Pages publie une fois que l'humain l'a ouvert ; elle se regarde en
+ouvrant un petit serveur de fichiers dans `docs/`, par exemple `python3 -m http.server` (un navigateur ne charge pas un
+module WebAssembly depuis `file://`).
 
 ## Comment il se construit
 
