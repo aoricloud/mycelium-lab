@@ -30,7 +30,16 @@ fn jouer(parametres: Parametres, pas: u32) -> Jeu {
     };
     for graine in 1..=GRAINES {
         let mut colonie = Colonie::depuis_spore((0.0, 0.0), parametres, graine);
-        colonie.avancer_n(pas);
+        // Garde-fou : sans limite de densité, 24 pas donnent jusqu'à 8613 pointes (observé) ; sinon 213 au plus à 400 pas, garde à 500.
+        let limite = if parametres.seuil_densite.is_infinite() { 50_000 } else { 500 };
+        for _ in 0..pas {
+            colonie.avancer();
+            assert!(
+                colonie.pointes() <= limite,
+                "graine {graine} : {} pointes, la ramification s'emballe",
+                colonie.pointes()
+            );
+        }
         jeu.rayons.push(colonie.rayons().to_vec());
         jeu.pointes_par_pas.push(colonie.pointes_par_pas().to_vec());
         jeu.ramifications.push(colonie.ramifications().to_vec());
@@ -152,6 +161,7 @@ fn la_limite_de_densite_tient() {
     let seuil = Parametres::figure_3().seuil_densite;
     for (indice, ramifications) in base.ramifications.iter().enumerate() {
         let graine = indice + 1;
+        assert!(ramifications.len() >= 100, "graine {graine} : {} ramifications seulement", ramifications.len());
         for ramification in ramifications {
             assert!(
                 ramification.densite < seuil,

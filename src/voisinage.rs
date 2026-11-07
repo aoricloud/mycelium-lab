@@ -29,11 +29,14 @@ pub struct Parametres {
     pub seuil_densite: f64,
     /// Probabilité qu'un apex se ramifie à un pas donné, dans `[0, 1]`.
     pub probabilite_ramification: f64,
-    /// Longueur caractéristique `lc` du champ de densité, finie et strictement positive.
+    /// Constante `lc` de l'éq. 3 : poids total d'une section dans le champ de densité (un segment d'une section de
+    /// `n` segments pèse `lc / n`), finie et strictement positive. Ce n'est pas une portée.
     pub lc: f64,
-    /// Tolérance `epsilon` du calcul du champ de densité, finie et strictement positive.
+    /// Adoucissement `epsilon` du noyau : un segment à la distance `d` compte pour `1 / (d² + epsilon²)`, ce qui évite
+    /// la divergence à distance nulle ; fini et strictement positif.
     pub epsilon: f64,
-    /// Portée `portee` du champ de densité, finie et strictement positive.
+    /// Coupure du champ de densité : les segments à plus de `portee` d'une pointe ne comptent pas ; finie et
+    /// strictement positive.
     pub portee: f64,
     /// Angle maximal de ramification, en degrés entiers, au plus 180.
     pub angle_max: u32,
@@ -80,6 +83,8 @@ pub struct Ramification {
 }
 
 /// Une colonie qui pousse depuis une spore.
+///
+/// Une `Colonie` doit rester `Send + Sync` : les tests la rangent dans un `static` (`std::sync::OnceLock`).
 pub struct Colonie {}
 
 #[allow(unused_variables)]
@@ -123,7 +128,8 @@ impl Colonie {
         todo!()
     }
 
-    /// Rayon de la colonie après le dernier pas effectué.
+    /// Rayon de la colonie après le dernier pas effectué : la plus grande distance entre la spore et une extrémité
+    /// de segment (0 avant le premier pas).
     pub fn rayon(&self) -> f64 {
         todo!()
     }
@@ -144,10 +150,14 @@ impl Colonie {
         todo!()
     }
 
-    /// Écriture canonique de la colonie : un ordre fixe, sans remplissage ni préfixe de longueur. Tous les
-    /// entiers sont en petit-boutiste (`u32::to_le_bytes`, `u64::to_le_bytes`) et chaque `f64` est écrit par
-    /// les 8 octets de son motif de bits (`f64::to_bits`), lui aussi en petit-boutiste. Deux colonies ont la
-    /// même écriture si et seulement si leurs états sont identiques bit à bit.
+    /// Écriture canonique de la colonie, dans cet ordre et sans remplissage : `temps` (`u32`) ; le nombre de segments
+    /// (`u64`) puis les segments dans l'ordre de leur dépôt, chacun par [`croissance::Segment::octets`] ; le nombre
+    /// d'apex (`u64`) puis les apex dans l'ordre de leur identifiant, chacun par `id` et `section` (`u32`), puis `x`,
+    /// `y`, `hx` et `hy` (`f64`) ; le nombre de ramifications (`u64`) puis les ramifications dans l'ordre où elles ont
+    /// eu lieu, chacune par `temps` et `apex` (`u32`) puis `densite` (`f64`). Tous les entiers sont en petit-boutiste
+    /// (`u32::to_le_bytes`, `u64::to_le_bytes`) et chaque `f64` est écrit par les 8 octets de son motif de bits
+    /// (`f64::to_bits`), lui aussi en petit-boutiste. Deux colonies ont la même écriture si et seulement si leurs
+    /// états sont identiques bit à bit.
     pub fn octets(&self) -> Vec<u8> {
         todo!()
     }
