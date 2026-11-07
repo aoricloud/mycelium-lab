@@ -29,7 +29,14 @@ fn jeu_a() -> &'static JeuA {
         let mut pointes = Vec::new();
         for graine in 1..=30u64 {
             let mut colonie = voisinage::Colonie::depuis_spore((0.0, 0.0), parametres, graine);
-            colonie.avancer_n(400);
+            for _ in 0..400 {
+                colonie.avancer();
+                assert!(
+                    colonie.pointes() <= 500,
+                    "graine {graine} : {} pointes, la ramification s'emballe",
+                    colonie.pointes()
+                );
+            }
             rayons.push(colonie.rayons().to_vec());
             pointes.push(colonie.pointes_par_pas().to_vec());
         }
@@ -161,6 +168,11 @@ fn le_nombre_de_pointes_ne_croit_pas_exponentiellement() {
     for (indice, pointes) in jeu.pointes.iter().enumerate() {
         let premiere = pente_du_logarithme(pointes, 200, 300);
         let seconde = pente_du_logarithme(pointes, 300, 400);
+        assert!(
+            premiere > 0.0,
+            "graine {} : le nombre de pointes doit croître sur ]200, 300] : {premiere}",
+            indice + 1
+        );
         assert!(
             seconde <= 0.85 * premiere,
             "graine {} : pente {premiere} puis {seconde}, au-delà de 0,85 fois la première",
