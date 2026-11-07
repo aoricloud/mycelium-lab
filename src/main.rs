@@ -1,11 +1,17 @@
 //! `mycelium lancer <scénario> --graine <n> --sortie <dossier>` : lit le scénario, construit l'état, écrit
 //! `empreinte.txt` et `apercu.png` dans le dossier de sortie.
+//!
+//! Un scénario de l'étape 0 (une ligne `boite`) garde son chemin : `empreinte.txt` et `apercu.png`, tirés de
+//! [`Etat`]. Un scénario couplé — un texte qui porte une directive `substrat`, `croissance`, `couplage`,
+//! `anastomose` ou `duree` — passe par [`lire_scenario`] et une [`Simulation`], et écrit en plus `mesures.csv`.
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use mycelium_lab::grille::Etat;
 use mycelium_lab::image::ecrire_png;
+use mycelium_lab::releves::en_csv;
 use mycelium_lab::scenario::Scenario;
+use mycelium_lab::simulation::{Simulation, lire_scenario};
 
 const USAGE: &str = "usage : mycelium lancer <scénario> --graine <n> --sortie <dossier>";
 
@@ -75,15 +81,146 @@ fn apercu(largeur: u32, hauteur: u32) -> Vec<u8> {
     pixels
 }
 
+/// Les directives qui font d'un scénario un scénario couplé.
+const DIRECTIVES_COUPLEES: [&str; 5] = ["substrat", "croissance", "couplage", "anastomose", "duree"];
+
+/// Vrai si le texte porte au moins une directive du chemin couplé.
+fn est_couple(texte: &str) -> bool {
+    texte.lines().any(|brute| {
+        let ligne = brute.trim();
+        if ligne.is_empty() || ligne.starts_with('#') {
+            return false;
+        }
+        ligne.split_whitespace().next().is_some_and(|mot| DIRECTIVES_COUPLEES.contains(&mot))
+    })
+}
+
+/// `mycelium lancer` : le chemin de l'étape 0 ou celui du couplage, selon le texte du scénario.
 fn executer(a: &Arguments) -> Result<(), String> {
     let texte =
         std::fs::read_to_string(&a.scenario).map_err(|e| format!("lecture de {} : {e}", a.scenario.display()))?;
-    let scenario = Scenario::lire(&texte).map_err(|e| format!("scénario invalide : {e:?}"))?;
+    if est_couple(&texte) { executer_couple(&texte, a) } else { executer_etape_0(&texte, a) }
+}
+
+/// Le chemin de l'étape 0 : une boîte et son état, `empreinte.txt` et `apercu.png`.
+fn executer_etape_0(texte: &str, a: &Arguments) -> Result<(), String> {
+    let scenario = Scenario::lire(texte).map_err(|e| format!("scénario invalide : {e:?}"))?;
     let etat = Etat::nouveau(&scenario, a.graine);
     std::fs::create_dir_all(&a.sortie).map_err(|e| format!("création de {} : {e}", a.sortie.display()))?;
     ecrire(&a.sortie.join("empreinte.txt"), format!("{}\n", etat.empreinte()).as_bytes())?;
     let png = ecrire_png(etat.largeur, etat.hauteur, &apercu(etat.largeur, etat.hauteur));
     ecrire(&a.sortie.join("apercu.png"), &png)
+}
+
+/// Le chemin couplé : la simulation jouée `duree` pas, puis l'empreinte, les mesures et l'aperçu.
+fn executer_couple(texte: &str, a: &Arguments) -> Result<(), String> {
+    let (reglages, duree) = lire_scenario(texte).map_err(|e| format!("scénario couplé invalide : {e:?}"))?;
+    let mut simulation =
+        Simulation::nouvelle(reglages, a.graine).map_err(|e| format!("réglages couplés invalides : {e:?}"))?;
+    simulation.avancer_n(duree);
+    std::fs::create_dir_all(&a.sortie).map_err(|e| format!("création de {} : {e}", a.sortie.display()))?;
+    ecrire(&a.sortie.join("empreinte.txt"), format!("{}\n", simulation.empreinte()).as_bytes())?;
+    ecrire(&a.sortie.join("mesures.csv"), en_csv(simulation.releves()).as_bytes())?;
+    let (largeur, hauteur) = (simulation.substrat().largeur(), simulation.substrat().hauteur());
+    let png = ecrire_png((largeur * 4) as u32, (hauteur * 4) as u32, &apercu_couple(&simulation));
+    ecrire(&a.sortie.join("apercu.png"), &png)
+}
+
+/// Nombre de pixels par case dans l'aperçu couplé.
+const PIXELS_PAR_CASE: usize = 4;
+
+/// Couleur claire de la colonie.
+const COLONIE: [u8; 3] = [236, 240, 214];
+
+/// La boîte vue de dessus : un bloc de `PIXELS_PAR_CASE` pixels par case, dont la luminosité suit le substrat
+/// restant, et chaque segment de la colonie tracé en clair par l'algorithme de Bresenham entier.
+fn apercu_couple(simulation: &Simulation) -> Vec<u8> {
+    let substrat = simulation.substrat();
+    let (largeur, hauteur) = (substrat.largeur(), substrat.hauteur());
+    let (l, h) = (largeur * PIXELS_PAR_CASE, hauteur * PIXELS_PAR_CASE);
+
+    // Le substrat le plus abondant donne le blanc du fond ; les cases consommées s'assombrissent.
+    let mut maximum = 0.0f64;
+    for y in 0..hauteur {
+        for x in 0..largeur {
+            let valeur = substrat.valeur(x, y);
+            if valeur > maximum {
+                maximum = valeur;
+            }
+        }
+    }
+
+    let mut toile = Toile::nouvelle(l, h);
+    for y in 0..hauteur {
+        for x in 0..largeur {
+            let valeur = substrat.valeur(x, y);
+            let rapport = if maximum > 0.0 { valeur / maximum } else { 0.0 };
+            // 180 au plus : la colonie, plus claire, reste visible sur le fond le plus lumineux.
+            let niveau = (180.0 * rapport) as u8;
+            for py in 0..PIXELS_PAR_CASE {
+                for px in 0..PIXELS_PAR_CASE {
+                    toile.poser((x * PIXELS_PAR_CASE + px) as i64, (y * PIXELS_PAR_CASE + py) as i64, [niveau; 3]);
+                }
+            }
+        }
+    }
+
+    for segment in simulation.segments() {
+        let x0 = (segment.x0 * PIXELS_PAR_CASE as f64) as i64;
+        let y0 = (segment.y0 * PIXELS_PAR_CASE as f64) as i64;
+        let x1 = (segment.x1 * PIXELS_PAR_CASE as f64) as i64;
+        let y1 = (segment.y1 * PIXELS_PAR_CASE as f64) as i64;
+        toile.trace(x0, y0, x1, y1, COLONIE);
+    }
+    toile.pixels
+}
+
+/// Une image RGB en cours de dessin, ligne par ligne.
+struct Toile {
+    largeur: usize,
+    hauteur: usize,
+    pixels: Vec<u8>,
+}
+
+impl Toile {
+    /// Une toile noire de `largeur × hauteur` pixels.
+    fn nouvelle(largeur: usize, hauteur: usize) -> Toile {
+        Toile { largeur, hauteur, pixels: vec![0u8; largeur * hauteur * 3] }
+    }
+
+    /// Pose un pixel, s'il tombe dans la toile.
+    fn poser(&mut self, x: i64, y: i64, couleur: [u8; 3]) {
+        if x < 0 || y < 0 || x as usize >= self.largeur || y as usize >= self.hauteur {
+            return;
+        }
+        let i = (y as usize * self.largeur + x as usize) * 3;
+        self.pixels[i..i + 3].copy_from_slice(&couleur);
+    }
+
+    /// Trace un segment entre deux pixels, par l'algorithme de Bresenham entier.
+    fn trace(&mut self, x0: i64, y0: i64, x1: i64, y1: i64, couleur: [u8; 3]) {
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let pas_x = if x0 < x1 { 1 } else { -1 };
+        let pas_y = if y0 < y1 { 1 } else { -1 };
+        let (mut x, mut y) = (x0, y0);
+        let mut erreur = dx + dy;
+        loop {
+            self.poser(x, y, couleur);
+            if x == x1 && y == y1 {
+                break;
+            }
+            let erreur_2 = 2 * erreur;
+            if erreur_2 >= dy {
+                erreur += dy;
+                x += pas_x;
+            }
+            if erreur_2 <= dx {
+                erreur += dx;
+                y += pas_y;
+            }
+        }
+    }
 }
 
 fn ecrire(chemin: &Path, octets: &[u8]) -> Result<(), String> {
