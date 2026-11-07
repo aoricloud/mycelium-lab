@@ -152,6 +152,9 @@ fn la_masse_totale_se_conserve() {
         );
         verifier_cases_non_negatives(simulation.substrat());
     }
+
+    // Une simulation qui ne fait rien conserverait aussi la masse : la biomasse mesurée doit donc valoir 551.
+    assert!((simulation.biomasse() - 551.0).abs() <= 1e-9, "biomasse : {}", simulation.biomasse());
 }
 
 /// 3. Sans substrat, la colonie ne pousse pas : aucun segment, biomasse et rayon nuls, une seule pointe.
@@ -330,7 +333,7 @@ fn determinisme_et_releves() {
         final_.substrat
     );
 
-    let (x_spore, y_spore) = (reglages.spore.0 as f64, reglages.spore.1 as f64);
+    let (x_spore, y_spore) = (reglages.spore.0 as f64 + 0.5, reglages.spore.1 as f64 + 0.5);
     let mut rayon = 0.0f64;
     for segment in premiere.segments() {
         for (x, y) in [(segment.x0, segment.y0), (segment.x1, segment.y1)] {
@@ -359,9 +362,11 @@ fn les_murs_arretent_les_segments() {
     reglages.cout = 0.05;
     reglages.anastomose = Some(anastomose::Reglage { rayon: 0.5, delai: 10 });
 
+    let mut segments = 0usize;
     for graine in 1..=3u64 {
         let mut simulation = simuler(reglages.clone(), graine);
         simulation.avancer_n(60);
+        segments += simulation.segments().len();
         for segment in simulation.segments() {
             for (x, y) in [(segment.x0, segment.y0), (segment.x1, segment.y1)] {
                 assert!((0.0..21.0).contains(&x), "graine {graine} : x = {x}");
@@ -369,6 +374,7 @@ fn les_murs_arretent_les_segments() {
             }
         }
     }
+    assert!(segments >= 20, "seulement {segments} segments sur les trois graines");
 }
 
 /// 9. L'anastomose : nulle quand l'option est coupée, au moins cinq sur dix graines quand elle est allumée,
@@ -407,7 +413,7 @@ fn l_anastomose_est_optionnelle_et_reproductible() {
             "graine {graine}"
         );
     }
-    assert!(total >= 5, "seulement {total} anastomoses sur dix graines");
+    assert!((150..=190).contains(&total), "{total} anastomoses sur dix graines, hors de [150, 190]");
 
     let mut premiere = simuler(allumee.clone(), 3);
     premiere.avancer_n(30);
@@ -547,5 +553,98 @@ fn l_intervalle_peut_s_ecrire_infini() {
 #[test]
 #[cfg_attr(not(feature = "etape-2"), ignore)]
 fn un_scenario_vide_n_est_pas_couple() {
-    assert!(lire_scenario("boite 64 48\n").is_err());
+    assert!(matches!(lire_scenario("boite 64 48\n"), Err(ErreurLecture::Manquante(_))));
+}
+
+/// Les lignes du scénario couplé de référence, sans les sauts de ligne.
+const LIGNES_COUPLAGE: [&str; 7] = [
+    "boite 161 161",
+    "spore 80 80",
+    "substrat 1.0 0.2",
+    "croissance 1.0 20.0 30 20",
+    "couplage 0.1 0.002",
+    "anastomose 0.5 10",
+    "duree 80",
+];
+
+/// Le texte d'un scénario : chaque ligne suivie d'un saut de ligne.
+fn texte_de(lignes: &[&str]) -> String {
+    let mut texte = String::new();
+    for ligne in lignes {
+        texte.push_str(ligne);
+        texte.push('\n');
+    }
+    texte
+}
+
+/// B. Le texte de référence est exactement celui du fichier `scenarios/couplage.txt`, et il se lit en les
+///    réglages attendus.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn le_texte_de_reference_est_celui_du_fichier() {
+    assert_eq!(texte_de(&LIGNES_COUPLAGE), include_str!("../scenarios/couplage.txt"));
+    let (reglages, duree) = lire_scenario(&texte_de(&LIGNES_COUPLAGE)).unwrap();
+    assert_eq!(duree, 80);
+    assert_eq!(reglages, reglages_couplage());
+}
+
+/// C. Sans sa ligne `anastomose`, le texte de référence se lit avec l'option coupée.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn l_anastomose_absente_vaut_none_dans_le_texte_de_reference() {
+    let lignes: Vec<&str> = LIGNES_COUPLAGE.iter().copied().filter(|ligne| !ligne.starts_with("anastomose")).collect();
+    let (reglages, duree) = lire_scenario(&texte_de(&lignes)).unwrap();
+    assert_eq!(reglages.anastomose, None);
+    assert_eq!(duree, 80);
+}
+
+/// F. Chaque directive obligatoire absente rend son nom.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn chaque_directive_obligatoire_absente_donne_son_nom() {
+    let obligatoires = [
+        ("boite", "boite"),
+        ("spore", "spore"),
+        ("substrat", "substrat"),
+        ("croissance", "croissance"),
+        ("couplage", "couplage"),
+        ("duree", "duree"),
+    ];
+    for (nom, debut) in obligatoires {
+        let lignes: Vec<&str> = LIGNES_COUPLAGE.iter().copied().filter(|ligne| !ligne.starts_with(debut)).collect();
+        assert_eq!(lire_scenario(&texte_de(&lignes)), Err(ErreurLecture::Manquante(nom)), "sans {nom}");
+    }
+}
+
+/// F (suite). Les lignes vides et les commentaires sont ignorés, mais comptent dans les numéros de ligne.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn les_lignes_ignorees_comptent_dans_les_numeros_de_ligne() {
+    let mut lignes = LIGNES_COUPLAGE.to_vec();
+    lignes.insert(0, "# un commentaire");
+    lignes.insert(1, "");
+    lignes.push("inconnue 1 2");
+    assert_eq!(lire_scenario(&texte_de(&lignes)), Err(ErreurLecture::LigneInvalide(LIGNES_COUPLAGE.len() + 3)));
+}
+
+/// G. Des lignes vides et des commentaires ajoutés ne changent pas le scénario lu.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn les_lignes_vides_et_les_commentaires_sont_ignores() {
+    let mut lignes = LIGNES_COUPLAGE.to_vec();
+    lignes.insert(0, "# un commentaire");
+    lignes.insert(4, "");
+    let (reglages, duree) = lire_scenario(&texte_de(&lignes)).unwrap();
+    assert_eq!(duree, 80);
+    assert_eq!(reglages, reglages_couplage());
+}
+
+/// H. Un nombre mal écrit donne le numéro de sa ligne.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn un_nombre_mal_ecrit_donne_sa_ligne() {
+    let mut lignes = LIGNES_COUPLAGE.to_vec();
+    let rang = lignes.iter().position(|ligne| ligne.starts_with("duree")).expect("une ligne duree");
+    lignes[rang] = "duree quatre-vingts";
+    assert_eq!(lire_scenario(&texte_de(&lignes)), Err(ErreurLecture::LigneInvalide(rang + 1)));
 }
