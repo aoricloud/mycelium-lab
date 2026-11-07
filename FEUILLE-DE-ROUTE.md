@@ -132,16 +132,18 @@ vrai 2D. L'article n'a aucun tableau, et la plupart de ses figures sont des imag
 en 2D : la **figure 3**, où le rayon de la colonie croît linéairement avec le temps, avec une pente d'environ 0,86 fois
 la vitesse d'un apex (« The slope of the line in both cases in Fig. 3 is about 0.86 ») ; l'écart à 1 vient des apex
 qui ne partent pas droit vers l'extérieur. Les paramètres donnés : la vitesse d'un apex (1), l'autotropisme négatif
-(facteur de persistance k = 0,1), la ramification selon la densité (seuil 0,06, champ de densité de portée 20, 40 % par
-itération). Manquent la formule exacte du champ de densité et de l'autotropisme, l'angle de ramification, le nombre
-d'apex au départ ; le programme Java est cité, pas son code. Les figures 6 et 7 dépendent du passage du 3D au plat et ne
-se refont pas en 2D. L'article ne donne aucune mesure de vraies colonies.
+(facteur de persistance k = 0,1), la ramification selon la densité (seuil 0,06, constante d'ajustement lc = 20 du poids
+d'une section, 40 % par itération) ; le noyau n'a pas de coupure dans l'article. Les formules du modèle sont dans son
+compagnon, Meškauskas, McNulty et Moore (2004), Mycological Research 108:341–353 (équations 3, 4, 11 et 13) ; manquent
+l'angle de ramification et le nombre d'apex au départ ; le programme Java est cité, pas son code. Les figures 6 et 7
+dépendent du passage du 3D au plat et ne se refont pas en 2D. L'article ne donne aucune mesure de vraies colonies.
 
 Pour la V0, donc :
-- **La cible** : la figure 3, en nombres : une croissance linéaire, pas exponentielle, et une pente de 0,86 fois la
-  vitesse d'un apex, à une tolérance à fixer (par exemple 0,05), avec les paramètres publiés ; ce qui manque est choisi
-  et écrit dans `MODELE.md`. C'est une reproduction dans l'esprit de la figure, en 2D, pas sa copie exacte, et
-  `MODELE.md` le dit.
+- **La cible** : la figure 3, en nombres : une croissance linéaire du rayon, pas exponentielle (R² d'au moins 0,995),
+  une pente moyenne sous 1 et dans l'intervalle `[0,80 ; 0,97]` (la valeur publiée, 0,86, est dans l'intervalle mais
+  n'est pas la cible ; l'écart mesuré se publie dans `MODELE.md`), et une vitesse radiale constante (Edelstein, 1982),
+  avec les paramètres publiés ; ce qui manque est choisi et écrit dans `MODELE.md`. C'est une reproduction dans
+  l'esprit de la figure, en 2D, pas sa copie exacte, et `MODELE.md` le dit.
 - **Une seconde vérification**, qui ne dépend d'aucun réglage : la vitesse radiale constante prédite par Edelstein
   (1982).
 - **Les mesures de vraies colonies** viennent d'ailleurs (par exemple une dimension fractale d'environ 1,94 pour une
