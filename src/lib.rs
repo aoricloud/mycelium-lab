@@ -19,10 +19,13 @@
 //! - [`mesures`] : biomasse et dimension fractale.
 
 pub mod alea;
+pub mod anastomose;
 pub mod croissance;
 pub mod empreinte;
 pub mod grille;
 pub mod image;
 pub mod mesures;
+pub mod releves;
 pub mod scenario;
+pub mod simulation;
 pub mod substrat;
