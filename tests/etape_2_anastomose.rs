@@ -265,3 +265,54 @@ fn ajouter_panique_si_y_sort_par_le_haut() {
     let mut index = Index::new(10, 10);
     index.ajouter(Segment { apex: 0, temps: 0, x0: 5.0, y0: 1.0, x1: 5.0, y1: 10.001 });
 }
+
+/// Les segments longs des tests D : trois horizontales d'un bord à l'autre, chacune à un étage différent.
+fn segments_longs() -> Vec<Segment> {
+    vec![
+        Segment { apex: 0, temps: 0, x0: 0.0, y0: 1.0, x1: 10.0, y1: 1.0 },
+        Segment { apex: 1, temps: 0, x0: 0.0, y0: 5.0, x1: 10.0, y1: 5.0 },
+        Segment { apex: 2, temps: 0, x0: 0.0, y0: 9.0, x1: 10.0, y1: 9.0 },
+    ]
+}
+
+/// D. Un segment long se trouve depuis chaque case qu'il traverse, pas seulement celle de son départ.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn un_segment_long_se_trouve_dans_chaque_case_qu_il_traverse() {
+    let mut index = Index::new(10, 10);
+    for segment in segments_longs() {
+        index.ajouter(segment);
+    }
+
+    let reglage = Reglage { rayon: 0.75, delai: 0 };
+    // Le segment (0, 1)-(10, 1) coupe les dix cases de la ligne y = 1. Le point (x + 0,5, 1,5) est à 0,5 de ce
+    // segment et à plus de 3 des deux autres : c'est toujours le numéro 0 qui gagne, quelle que soit la case.
+    for i in 0..10usize {
+        let x = i as f64 + 0.5;
+        assert_eq!(index.chercher(x, 1.5, 3, 0, &reglage), Some(0), "case {i}");
+    }
+}
+
+/// D (suite). Avec des segments longs, `chercher` rend exactement le parcours exhaustif, départage compris.
+#[test]
+#[cfg_attr(not(feature = "etape-2"), ignore)]
+fn l_index_ne_ment_pas_avec_des_segments_longs() {
+    let mut index = Index::new(10, 10);
+    let mut segments = segments_longs();
+    // Un point proche d'une extrémité et un autre au milieu : le plus proche gagne, puis le plus petit numéro.
+    segments.push(Segment { apex: 3, temps: 0, x0: 9.5, y0: 1.0, x1: 9.5, y1: 2.0 });
+    segments.push(Segment { apex: 4, temps: 0, x0: 4.5, y0: 5.0, x1: 4.5, y1: 6.0 });
+    for segment in &segments {
+        index.ajouter(*segment);
+    }
+
+    let reglage = Reglage { rayon: 1.0, delai: 0 };
+    for i in 0..100usize {
+        let x = (i % 10) as f64 + 0.5;
+        let y = (i / 10) as f64 + 0.5;
+        let apex = (i % 6) as u32;
+        let attendu = chercher_exhaustif(&segments, x, y, apex, 0, &reglage);
+        let trouve = index.chercher(x, y, apex, 0, &reglage);
+        assert_eq!(trouve, attendu, "requête {i} : ({x}, {y}), apex {apex}");
+    }
+}
