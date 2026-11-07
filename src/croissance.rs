@@ -770,8 +770,7 @@ pub struct Parametres {
     /// Longueur dont chaque apex avance à chaque pas de temps, dans l'unité du plan.
     pub pas: f64,
     /// Intervalle moyen de ramification, en pas de temps : chaque apex se ramifie à chaque pas avec la probabilité
-    /// `1 / intervalle`, indépendamment des autres pas. Quand la ramification est possible, la première ramification
-    /// de la colonie est garantie dans ses 30 premiers pas. `f64::INFINITY` supprime toute ramification.
+    /// `1 / intervalle`, indépendamment des autres pas. `f64::INFINITY` supprime toute ramification.
     pub intervalle: f64,
     /// Angle, en degrés (indices de la table), entre la direction de l'apex et celle de la branche neuve ; la
     /// branche part d'un côté ou de l'autre, à parts égales.
