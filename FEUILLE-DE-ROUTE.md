@@ -1,7 +1,7 @@
 # Mycelium Lab — la feuille de route de la V0
 
 Ce document est le plan de la V0. Ses étapes deviennent des issues, et il change par PR, comme le code. Seules
-l'autonomie de Kraken et ses trois limites sont décidées par l'humain ; le reste est proposé, et se corrige en route.
+l'autonomie de Lydite et ses trois limites sont décidées par l'humain ; le reste est proposé, et se corrige en route.
 
 ## Ce que c'est
 
@@ -13,7 +13,7 @@ tient entre le scientifique élégant, crédible pour un labo, et l'organique un
 le plaisir de regarder.
 
 « Outil de recherche » se gagne : sans chercheur qui l'utilise ni donnée réelle, ce serait un très joli jouet. Le
-critère sérieux, dès la V0 : reproduire une figure publiée, en nombres. C'est aussi la meilleure épreuve pour Kraken,
+critère sérieux, dès la V0 : reproduire une figure publiée, en nombres. C'est aussi la meilleure épreuve pour Lydite,
 parce que cette preuve ne dépend de l'avis d'aucun agent.
 
 ## Ce que la V0 est, et ce qu'elle n'est pas
@@ -25,7 +25,7 @@ parce que cette preuve ne dépend de l'avis d'aucun agent.
 
 ## Les principes
 
-1. **Rust sans dépendance**, comme Kraken : générateur pseudo-aléatoire, écrivain PNG et empreinte écrits dans le
+1. **Rust sans dépendance**, comme Lydite : générateur pseudo-aléatoire, écrivain PNG et empreinte écrits dans le
    dépôt. La CI reste simple et rien n'est à auditer.
 2. **Déterministe sur toutes les machines** : même graine, même état, sous Linux comme sous Windows. Donc pas de
    `sin`, `cos`, `exp` ou `ln` de `f64`, qui passent par la bibliothèque mathématique du système et peuvent différer
@@ -57,26 +57,27 @@ parce que cette preuve ne dépend de l'avis d'aucun agent.
 | `rendu` | les aperçus et les images d'animation |
 | binaire `mycelium` | `mycelium lancer <scénario> --graine <n> --sortie <dossier>` : l'empreinte, les mesures en CSV, les aperçus |
 
-## L'autonomie de Kraken
+## L'autonomie de Lydite
 
-Kraken mène Mycelium Lab en autonomie totale, dans trois limites décidées par l'humain :
-1. la preuve et le mur restent : Kraken rejoue lui-même chaque preuve, et les mains travaillent derrière le mur ;
+Lydite mène Mycelium Lab en autonomie totale, dans trois limites décidées par l'humain :
+1. la preuve et le mur restent : Lydite rejoue lui-même chaque preuve, et les mains travaillent derrière le mur ;
 2. ce seul dépôt : un jeton limité à Mycelium Lab ; les réglages du dépôt (règles, vérifications exigées, Pages) restent
-   à l'humain, et Kraken ne peut pas lever ses propres garde-fous (il ne pousse jamais `.github/`, n'a aucun droit
+   à l'humain, et Lydite ne peut pas lever ses propres garde-fous (il ne pousse jamais `.github/`, n'a aucun droit
    d'administration) ;
-3. seulement les issues de l'humain ou celles de Kraken : sur un dépôt public, le texte d'un inconnu ne devient jamais
+3. seulement les issues de l'humain ou celles de Lydite : sur un dépôt public, le texte d'un inconnu ne devient jamais
    la consigne d'une main.
 
 Le reste est libre : écrire ses issues, choisir l'ordre, fusionner, enchaîner. Proposé, non décidé : l'humain pose
-l'étiquette `aurait-refuse` sur une PR fusionnée qu'il aurait refusée ; Kraken la compte comme un raté et ouvre une
+l'étiquette `aurait-refuse` sur une PR fusionnée qu'il aurait refusée ; Lydite la compte comme un raté et ouvre une
 issue de correction.
 
-**La fusion, sans une ligne de Kraken** : l'auto-fusion du dépôt est permise, et la règle de `main` exige la CI (Linux
-et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `kraken/` du dépôt vers `main`,
-déclenché par `pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert. La même CI refuse
+**La fusion, sans une ligne de Lydite** : l'auto-fusion du dépôt est permise, et la règle de `main` exige la CI (Linux
+et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `lydite/` du dépôt vers `main` (et
+`kraken/`, l'ancien nom de Lydite, le temps que finissent les vagues lancées avant le changement), déclenché par
+`pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert. La même CI refuse
 qu'une dépendance ou un `.cargo/` entre.
 
-**Le plan vit dans le dépôt** : ce document, et ses étapes en issues. Tant que Kraken ne prend pas encore ses issues
+**Le plan vit dans le dépôt** : ce document, et ses étapes en issues. Tant que Lydite ne prend pas encore ses issues
 seul, ses vagues sont lancées d'office, une étape après l'autre.
 
 ## Les tests avant les mains
@@ -85,19 +86,19 @@ Chaque étape a deux vagues. La première écrit les signatures publiques de l'�
 tests d'acceptation, d'après l'issue et sa référence ; elle déclare la fonctionnalité `etape-<n>` dans `Cargo.toml`,
 sans l'activer, et chaque test porte `#[cfg_attr(not(feature = "etape-<n>"), ignore)]`. Elle est fusionnée comme les
 autres. La seconde remplit les corps et ajoute `etape-<n>` aux fonctionnalités par défaut, ce qui lève les `ignore`
-sans toucher aux tests : ses tâches n'ont pas les fichiers de tests dans leurs `fichiers`, et Kraken refuse une main
+sans toucher aux tests : ses tâches n'ont pas les fichiers de tests dans leurs `fichiers`, et Lydite refuse une main
 qui y touche. C'est la meilleure parade d'ImpossibleBench : des tests en lecture seule.
 
 ## Les règles que les mains ne lisent pas encore
 
-Une main de Kraken ne reçoit pas encore les consignes du dépôt (`AGENTS.md`, `CLAUDE.md`). Chaque issue redit donc les
+Une main de Lydite ne reçoit pas encore les consignes du dépôt (`AGENTS.md`, `CLAUDE.md`). Chaque issue redit donc les
 règles qui comptent pour son étape : le déterminisme (ni `sin` ni `exp` du système, ni `HashMap` parcourue), les tests
 qu'on ne touche pas, le « sans dépendance ». La CI sous Linux et sous Windows attrape un état qui différerait d'un
 système à l'autre : l'empreinte de référence n'y serait plus la même.
 
 ## Les vagues
 
-Chaque vague part par Kraken sur une issue (`kraken lancer mycelium --issue <n> --decouper --verifier "<preuve>" --pr
+Chaque vague part par Lydite sur une issue (`lydite lancer mycelium --issue <n> --decouper --verifier "<preuve>" --pr
 main`), sous le profil `mycelium` : le mur exigé, Sonnet aux mains. GitHub fusionne ce qui est vert. La preuve :
 `cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`.
 
@@ -154,9 +155,9 @@ Pour la V0, donc :
 - **Les nutriments** de la V0 ne viennent pas de cet article : ils suivent la lignée de Boswell, à lire avant la
   vague 2.
 
-## Les rejeux, pour Kraken
+## Les rejeux, pour Lydite
 
-Chaque milestone de Kraken se mesure en rejouant des étapes déjà faites, à base et issue gelées. Un rejeu part d'un
+Chaque milestone de Lydite se mesure en rejouant des étapes déjà faites, à base et issue gelées. Un rejeu part d'un
 dépôt neuf qui ne porte que l'arbre de la base, sans l'historique ni les branches de la suite : sinon une main lirait la
 solution dans git (`git log --all`, les objets du dépôt). Les issues y sont recopiées. Des issues piégées, dont le test
 contredit le texte, ne servent qu'aux rejeux.
