@@ -1,7 +1,7 @@
 # Mycelium Lab : les règles du dépôt
 
-Ce dépôt est mené par Kraken : des mains (des agents de toute sorte) y travaillent sur des issues, chacune sur une
-branche `kraken/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. Ces règles valent pour
+Ce dépôt est mené par Lydite : des mains (des agents de toute sorte) y travaillent sur des issues, chacune sur une
+branche `lydite/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. Ces règles valent pour
 toute main. Le plan est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations et ses limites, dans `MODELE.md`.
 
 ## La preuve
