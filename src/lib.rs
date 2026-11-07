@@ -13,10 +13,16 @@
 //! - [`grille`] : l'état simulé, son écriture canonique et son empreinte ;
 //! - [`scenario`] : la boîte de Petri et sa lecture depuis un texte ;
 //! - [`empreinte`] : SHA-256 ;
-//! - [`image`] : écrivain PNG et sommes de contrôle.
+//! - [`image`] : écrivain PNG et sommes de contrôle ;
+//! - [`croissance`] : apex, marche persistante, ramification ;
+//! - [`substrat`] : diffusion explicite du substrat ;
+//! - [`mesures`] : biomasse et dimension fractale.
 
 pub mod alea;
+pub mod croissance;
 pub mod empreinte;
 pub mod grille;
 pub mod image;
+pub mod mesures;
 pub mod scenario;
+pub mod substrat;
