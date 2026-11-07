@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="La vitrine de Mycelium Lab : une colonie mycélienne qui pousse sur sa boîte de Petri, simulée en WebAssembly.">
+<title>Mycelium Lab — la colonie en vitrine</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --fond: #060a0b;
+    --carte: rgba(15, 23, 24, 0.74);
+    --trait: rgba(205, 226, 203, 0.13);
+    --encre: #e9efe6;
+    --encre-douce: #9fb0a4;
+    --accent: #cfe6a6;
+    --accent-fort: #e8f6c8;
+    --mesure: #f3f7ea;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--fond); }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--encre);
+    background:
+      radial-gradient(90rem 60rem at 50% -20%, #12201c 0%, transparent 60%),
+      radial-gradient(60rem 40rem at 100% 100%, #0c1513 0%, transparent 55%),
+      var(--fond);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .page {
+    width: min(1180px, 100% - 2rem);
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 3.5rem) 0 4rem;
+  }
+
+  .surtitre {
+    margin: 0 0 0.55rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  .chapeau {
+    max-width: 62ch;
+    margin: 0.9rem 0 0;
+    font-size: clamp(1rem, 1.8vw, 1.12rem);
+    line-height: 1.6;
+    color: var(--encre-douce);
+  }
+
+  .atelier {
+    display: grid;
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  }
+
+  @media (min-width: 900px) {
+    .atelier {
+      grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 1fr);
+      align-items: start;
+    }
+  }
+
+  .cadre {
+    position: relative;
+    margin: 0;
+    padding: clamp(0.5rem, 1.4vw, 0.9rem) clamp(0.5rem, 1.4vw, 0.9rem) 0.7rem;
+    border: 1px solid var(--trait);
+    border-radius: 22px;
+    background: linear-gradient(160deg, rgba(30, 44, 40, 0.9), rgba(9, 14, 14, 0.95));
+    box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    background: #040607;
+    touch-action: manipulation;
+  }
+
+  .etat {
+    position: absolute;
+    top: 1.25rem;
+    left: 1.25rem;
+    max-width: calc(100% - 2.5rem);
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--trait);
+    border-radius: 999px;
+    background: rgba(5, 9, 9, 0.62);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 0.78rem;
+    color: var(--encre-douce);
+    pointer-events: none;
+  }
+
+  .legende {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0.7rem 0.15rem 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    color: var(--encre-douce);
+  }
+
+  .echantillon {
+    width: 3.4rem;
+    height: 0.5rem;
+    flex: none;
+    border: 1px solid var(--trait);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgb(12, 17, 16), rgb(54, 68, 44));
+  }
+
+  .panneau {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .bloc {
+    padding: 1rem 1.05rem 1.1rem;
+    border: 1px solid var(--trait);
+    border-radius: 18px;
+    background: var(--carte);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  h2 {
+    margin: 0 0 0.8rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--encre-douce);
+  }
+
+  .champ {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--encre-douce);
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    background: rgba(4, 8, 8, 0.7);
+    color: var(--mesure);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  input[type="number"]:focus-visible,
+  input[type="range"]:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .boutons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+    margin-bottom: 0.6rem;
+  }
+
+  button {
+    min-height: 44px;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--encre);
+    font: inherit;
+    font-weight: 550;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:hover {
+    background: rgba(207, 232, 168, 0.1);
+    border-color: rgba(207, 232, 168, 0.28);
+  }
+
+  button:active { transform: translateY(1px); }
+
+  button.principal {
+    border-color: transparent;
+    background: linear-gradient(180deg, #d6eda9, #a9c97e);
+    color: #10170c;
+  }
+
+  button.principal:hover {
+    background: linear-gradient(180deg, #e2f7b8, #b6d68a);
+  }
+
+  button[aria-pressed="true"] {
+    border-color: rgba(207, 232, 168, 0.42);
+    background: rgba(207, 232, 168, 0.16);
+  }
+
+  output {
+    font-variant-numeric: tabular-nums;
+    color: var(--mesure);
+  }
+
+  .message {
+    min-height: 1.2em;
+    margin: 0.35rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--encre-douce);
+  }
+
+  .grille-mesures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+    margin: 0;
+  }
+
+  .grille-mesures > div {
+    padding: 0.6rem 0.7rem;
+    border: 1px solid rgba(208, 228, 205, 0.07);
+    border-radius: 12px;
+    background: rgba(4, 8, 8, 0.45);
+  }
+
+  dt {
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--encre-douce);
+  }
+
+  dd {
+    margin: 0.25rem 0 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+    font-variant-numeric: tabular-nums;
+    color: var(--mesure);
+  }
+
+  dd small {
+    font-size: 0.65em;
+    color: var(--encre-douce);
+  }
+
+  .valeur-empreinte {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    letter-spacing: 0.03em;
+    color: var(--accent-fort);
+    word-break: break-all;
+  }
+
+  .note {
+    margin: 0.55rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--encre-douce);
+  }
+
+  .lecture {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: clamp(1.75rem, 4vw, 2.75rem);
+    padding-top: clamp(1.25rem, 3vw, 2rem);
+    border-top: 1px solid var(--trait);
+  }
+
+  .lecture h2 { margin-bottom: 0; }
+
+  .lecture p {
+    max-width: 74ch;
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.7;
+    color: var(--encre-douce);
+  }
+
+  .lecture strong {
+    font-weight: 600;
+    color: var(--encre);
+  }
+
+  .lecture code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    color: var(--accent-fort);
+  }
+
+  .pied {
+    margin: clamp(2rem, 5vw, 3rem) 0 0;
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+    color: var(--encre-douce);
+    opacity: 0.8;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <p class="surtitre">Vitrine · boîte de Petri</p>
+    <h1>Mycelium Lab</h1>
+    <p class="chapeau">
+      Une colonie mycélienne pousse depuis sa spore, étend ses hyphes sur un substrat qui s'épuise
+      derrière elle, se ramifie et s'anastomose. La simulation tourne dans votre navigateur, en
+      WebAssembly, sans rien charger d'autre que cette page.
+    </p>
+  </header>
+
+  <section class="atelier" aria-label="La simulation et ses commandes">
+    <figure class="cadre">
+      <canvas id="boite" width="900" height="900" role="img"
+              aria-label="Boîte de Petri sombre où poussent les hyphes clairs de la colonie."></canvas>
+      <figcaption id="etat" class="etat" role="status" aria-live="polite">Chargement du module…</figcaption>
+      <p class="legende">
+        <span class="echantillon" aria-hidden="true"></span>
+        Substrat : clair = intact, sombre = consommé — contraste amplifié ×60
+      </p>
+    </figure>
+
+    <aside class="panneau">
+      <section class="bloc" aria-labelledby="titre-commandes">
+        <h2 id="titre-commandes">Commandes</h2>
+
+        <label class="champ" for="graine">
+          <span>Graine</span>
+          <input id="graine" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="1">
+        </label>
+
+        <div class="boutons">
+          <button id="hasard" type="button">Au hasard</button>
+          <button id="relancer" type="button" class="principal">Relancer</button>
+        </div>
+
+        <div class="boutons">
+          <button id="pause" type="button" aria-pressed="false">Pause</button>
+          <button id="pas80" type="button">Jusqu'au pas 80</button>
+        </div>
+
+        <label class="champ" for="vitesse">
+          <span>Vitesse — <output id="vitesse-valeur" for="vitesse">1</output> pas par image</span>
+          <input id="vitesse" type="range" min="1" max="16" step="1" value="1">
+        </label>
+
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="bloc" aria-labelledby="titre-mesures">
+        <h2 id="titre-mesures">La colonie</h2>
+        <dl class="grille-mesures">
+          <div>
+            <dt>Temps</dt>
+            <dd><span id="temps">0</span> <small>pas</small></dd>
+          </div>
+          <div>
+            <dt>Biomasse</dt>
+            <dd id="biomasse">0</dd>
+          </div>
+          <div>
+            <dt>Pointes</dt>
+            <dd id="pointes">0</dd>
+          </div>
+          <div>
+            <dt>Anastomoses</dt>
+            <dd id="anastomoses">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="bloc" aria-labelledby="titre-empreinte">
+        <h2 id="titre-empreinte">Empreinte de l'état</h2>
+        <p id="empreinte" class="valeur-empreinte">—</p>
+        <p class="note" id="note-empreinte">
+          Le SHA-256 de tout l'état : temps, segments, apex et substrat. Elle identifie la simulation
+          exacte et est relue à intervalles espacés, jamais à chaque image.
+        </p>
+      </section>
+    </aside>
+  </section>
+
+  <section class="lecture" aria-labelledby="titre-lecture">
+    <h2 id="titre-lecture">Ce que l'on voit, ce que l'empreinte prouve</h2>
+    <p>
+      Chaque trait clair est un <strong>segment d'hyphe</strong> laissé par une pointe en croissance.
+      La colonie part de la spore au centre, avance d'un pas à la fois, se ramifie quand le hasard le
+      décide et s'anastomose lorsque deux branches se rejoignent. Le substrat, d'abord uniforme,
+      s'assombrit là où les hyphes l'ont consommé : la boîte se vide derrière la colonie. L'image
+      amplifie ce très faible écart — il vaut quelques millièmes — pour le rendre lisible, sans
+      jamais changer les valeurs que le module calcule.
+    </p>
+    <p>
+      L'<strong>empreinte</strong> est le SHA-256 de l'état complet, calculé par le module lui-même.
+      Deux simulations de la même graine au même pas produisent exactement les mêmes 64 caractères :
+      c'est une preuve vérifiable hors de la page, et c'est ainsi que l'on sait que le module
+      WebAssembly calcule la même chose que le code Rust natif. Pour la graine 1 au pas 80, elle vaut
+      <strong>2223a1f3bcbc8627866aba084052cac06e93b05842bacc0ba94778bc23ed1083</strong>, exactement le
+      contenu de <code>references/couplage-graine-1.empreinte</code> du dépôt
+      <strong>aoricloud/mycelium-lab</strong>. Le bouton « Jusqu'au pas 80 » s'arrête sur cet état :
+      l'empreinte affichée est alors celle de la référence.
+    </p>
+  </section>
+
+  <p class="pied">
+    aoricloud/mycelium-lab · module WebAssembly sans importation · aucun script, aucune police et aucune
+    image ne viennent de l'extérieur.
+  </p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
