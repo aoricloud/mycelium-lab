@@ -10,3 +10,6 @@ name = "mycelium"
 path = "src/main.rs"
 
 [dependencies]
+
+[features]
+etape-0 = []
