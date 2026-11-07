@@ -12,6 +12,6 @@ path = "src/main.rs"
 [dependencies]
 
 [features]
-default = ["etape-0"]
+default = ["etape-0", "etape-1"]
 etape-0 = []
 etape-1 = []
