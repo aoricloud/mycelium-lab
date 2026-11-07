@@ -113,6 +113,10 @@ fn mesures_de_la_croissance() {
     let r2_attendu = 1.0 - scr / sct;
     assert!(proche(bruite.r2, r2_attendu, 1e-12), "R² : {} au lieu de {r2_attendu}", bruite.r2);
     assert!(bruite.r2 > 0.0 && bruite.r2 < 1.0, "R² strictement entre 0 et 1 : {}", bruite.r2);
+    // La droite et le R² de ce nuage sont connus exactement : 36/35, 23/21 et 972/1225.
+    assert!(proche(bruite.pente, 36.0 / 35.0, 1e-12), "pente du nuage : {}", bruite.pente);
+    assert!(proche(bruite.ordonnee, 23.0 / 21.0, 1e-12), "ordonnée du nuage : {}", bruite.ordonnee);
+    assert!(proche(bruite.r2, 972.0 / 1225.0, 1e-12), "R² du nuage : {}", bruite.r2);
 
     // `r(t) = 0,9 t` : les seize fenêtres de `vitesses_glissantes` ont toutes la pente 0,9.
     let mut rayons = Vec::new();
@@ -141,4 +145,18 @@ fn mesures_de_la_croissance() {
     // La régression du rayon sur le temps retrouve la pente 0,9 de `r(t) = 0,9 t`.
     let pente = ajuster_rayon(&rayons, 200, 400).pente;
     assert!(proche(pente, 0.9, 1e-9), "pente du rayon : {pente}");
+    let ordonnee = ajuster_rayon(&rayons, 200, 400).ordonnee;
+    assert!(proche(ordonnee, 0.0, 1e-8), "ordonnée du rayon : {ordonnee}");
+
+    // `r(t) = t²` n'est pas une droite : la pente sur `]200, 400]` est 601 (deux fois la moyenne des temps) et celle de
+    // la `k`-ième fenêtre de 50 pas est `451 + 20 k`. Une fenêtre décalée d'un pas ou un temps mal compté se voit.
+    let mut carres = Vec::new();
+    for t in 1..=400u32 {
+        carres.push((t as f64) * (t as f64));
+    }
+    let pente_carres = ajuster_rayon(&carres, 200, 400).pente;
+    assert!(proche(pente_carres, 601.0, 1e-8), "pente de t² sur ]200, 400] : {pente_carres}");
+    for (k, pente) in vitesses_glissantes(&carres, 200, 400, 50, 10).iter().enumerate() {
+        assert!(proche(*pente, 451.0 + 20.0 * k as f64, 1e-8), "fenêtre {k} de t² : pente {pente}");
+    }
 }
