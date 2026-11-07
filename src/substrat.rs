@@ -93,6 +93,15 @@ impl Substrat {
         self.cases[y * self.largeur + x] += quantite;
     }
 
+    /// Retire au plus `quantite` de la case `(x, y)` et rend ce qui a été retiré.
+    ///
+    /// Contrat : le résultat n'excède jamais ce que la case contenait, et la masse totale baisse d'autant.
+    /// Panique si la case est hors de la grille, ou si `quantite` n'est pas finie ou est négative.
+    pub fn retirer(&mut self, x: usize, y: usize, quantite: f64) -> f64 {
+        let _ = (x, y, quantite);
+        todo!()
+    }
+
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
     ///
     /// Contrat : la masse totale est conservée (aux erreurs d'arrondi près) ; l'ancien champ est lu en entier

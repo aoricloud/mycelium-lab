@@ -15,3 +15,4 @@ path = "src/main.rs"
 default = ["etape-0", "etape-1"]
 etape-0 = []
 etape-1 = []
+etape-2 = []
