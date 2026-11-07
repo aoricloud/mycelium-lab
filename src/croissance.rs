@@ -924,10 +924,7 @@ impl Colonie {
             self.segments.push(Segment { apex: apex.id, temps: self.temps, x0, y0, x1, y1 });
 
             // 3. Se ramifier : un nouvel apex naît à la nouvelle position, d'un côté ou de l'autre.
-            // Quand la ramification est possible, la première ramification de la colonie est garantie dans ses
-            // 30 premiers pas : une colonie ne reste jamais indéfiniment réduite à son apex initial.
-            let premiere_ramification_garantie = self.nb_ramifications == 0 && self.temps >= 30;
-            if probabilite > 0.0 && (premiere_ramification_garantie || self.alea.suivant_f64() < probabilite) {
+            if probabilite > 0.0 && self.alea.suivant_f64() < probabilite {
                 let cote = self.alea.suivant() % 2;
                 let decalage = if cote == 0 { angle_ramification } else { -angle_ramification };
                 let direction = (direction as i64 + decalage).rem_euclid(NB_DIRECTIONS as i64) as usize;
