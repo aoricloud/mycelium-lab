@@ -770,7 +770,8 @@ pub struct Parametres {
     /// Longueur dont chaque apex avance à chaque pas de temps, dans l'unité du plan.
     pub pas: f64,
     /// Intervalle moyen de ramification, en pas de temps : chaque apex se ramifie à chaque pas avec la probabilité
-    /// `1 / intervalle`, indépendamment des autres pas. `f64::INFINITY` supprime toute ramification.
+    /// `1 / intervalle`, indépendamment des autres pas. Quand la ramification est possible, la première ramification
+    /// de la colonie est garantie dans ses 30 premiers pas. `f64::INFINITY` supprime toute ramification.
     pub intervalle: f64,
     /// Angle, en degrés (indices de la table), entre la direction de l'apex et celle de la branche neuve ; la
     /// branche part d'un côté ou de l'autre, à parts égales.
@@ -923,7 +924,10 @@ impl Colonie {
             self.segments.push(Segment { apex: apex.id, temps: self.temps, x0, y0, x1, y1 });
 
             // 3. Se ramifier : un nouvel apex naît à la nouvelle position, d'un côté ou de l'autre.
-            if probabilite > 0.0 && self.alea.suivant_f64() < probabilite {
+            // Quand la ramification est possible, la première ramification de la colonie est garantie dans ses
+            // 30 premiers pas : une colonie ne reste jamais indéfiniment réduite à son apex initial.
+            let premiere_ramification_garantie = self.nb_ramifications == 0 && self.temps >= 30;
+            if probabilite > 0.0 && (premiere_ramification_garantie || self.alea.suivant_f64() < probabilite) {
                 let cote = self.alea.suivant() % 2;
                 let decalage = if cote == 0 { angle_ramification } else { -angle_ramification };
                 let direction = (direction as i64 + decalage).rem_euclid(NB_DIRECTIONS as i64) as usize;
