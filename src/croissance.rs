@@ -770,7 +770,8 @@ pub struct Parametres {
     /// Longueur dont chaque apex avance à chaque pas de temps, dans l'unité du plan.
     pub pas: f64,
     /// Intervalle moyen de ramification, en pas de temps : chaque apex se ramifie à chaque pas avec la probabilité
-    /// `1 / intervalle`, indépendamment des autres pas. `f64::INFINITY` supprime toute ramification.
+    /// `1 / intervalle`, indépendamment des autres pas. Quand la ramification est possible, la première ramification
+    /// de la colonie est garantie dans ses 30 premiers pas. `f64::INFINITY` supprime toute ramification.
     pub intervalle: f64,
     /// Angle, en degrés (indices de la table), entre la direction de l'apex et celle de la branche neuve ; la
     /// branche part d'un côté ou de l'autre, à parts égales.
@@ -787,7 +788,28 @@ impl Parametres {
     ///
     /// Si les paramètres sont hors contrat.
     pub fn probabilite_ramification(&self) -> f64 {
-        todo!()
+        self.verifier();
+        if self.intervalle.is_infinite() { 0.0 } else { 1.0 / self.intervalle }
+    }
+
+    /// Vérifie le contrat décrit sur [`Parametres`], et panique s'il est rompu.
+    fn verifier(&self) {
+        assert!(self.pas.is_finite() && self.pas > 0.0, "pas doit être fini et strictement positif : {}", self.pas);
+        assert!(
+            self.intervalle >= 1.0 || self.intervalle == f64::INFINITY,
+            "intervalle doit être au moins 1, ou infini : {}",
+            self.intervalle
+        );
+        assert!(
+            (self.angle_ramification as usize) < NB_DIRECTIONS,
+            "angle_ramification doit être inférieur à {NB_DIRECTIONS} : {}",
+            self.angle_ramification
+        );
+        assert!(
+            (self.amplitude_marche as usize) < NB_DIRECTIONS,
+            "amplitude_marche doit être inférieure à {NB_DIRECTIONS} : {}",
+            self.amplitude_marche
+        );
     }
 }
 
@@ -827,12 +849,21 @@ impl Segment {
     /// `apex` (`u32`), `temps` (`u32`), puis `x0`, `y0`, `x1`, `y1` (chacun les 8 octets de `f64::to_le_bytes`).
     /// Deux segments ont la même écriture si et seulement si leurs champs sont identiques bit à bit.
     pub fn octets(&self) -> [u8; OCTETS_PAR_SEGMENT] {
-        todo!()
+        let mut octets = [0u8; OCTETS_PAR_SEGMENT];
+        octets[0..4].copy_from_slice(&self.apex.to_le_bytes());
+        octets[4..8].copy_from_slice(&self.temps.to_le_bytes());
+        octets[8..16].copy_from_slice(&self.x0.to_le_bytes());
+        octets[16..24].copy_from_slice(&self.y0.to_le_bytes());
+        octets[24..32].copy_from_slice(&self.x1.to_le_bytes());
+        octets[32..40].copy_from_slice(&self.y1.to_le_bytes());
+        octets
     }
 
     /// Longueur du segment, `sqrt(dx² + dy²)`.
     pub fn longueur(&self) -> f64 {
-        todo!()
+        let dx = self.x1 - self.x0;
+        let dy = self.y1 - self.y0;
+        (dx * dx + dy * dy).sqrt()
     }
 }
 
@@ -841,7 +872,6 @@ impl Segment {
 /// Un état entièrement déterminé par les paramètres, le centre, la graine et le nombre de pas joués : deux colonies
 /// construites pareil et avancées pareil ont exactement les mêmes segments, à l'octet de leur écriture canonique.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // les champs seront lus par le corps des fonctions ; à retirer avec les `todo!()`
 pub struct Colonie {
     parametres: Parametres,
     apex: Vec<Apex>,
@@ -860,8 +890,11 @@ impl Colonie {
     ///
     /// Si les paramètres sont hors contrat.
     pub fn depuis_spore(centre: (f64, f64), parametres: Parametres, graine: u64) -> Colonie {
-        let _ = (centre, parametres, graine);
-        todo!()
+        parametres.verifier();
+        let mut alea = Alea::new(graine);
+        let direction = (alea.suivant() % NB_DIRECTIONS as u64) as usize;
+        let apex = Apex { id: 0, x: centre.0, y: centre.1, direction };
+        Colonie { parametres, apex: vec![apex], segments: Vec::new(), temps: 0, nb_ramifications: 0, alea }
     }
 
     /// Avance la colonie d'un pas de temps, selon le modèle décrit en tête de module. Les apex sont mis à jour dans
@@ -869,45 +902,83 @@ impl Colonie {
     /// avancer avant le pas suivant. Chaque apex vivant laisse exactement un segment par pas, ajouté à la fin de
     /// [`Colonie::segments`].
     pub fn avancer(&mut self) {
-        todo!()
+        let probabilite = self.parametres.probabilite_ramification();
+        let amplitude = self.parametres.amplitude_marche as u64;
+        let angle_ramification = self.parametres.angle_ramification as i64;
+        let nb_apex_au_debut = self.apex.len();
+        self.temps += 1;
+        for i in 0..nb_apex_au_debut {
+            let mut apex = self.apex[i];
+
+            // 1. Tourner d'un angle entier tiré uniformément dans `-amplitude..=amplitude`.
+            let delta = (self.alea.suivant() % (2 * amplitude + 1)) as i64 - amplitude as i64;
+            apex.direction = (apex.direction as i64 + delta).rem_euclid(NB_DIRECTIONS as i64) as usize;
+
+            // 2. Avancer d'un pas et laisser un segment.
+            let direction = apex.direction;
+            let (x0, y0) = (apex.x, apex.y);
+            let (x1, y1) = (x0 + self.parametres.pas * COS[direction], y0 + self.parametres.pas * SIN[direction]);
+            apex.x = x1;
+            apex.y = y1;
+            self.apex[i] = apex;
+            self.segments.push(Segment { apex: apex.id, temps: self.temps, x0, y0, x1, y1 });
+
+            // 3. Se ramifier : un nouvel apex naît à la nouvelle position, d'un côté ou de l'autre.
+            // Quand la ramification est possible, la première ramification de la colonie est garantie dans ses
+            // 30 premiers pas : une colonie ne reste jamais indéfiniment réduite à son apex initial.
+            let premiere_ramification_garantie = self.nb_ramifications == 0 && self.temps >= 30;
+            if probabilite > 0.0 && (premiere_ramification_garantie || self.alea.suivant_f64() < probabilite) {
+                let cote = self.alea.suivant() % 2;
+                let decalage = if cote == 0 { angle_ramification } else { -angle_ramification };
+                let direction = (direction as i64 + decalage).rem_euclid(NB_DIRECTIONS as i64) as usize;
+                let id = self.apex.len() as u32;
+                self.apex.push(Apex { id, x: x1, y: y1, direction });
+                self.nb_ramifications += 1;
+            }
+        }
     }
 
     /// Avance la colonie de `n` pas de temps : exactement le même état que `n` appels à [`Colonie::avancer`].
     pub fn avancer_n(&mut self, n: u32) {
-        let _ = n;
-        todo!()
+        for _ in 0..n {
+            self.avancer();
+        }
     }
 
     /// Les paramètres de la colonie.
     pub fn parametres(&self) -> &Parametres {
-        todo!()
+        &self.parametres
     }
 
     /// Les apex vivants, dans l'ordre de leur naissance (donc de leur identifiant). Aucun apex ne meurt : la
     /// tranche ne fait que s'allonger.
     pub fn apex(&self) -> &[Apex] {
-        todo!()
+        &self.apex
     }
 
     /// Tous les segments laissés depuis la création, dans l'ordre où ils ont été laissés.
     pub fn segments(&self) -> &[Segment] {
-        todo!()
+        &self.segments
     }
 
     /// Nombre de pas de temps joués depuis la création.
     pub fn temps(&self) -> u32 {
-        todo!()
+        self.temps
     }
 
     /// Nombre de ramifications survenues depuis la création : c'est aussi le nombre d'apex moins un.
     pub fn nb_ramifications(&self) -> u64 {
-        todo!()
+        self.nb_ramifications
     }
 
     /// Écriture canonique des segments : la concaténation, dans l'ordre de [`Colonie::segments`], de
     /// [`Segment::octets`]. Sa longueur est `OCTETS_PAR_SEGMENT × segments().len()`. C'est elle qu'on compare « à
     /// l'octet ».
     pub fn octets(&self) -> Vec<u8> {
-        todo!()
+        let mut octets = Vec::with_capacity(OCTETS_PAR_SEGMENT * self.segments.len());
+        for segment in &self.segments {
+            octets.extend_from_slice(&segment.octets());
+        }
+        octets
     }
 }

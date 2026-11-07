@@ -31,7 +31,6 @@ pub enum ErreurSubstrat {
 /// champ neuf est nul partout. Les coordonnées `(x, y)` vont de `0` à `largeur - 1` et de `0` à `hauteur - 1`.
 /// Tout est déterministe : mêmes paramètres, mêmes dépôts, même nombre de pas, mêmes octets.
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)] // les champs sont lus par le code de la vague suivante
 pub struct Substrat {
     largeur: usize,
     hauteur: usize,
@@ -41,7 +40,6 @@ pub struct Substrat {
     cases: Vec<f64>,
 }
 
-#[allow(unused_variables)] // les corps sont `todo!()` jusqu'à la vague suivante
 impl Substrat {
     /// Construit un champ nul de `largeur × hauteur` cases, de coefficient de diffusion `d`, de pas de temps
     /// `dt` et de côté de case `dx` (`d` en longueur²/temps, `dt` en temps, `dx` en longueur).
@@ -51,36 +49,48 @@ impl Substrat {
     /// `dx ≤ 0` (`d = 0` est permis : le champ ne bouge pas) ; avec [`ErreurSubstrat::PasInstable`] si
     /// `d * dt / (dx * dx) > 0.25`. La limite `0.25` elle-même est acceptée.
     pub fn nouveau(largeur: usize, hauteur: usize, d: f64, dt: f64, dx: f64) -> Result<Substrat, ErreurSubstrat> {
-        todo!()
+        if largeur == 0 || hauteur == 0 {
+            return Err(ErreurSubstrat::DimensionNulle);
+        }
+        if !d.is_finite() || !dt.is_finite() || !dx.is_finite() || d < 0.0 || dt <= 0.0 || dx <= 0.0 {
+            return Err(ErreurSubstrat::ParametreInvalide);
+        }
+        if d * dt / (dx * dx) > 0.25 {
+            return Err(ErreurSubstrat::PasInstable);
+        }
+        Ok(Substrat { largeur, hauteur, d, dt, dx, cases: vec![0.0; largeur * hauteur] })
     }
 
     /// Nombre de cases en `x`.
     pub fn largeur(&self) -> usize {
-        todo!()
+        self.largeur
     }
 
     /// Nombre de cases en `y`.
     pub fn hauteur(&self) -> usize {
-        todo!()
+        self.hauteur
     }
 
     /// Le nombre de diffusion `r = D dt / dx²`, toujours dans `[0, 0.25]` pour un substrat construit.
     pub fn nombre_de_diffusion(&self) -> f64 {
-        todo!()
+        self.d * self.dt / (self.dx * self.dx)
     }
 
     /// La quantité de nutriments dans la case `(x, y)`.
     ///
     /// Contrat : panique si `x >= largeur()` ou `y >= hauteur()`.
     pub fn valeur(&self, x: usize, y: usize) -> f64 {
-        todo!()
+        assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
+        self.cases[y * self.largeur + x]
     }
 
     /// Ajoute `quantite` à la case `(x, y)` (la masse totale croît d'autant).
     ///
     /// Contrat : panique si la case est hors de la grille, ou si `quantite` n'est pas finie ou est négative.
     pub fn deposer(&mut self, x: usize, y: usize, quantite: f64) {
-        todo!()
+        assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
+        assert!(quantite.is_finite() && quantite >= 0.0, "quantité invalide : {quantite}");
+        self.cases[y * self.largeur + x] += quantite;
     }
 
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
@@ -88,19 +98,38 @@ impl Substrat {
     /// Contrat : la masse totale est conservée (aux erreurs d'arrondi près) ; l'ancien champ est lu en entier
     /// avant d'écrire le nouveau ; l'ordre de calcul est fixe.
     pub fn pas(&mut self) {
-        todo!()
+        let ancien = self.cases.clone();
+        let (largeur, hauteur) = (self.largeur, self.hauteur);
+        let r = self.nombre_de_diffusion();
+        for y in 0..hauteur {
+            for x in 0..largeur {
+                let i = y * largeur + x;
+                let c = ancien[i];
+                let gauche = if x == 0 { c } else { ancien[i - 1] };
+                let droite = if x + 1 == largeur { c } else { ancien[i + 1] };
+                let haut = if y == 0 { c } else { ancien[i - largeur] };
+                let bas = if y + 1 == hauteur { c } else { ancien[i + largeur] };
+                self.cases[i] = c + r * (gauche + droite + haut + bas - 4.0 * c);
+            }
+        }
     }
 
     /// Avance le champ de `n` pas : strictement équivalent à appeler [`Substrat::pas`] `n` fois, au même
     /// octet près. `n = 0` ne change rien.
     pub fn pas_n(&mut self, n: usize) {
-        todo!()
+        for _ in 0..n {
+            self.pas();
+        }
     }
 
     /// La somme des valeurs de toutes les cases, additionnées dans l'ordre des lignes puis des colonnes
     /// (`y` lent, `x` rapide).
     pub fn masse_totale(&self) -> f64 {
-        todo!()
+        let mut somme = 0.0;
+        for &v in &self.cases {
+            somme += v;
+        }
+        somme
     }
 
     /// L'écriture canonique du champ, pour comparer « à l'octet » et pour l'empreinte.
@@ -109,6 +138,12 @@ impl Substrat {
     /// case, ligne par ligne (`y` lent, `x` rapide), en `f64::to_bits` petit-boutiste (8 octets). Les paramètres
     /// `d`, `dt` et `dx` n'en font pas partie. Longueur : `16 + 8 * largeur * hauteur` octets.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
-        todo!()
+        let mut octets = Vec::with_capacity(16 + 8 * self.cases.len());
+        octets.extend_from_slice(&(self.largeur as u64).to_le_bytes());
+        octets.extend_from_slice(&(self.hauteur as u64).to_le_bytes());
+        for &v in &self.cases {
+            octets.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+        octets
     }
 }
