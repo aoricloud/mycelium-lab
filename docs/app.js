@@ -15,6 +15,10 @@
 const GRAINE_MAX = 4294967295;
 const PAS_REFERENCE = 80;
 
+// La vitrine n'a pas à tourner indéfiniment : au-delà de 3000 pas, on fige la colonie même si
+// des pointes subsistent, pour qu'une page laissée ouverte ne consomme plus rien.
+const PAS_MAX = 3000;
+
 // Le substrat n'est consommé qu'à quelques millièmes par pas : on étale cet écart pour que la
 // déplétion se voie, sans jamais modifier les valeurs lues dans le module.
 const CONTRASTE_SUBSTRAT = 60;
@@ -48,6 +52,9 @@ const noteEmpreinte = document.getElementById("note-empreinte");
 // L'état de la page. `module` reste nul tant que le fichier WebAssembly n'est pas chargé.
 let module = null;
 let enPause = false;
+// Vrai quand la colonie a fini de pousser (ou a atteint PAS_MAX) : le bouton Pause reste alors
+// désactivé jusqu'au prochain démarrage.
+let colonieFinie = false;
 let graineCourante = 1;
 let compteurImages = 0;
 let substratAJour = false;
@@ -134,9 +141,13 @@ function demarrer(graine) {
   champGraine.value = String(graine);
   module.mycelium_demarrer(graine);
   enPause = false;
+  colonieFinie = false;
   compteurImages = 0;
   substratAJour = false;
   majBoutonPause();
+  // Une nouvelle colonie peut de nouveau être mise en pause.
+  boutonPause.disabled = false;
+  boutonPause.setAttribute("aria-disabled", "false");
   dessiner();
   afficherMesures();
   rafraichirEmpreinte();
@@ -172,6 +183,10 @@ champGraine.addEventListener("keydown", (evenement) => {
 
 boutonPause.addEventListener("click", () => {
   if (!pret()) {
+    return;
+  }
+  if (colonieFinie) {
+    // La colonie est figée : seule une nouvelle graine la relance.
     return;
   }
   enPause = !enPause;
@@ -225,19 +240,50 @@ curseurVitesse.addEventListener("input", () => {
 // La boucle : une image de navigateur, un ou plusieurs pas de simulation
 // ---------------------------------------------------------------------------------------------
 
+// Fige la colonie : pause, dernier dessin, mesures et empreinte, puis message. Le bouton
+// Pause/Reprendre est désactivé tant qu'une nouvelle colonie n'a pas été démarrée.
+function arreter(texte) {
+  enPause = true;
+  colonieFinie = true;
+  majBoutonPause();
+  boutonPause.disabled = true;
+  boutonPause.setAttribute("aria-disabled", "true");
+  substratAJour = false;
+  dessiner();
+  afficherMesures();
+  rafraichirEmpreinte();
+  etat.textContent = texte;
+}
+
 function boucle() {
   if (module !== null && !enPause) {
-    module.mycelium_avancer(vitesse());
+    const temps = module.mycelium_temps() >>> 0;
+    // La boucle ne dépasse jamais PAS_MAX : au plus les pas qui restent avant la limite.
+    module.mycelium_avancer(Math.min(vitesse(), PAS_MAX - temps));
     compteurImages += 1;
     // Le substrat diffuse lentement : le redessiner une image sur quatre suffit, et coûte moins cher.
     if (compteurImages % IMAGES_PAR_SUBSTRAT === 0) {
       substratAJour = false;
     }
-    dessiner();
-    afficherMesures();
-    // Huit appels à l'empreinte, chacun hache tout l'état : environ une fois par seconde et demie.
-    if (compteurImages % IMAGES_PAR_EMPREINTE === 0) {
-      rafraichirEmpreinte();
+
+    const tempsApres = module.mycelium_temps() >>> 0;
+    if (module.mycelium_pointes() === 0 && tempsApres > 0) {
+      // Plus aucune pointe : la colonie a fini de pousser, rien ne changerait plus.
+      arreter(
+        "La colonie a fini de pousser : plus aucune pointe. « Relancer » ou « Au hasard » en démarre une autre.",
+      );
+    } else if (tempsApres >= PAS_MAX) {
+      // La limite de sécurité : on ne simule pas plus loin.
+      arreter(
+        "Limite de la vitrine atteinte (3000 pas) : la colonie est en pause. « Relancer » en démarre une autre.",
+      );
+    } else {
+      dessiner();
+      afficherMesures();
+      // Huit appels à l'empreinte, chacun hache tout l'état : environ une fois par seconde et demie.
+      if (compteurImages % IMAGES_PAR_EMPREINTE === 0) {
+        rafraichirEmpreinte();
+      }
     }
   }
   requestAnimationFrame(boucle);
@@ -389,18 +435,39 @@ function dessinerHyphes(origineX, origineY, echelle) {
   contexte.stroke();
 }
 
-// Le bord de la boîte de Petri et un reflet de verre, discrets.
-function dessinerBord(cx, cy, rayon, cote) {
+// Trace un rectangle à coins arrondis : le bord de la boîte carrée de la simulation.
+function cheminRectangleArrondi(x, y, largeur, hauteur, rayon) {
+  const r = Math.max(0, Math.min(rayon, largeur / 2, hauteur / 2));
   contexte.beginPath();
-  contexte.arc(cx, cy, rayon, 0, Math.PI * 2);
+  contexte.moveTo(x + r, y);
+  contexte.lineTo(x + largeur - r, y);
+  contexte.arcTo(x + largeur, y, x + largeur, y + r, r);
+  contexte.lineTo(x + largeur, y + hauteur - r);
+  contexte.arcTo(x + largeur, y + hauteur, x + largeur - r, y + hauteur, r);
+  contexte.lineTo(x + r, y + hauteur);
+  contexte.arcTo(x, y + hauteur, x, y + hauteur - r, r);
+  contexte.lineTo(x, y + r);
+  contexte.arcTo(x, y, x + r, y, r);
+  contexte.closePath();
+}
+
+// Le bord de la boîte carrée et un reflet de verre, discrets.
+function dessinerBord(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins, cote) {
+  cheminRectangleArrondi(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins);
   contexte.strokeStyle = "rgba(206, 224, 200, 0.14)";
   contexte.lineWidth = Math.max(1, cote * 0.0022);
   contexte.stroke();
 
-  contexte.beginPath();
-  contexte.arc(cx, cy, rayon * 0.99, Math.PI * 1.04, Math.PI * 1.4);
-  contexte.strokeStyle = "rgba(232, 246, 226, 0.12)";
-  contexte.lineWidth = rayon * 0.018;
+  // Le même contour, baigné d'un dégradé qui s'éteint vers le bas droit : un reflet de verre.
+  const reflet = contexte.createLinearGradient(
+    origineX, origineY,
+    origineX + largeurBoite, origineY + hauteurBoite,
+  );
+  reflet.addColorStop(0, "rgba(232, 246, 226, 0.16)");
+  reflet.addColorStop(0.45, "rgba(232, 246, 226, 0)");
+  cheminRectangleArrondi(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins);
+  contexte.strokeStyle = reflet;
+  contexte.lineWidth = Math.max(2, cote * 0.01);
   contexte.lineCap = "round";
   contexte.stroke();
 }
@@ -431,18 +498,21 @@ function dessiner() {
     return;
   }
 
+  // L'échelle fait tenir toute la boîte carrée dans le canvas, avec une petite marge.
   const cote = Math.min(largeurCanvas, hauteurCanvas) * 0.94;
-  const rayon = cote / 2;
-  const cx = largeurCanvas / 2;
-  const cy = hauteurCanvas / 2;
   const echelle = cote / Math.max(largeur, hauteur);
-  const origineX = cx - (largeur * echelle) / 2;
-  const origineY = cy - (hauteur * echelle) / 2;
+  const largeurBoite = largeur * echelle;
+  const hauteurBoite = hauteur * echelle;
+  const origineX = (largeurCanvas - largeurBoite) / 2;
+  const origineY = (hauteurCanvas - hauteurBoite) / 2;
+  const cx = origineX + largeurBoite / 2;
+  const cy = origineY + hauteurBoite / 2;
+  // Des coins à peine arrondis, pour ne pas découper le substrat.
+  const rayonCoins = Math.min(largeurBoite, hauteurBoite) * 0.035;
 
-  // Tout le contenu est tenu dans le disque de la boîte.
+  // Tout le contenu est tenu dans la boîte carrée, aux coins légèrement arrondis.
   contexte.save();
-  contexte.beginPath();
-  contexte.arc(cx, cy, rayon, 0, Math.PI * 2);
+  cheminRectangleArrondi(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins);
   contexte.clip();
 
   if (!substratAJour) {
@@ -450,19 +520,20 @@ function dessiner() {
     substratAJour = true;
   }
   contexte.imageSmoothingEnabled = true;
-  contexte.drawImage(coucheSubstrat, origineX, origineY, largeur * echelle, hauteur * echelle);
+  contexte.drawImage(coucheSubstrat, origineX, origineY, largeurBoite, hauteurBoite);
 
-  // Un vignettage qui éteint doucement les bords de la boîte.
-  const vignette = contexte.createRadialGradient(cx, cy, rayon * 0.5, cx, cy, rayon);
+  // Un vignettage qui éteint doucement les bords de la boîte carrée.
+  const rayonVignette = Math.hypot(largeurBoite, hauteurBoite) / 2;
+  const vignette = contexte.createRadialGradient(cx, cy, rayonVignette * 0.45, cx, cy, rayonVignette);
   vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
   vignette.addColorStop(1, "rgba(0, 0, 0, 0.58)");
   contexte.fillStyle = vignette;
-  contexte.fillRect(0, 0, largeurCanvas, hauteurCanvas);
+  contexte.fillRect(origineX, origineY, largeurBoite, hauteurBoite);
 
   dessinerHyphes(origineX, origineY, echelle);
   contexte.restore();
 
-  dessinerBord(cx, cy, rayon, largeurCanvas);
+  dessinerBord(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins, cote);
 }
 
 // ---------------------------------------------------------------------------------------------
