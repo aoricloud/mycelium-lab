@@ -40,8 +40,8 @@ module WebAssembly depuis `file://`).
 
 ## Comment il se construit
 
-Mycelium Lab est construit par Kraken, un orchestrateur d'agents : ses mains travaillent sur les issues, chacune sur
-une branche `kraken/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. L'humain qui mène
+Mycelium Lab est construit par Lydite, un orchestrateur d'agents : ses mains travaillent sur les issues, chacune sur
+une branche `lydite/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. L'humain qui mène
 le dépôt en garde les réglages et regarde après coup.
 
 ## Licence
