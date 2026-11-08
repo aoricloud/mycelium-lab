@@ -29,7 +29,7 @@ fn main() {
         let mut biomasse_proche = 0.0;
         let mut colonies_qui_touchent = 0;
         for graine in 1..=GRAINES {
-            let tropismes = Tropismes { chimiotropisme: force };
+            let tropismes = Tropismes { chimiotropisme: force, ..Tropismes::default() };
             let mut simulation =
                 Simulation::nouvelle_avec_tropismes(reglages.clone(), milieu.clone(), tropismes, graine)
                     .expect("simulation valide");

@@ -145,6 +145,31 @@ impl Substrat {
         }
     }
 
+    /// Vrai si le segment de `(x0, y0)` à `(x1, y1)` ne touche aucune case bloquée.
+    ///
+    /// Règle du plancher : chaque point `(x, y)` est dans la case `(⌊x⌋, ⌊y⌋)` (la case `(i, j)` est le carré
+    /// semi-ouvert `[i, i+1) × [j, j+1)`) ; le segment fermé est libre si aucun de ses points, extrémités comprises,
+    /// n'est dans une case bloquée. Finir, longer ou passer par le coin bas-gauche d'une case bloquée, c'est la toucher.
+    /// Le calcul est exact (aucune erreur d'arrondi à craindre sur les cases franchies).
+    ///
+    /// Contrat : panique si une coordonnée n'est pas finie ou sort de `[0, largeur] × [0, hauteur]`.
+    pub fn segment_libre(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> bool {
+        todo!("étape 7 : segment_libre {x0} {y0} {x1} {y1}")
+    }
+
+    /// La face par laquelle le segment de `(x0, y0)` à `(x1, y1)` entre dans la première case bloquée qu'il touche,
+    /// ou `None` si le segment est libre (c'est-à-dire si [`Substrat::segment_libre`] est vrai).
+    ///
+    /// La face est la ligne de la grille franchie pour entrer dans cette case : [`crate::tropisme::Face::Verticale`]
+    /// si c'est une ligne `x = entier`, [`crate::tropisme::Face::Horizontale`] si c'est une ligne `y = entier`. Pour
+    /// une entrée exacte par un coin, en venant de la case diagonale `(px, py)` vers la case `(cx, cy)` : la face est
+    /// horizontale si seule `(px, cy)` est bloquée, verticale dans tous les autres cas.
+    ///
+    /// Contrat : mêmes paniques que [`Substrat::segment_libre`], et panique si la case `(⌊x0⌋, ⌊y0⌋)` est bloquée.
+    pub fn face_de_contact(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<crate::tropisme::Face> {
+        todo!("étape 7 : face_de_contact {x0} {y0} {x1} {y1}")
+    }
+
     /// Vrai si la case `(x, y)` est bloquée.
     ///
     /// Contrat : panique si la case est hors de la grille.
