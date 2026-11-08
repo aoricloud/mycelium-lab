@@ -1,7 +1,7 @@
 # Le modèle de l'étape 3 : la figure 3 de Meškauskas, Fricker et Moore (2004)
 
 Ce document décrit le modèle tel que `src/voisinage.rs` l'implémente, et les nombres que
-`examples/figure_3.rs` mesure. Il est écrit pour être lu sans connaître Kraken : les noms de champs du code sont
+`examples/figure_3.rs` mesure. Il est écrit pour être lu sans connaître Lydite : les noms de champs du code sont
 donnés à côté des symboles, et chaque valeur est reliée à sa source.
 
 **En bref.** Une colonie 2D d'apex pousse depuis une spore ; chaque pointe lit un champ de densité et un vecteur
