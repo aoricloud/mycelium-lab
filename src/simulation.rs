@@ -161,6 +161,7 @@ struct Apex {
 /// et se compare « à l'octet » par [`Simulation::ecrire_canonique`].
 pub struct Simulation {
     reglages: Reglages,
+    milieu: Milieu,
     apex: Vec<Apex>,
     substrat: Substrat,
     index: anastomose::Index,
@@ -182,6 +183,23 @@ impl Simulation {
     /// diffusion sont refusés par [`Substrat::nouveau`] — notamment un pas de diffusion instable ou une dimension
     /// nulle.
     pub fn nouvelle(reglages: Reglages, graine: u64) -> Result<Simulation, ErreurSimulation> {
+        Simulation::nouvelle_avec_milieu(reglages, Milieu::default(), graine)
+    }
+
+    /// Comme [`Simulation::nouvelle`], avec un [`Milieu`] : au temps 0, les cases de chaque source valent sa
+    /// quantité (la dernière source du milieu l'emporte sur une case commune ; une source dont le centre est dans la
+    /// boîte mais dont le disque déborde est tronquée à la boîte) et les cases d'obstacle valent `0.0` pour toujours,
+    /// même sous une source. Avec `Milieu::default()`, l'état est le même, octet pour octet, que celui de
+    /// [`Simulation::nouvelle`], pour toute graine.
+    ///
+    /// Refuse avec [`ErreurSimulation::MilieuInvalide`] une source dont le centre est hors de la boîte ou de
+    /// quantité négative ou non finie, un obstacle hors de la boîte ou à l'envers (`x0 > x1` ou `y0 > y1`), un
+    /// obstacle qui contient la case de la spore ; les autres réglages sont refusés comme par `nouvelle`.
+    pub fn nouvelle_avec_milieu(
+        reglages: Reglages,
+        milieu: Milieu,
+        graine: u64,
+    ) -> Result<Simulation, ErreurSimulation> {
         // Le substrat est construit d'abord : une dimension nulle ou un pas de diffusion instable est une erreur
         // de substrat, comme le décrit le contrat de `Reglages`.
         let mut substrat = Substrat::nouveau(reglages.largeur, reglages.hauteur, reglages.diffusion, 1.0, 1.0)
@@ -200,13 +218,54 @@ impl Simulation {
             return Err(ErreurSimulation::ParametresInvalides);
         }
 
-        for y in 0..reglages.hauteur {
-            for x in 0..reglages.largeur {
-                substrat.deposer(x, y, reglages.substrat_initial);
+        // Les contrats du milieu se vérifient ici, pas à la lecture d'un scénario : le centre d'une source est dans
+        // la boîte (son disque, lui, peut déborder et sera tronqué), sa quantité est finie et positive ou nulle ;
+        // un obstacle est dans la boîte, à l'endroit, et ne contient pas la case de la spore.
+        for source in &milieu.sources {
+            if source.x >= reglages.largeur
+                || source.y >= reglages.hauteur
+                || !source.quantite.is_finite()
+                || source.quantite < 0.0
+            {
+                return Err(ErreurSimulation::MilieuInvalide);
+            }
+        }
+        for obstacle in &milieu.obstacles {
+            if obstacle.x0 > obstacle.x1
+                || obstacle.y0 > obstacle.y1
+                || obstacle.x1 >= reglages.largeur
+                || obstacle.y1 >= reglages.hauteur
+            {
+                return Err(ErreurSimulation::MilieuInvalide);
+            }
+            let contient_la_spore = (obstacle.x0..=obstacle.x1).contains(&reglages.spore.0)
+                && (obstacle.y0..=obstacle.y1).contains(&reglages.spore.1);
+            if contient_la_spore {
+                return Err(ErreurSimulation::MilieuInvalide);
             }
         }
 
-        // Le premier tirage fixe la direction du premier apex, comme `Colonie::depuis_spore`.
+        // Au temps 0, chaque case vaut le substrat initial, remplacé par la dernière source qui la contient. La
+        // boucle et son ordre sont ceux d'avant T0 : sans source, chaque case reçoit exactement `substrat_initial`.
+        for y in 0..reglages.hauteur {
+            for x in 0..reglages.largeur {
+                let mut quantite = reglages.substrat_initial;
+                for source in &milieu.sources {
+                    if dans_le_disque(x, y, source.x, source.y, source.rayon) {
+                        quantite = source.quantite;
+                    }
+                }
+                substrat.deposer(x, y, quantite);
+            }
+        }
+
+        // Les obstacles sont posés après les sources, donc une case d'obstacle vaut `0.0` même sous une source.
+        for obstacle in &milieu.obstacles {
+            substrat.bloquer(obstacle.x0, obstacle.y0, obstacle.x1, obstacle.y1);
+        }
+
+        // Le premier tirage fixe la direction du premier apex, comme `Colonie::depuis_spore`. Le milieu n'en tire
+        // aucun : sans source ni obstacle, l'état est celui d'avant T0, octet pour octet.
         let mut alea = Alea::new(graine);
         let direction = (alea.suivant() % NB_DIRECTIONS as u64) as usize;
         let premier =
@@ -215,6 +274,7 @@ impl Simulation {
 
         let mut simulation = Simulation {
             reglages,
+            milieu,
             apex: vec![premier],
             substrat,
             index,
@@ -231,26 +291,9 @@ impl Simulation {
         Ok(simulation)
     }
 
-    /// Comme [`Simulation::nouvelle`], avec un [`Milieu`] : au temps 0, les cases de chaque source valent sa
-    /// quantité (la dernière source du milieu l'emporte sur une case commune ; une source dont le centre est dans la
-    /// boîte mais dont le disque déborde est tronquée à la boîte) et les cases d'obstacle valent `0.0` pour toujours,
-    /// même sous une source. Avec `Milieu::default()`, l'état est le même, octet pour octet, que celui de
-    /// [`Simulation::nouvelle`], pour toute graine.
-    ///
-    /// Refuse avec [`ErreurSimulation::MilieuInvalide`] une source dont le centre est hors de la boîte ou de
-    /// quantité négative ou non finie, un obstacle hors de la boîte ou à l'envers (`x0 > x1` ou `y0 > y1`), un
-    /// obstacle qui contient la case de la spore ; les autres réglages sont refusés comme par `nouvelle`.
-    pub fn nouvelle_avec_milieu(
-        reglages: Reglages,
-        milieu: Milieu,
-        graine: u64,
-    ) -> Result<Simulation, ErreurSimulation> {
-        todo!("étape 5 : nouvelle_avec_milieu {reglages:?} {milieu:?} {graine}")
-    }
-
     /// Le milieu de la simulation : ses taches et ses obstacles, tels qu'ils ont été donnés.
     pub fn milieu(&self) -> &Milieu {
-        todo!("étape 5 : milieu")
+        &self.milieu
     }
 
     /// Avance la simulation d'un pas de temps : le substrat diffuse, puis les apex s'étendent en le consommant.
@@ -421,7 +464,11 @@ impl Simulation {
     /// - ensuite chaque apex dans l'ordre de son identifiant, sur 25 octets : `id` (`u32`), `x` et `y` par
     ///   `f64::to_bits` en petit-boutiste (8 octets chacun), `direction` (`u32`) et `actif` (`u8`, 1 ou 0) ;
     /// - puis les trois compteurs en `u64` : ramifications, anastomoses, pointes ;
-    /// - puis [`Substrat::ecrire_canonique`], dont le format est décrit dans le module `substrat`.
+    /// - puis [`Substrat::ecrire_canonique`], dont le format est décrit dans le module `substrat` ;
+    /// - puis, seulement si le milieu n'est pas vide, sa queue : le nombre de sources en `u64`, chacune (`x`, `y`,
+    ///   `rayon` en `u32`, `quantite` par `f64::to_bits`) en petit-boutiste, le nombre d'obstacles en `u64`, puis
+    ///   chacun (`x0`, `y0`, `x1`, `y1` en `u32`), tout dans l'ordre des vecteurs du milieu. Un milieu vide n'ajoute
+    ///   rien : l'écriture est celle d'avant T0.
     ///
     /// La graine et les réglages n'y figurent pas : deux simulations de même état ont la même écriture.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
@@ -442,6 +489,22 @@ impl Simulation {
         octets.extend_from_slice(&self.nb_anastomoses.to_le_bytes());
         octets.extend_from_slice(&(self.pointes() as u64).to_le_bytes());
         octets.extend_from_slice(&self.substrat.ecrire_canonique());
+        if !self.milieu.sources.is_empty() || !self.milieu.obstacles.is_empty() {
+            octets.extend_from_slice(&(self.milieu.sources.len() as u64).to_le_bytes());
+            for source in &self.milieu.sources {
+                octets.extend_from_slice(&(source.x as u32).to_le_bytes());
+                octets.extend_from_slice(&(source.y as u32).to_le_bytes());
+                octets.extend_from_slice(&(source.rayon as u32).to_le_bytes());
+                octets.extend_from_slice(&source.quantite.to_bits().to_le_bytes());
+            }
+            octets.extend_from_slice(&(self.milieu.obstacles.len() as u64).to_le_bytes());
+            for obstacle in &self.milieu.obstacles {
+                octets.extend_from_slice(&(obstacle.x0 as u32).to_le_bytes());
+                octets.extend_from_slice(&(obstacle.y0 as u32).to_le_bytes());
+                octets.extend_from_slice(&(obstacle.x1 as u32).to_le_bytes());
+                octets.extend_from_slice(&(obstacle.y1 as u32).to_le_bytes());
+            }
+        }
         octets
     }
 
@@ -463,6 +526,15 @@ impl Simulation {
             substrat: self.substrat.masse_totale(),
         }
     }
+}
+
+/// Vrai si la case `(i, j)` est dans le disque de centre `(x, y)` et de rayon `rayon`, en entiers signés sur 128
+/// bits : un très grand rayon ne déborde pas. Les carrés sont saturants pour rester sûrs même au-delà de 2⁶³.
+fn dans_le_disque(i: usize, j: usize, x: usize, y: usize, rayon: usize) -> bool {
+    let di = i as i128 - x as i128;
+    let dj = j as i128 - y as i128;
+    let r = rayon as i128;
+    di.saturating_mul(di).saturating_add(dj.saturating_mul(dj)) <= r.saturating_mul(r)
 }
 
 /// Vrai si les paramètres de croissance respectent le contrat de [`croissance::Parametres`].
@@ -494,6 +566,13 @@ pub enum ErreurLecture {
 /// Une ligne inconnue ou mal formée rend [`ErreurLecture::LigneInvalide`] avec son numéro, une directive
 /// obligatoire absente [`ErreurLecture::Manquante`] avec son nom.
 pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
+    let (reglages, _, duree) = lire_scenario_commun(texte, false)?;
+    Ok((reglages, duree))
+}
+
+/// La lecture commune à [`lire_scenario`] (`avec_milieu == false`) et [`lire_scenario_complet`] (`avec_milieu ==
+/// true`). Quand `avec_milieu` est faux, les directives `source` et `obstacle` restent des lignes inconnues.
+fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
     let mut boite: Option<(usize, usize)> = None;
     let mut spore: Option<(usize, usize)> = None;
     let mut substrat: Option<(f64, f64)> = None;
@@ -501,6 +580,7 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
     let mut couplage: Option<(f64, f64)> = None;
     let mut anastomose: Option<anastomose::Reglage> = None;
     let mut duree: Option<u32> = None;
+    let mut milieu = Milieu::default();
 
     for (rang, brute) in texte.lines().enumerate() {
         let numero = rang + 1;
@@ -549,6 +629,22 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
                 Ok(n) => duree = Some(n),
                 Err(_) => return Err(ErreurLecture::LigneInvalide(numero)),
             },
+            ["source", x, y, rayon, quantite] if avec_milieu => {
+                match (x.parse::<usize>(), y.parse::<usize>(), rayon.parse::<usize>(), quantite.parse::<f64>()) {
+                    (Ok(x), Ok(y), Ok(rayon), Ok(quantite)) => {
+                        milieu.sources.push(Source { x, y, rayon, quantite });
+                    }
+                    _ => return Err(ErreurLecture::LigneInvalide(numero)),
+                }
+            }
+            ["obstacle", x0, y0, x1, y1] if avec_milieu => {
+                match (x0.parse::<usize>(), y0.parse::<usize>(), x1.parse::<usize>(), y1.parse::<usize>()) {
+                    (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) if x0 <= x1 && y0 <= y1 => {
+                        milieu.obstacles.push(Obstacle { x0, y0, x1, y1 });
+                    }
+                    _ => return Err(ErreurLecture::LigneInvalide(numero)),
+                }
+            }
             _ => return Err(ErreurLecture::LigneInvalide(numero)),
         }
     }
@@ -574,7 +670,7 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
 
     let reglages =
         Reglages { largeur, hauteur, spore, substrat_initial, diffusion, croissance, affinite, cout, anastomose };
-    Ok((reglages, duree))
+    Ok((reglages, milieu, duree))
 }
 
 /// Comme [`lire_scenario`], avec deux directives de plus, optionnelles et répétables, dans n'importe quel ordre :
@@ -587,5 +683,5 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
 /// les mêmes réglages et la même durée que [`lire_scenario`], et un [`Milieu`] vide. [`lire_scenario`] ne change pas :
 /// elle continue de refuser `source` et `obstacle`.
 pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
-    todo!("étape 5 : lire_scenario_complet {texte:?}")
+    lire_scenario_commun(texte, true)
 }
