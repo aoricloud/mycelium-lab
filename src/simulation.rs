@@ -92,6 +92,42 @@ pub struct Reglages {
     pub anastomose: Option<anastomose::Reglage>,
 }
 
+/// Une tache de nutriments : les cases dont le centre est à moins de `rayon` de la case `(x, y)` démarrent à
+/// `quantite`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Source {
+    /// Colonne du centre de la tache.
+    pub x: usize,
+    /// Ligne du centre de la tache.
+    pub y: usize,
+    /// Rayon de la tache, en cases : une case `(i, j)` en fait partie si `(i - x)² + (j - y)² ≤ rayon²`, en entiers.
+    pub rayon: usize,
+    /// Quantité de substrat de chaque case de la tache au temps 0 (elle remplace `substrat_initial`).
+    pub quantite: f64,
+}
+
+/// Un rectangle de cases infranchissables : `x0..=x1` × `y0..=y1`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Obstacle {
+    /// Première colonne du rectangle.
+    pub x0: usize,
+    /// Première ligne du rectangle.
+    pub y0: usize,
+    /// Dernière colonne du rectangle, incluse.
+    pub x1: usize,
+    /// Dernière ligne du rectangle, incluse.
+    pub y1: usize,
+}
+
+/// Le milieu d'une simulation : ses taches et ses obstacles. `Milieu::default()` est vide.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Milieu {
+    /// Les taches de nutriments, dans l'ordre du texte du scénario.
+    pub sources: Vec<Source>,
+    /// Les obstacles, dans l'ordre du texte du scénario.
+    pub obstacles: Vec<Obstacle>,
+}
+
 /// Pourquoi une [`Simulation`] est refusée.
 #[derive(Debug, PartialEq)]
 #[non_exhaustive]
@@ -99,6 +135,9 @@ pub enum ErreurSimulation {
     /// Un réglage est hors contrat : spore hors de la boîte, quantité négative ou non finie, paramètres de
     /// croissance hors contrat.
     ParametresInvalides,
+    /// Le milieu est hors contrat : source hors de la boîte ou de quantité négative ou non finie, obstacle hors de la
+    /// boîte, à l'envers, ou qui contient la case de la spore.
+    MilieuInvalide,
     /// Le substrat refuse ses paramètres de diffusion (voir [`substrat::ErreurSubstrat`]).
     Substrat(substrat::ErreurSubstrat),
 }
@@ -190,6 +229,28 @@ impl Simulation {
         let initial = simulation.releve_courant();
         simulation.releves.push(initial);
         Ok(simulation)
+    }
+
+    /// Comme [`Simulation::nouvelle`], avec un [`Milieu`] : au temps 0, les cases de chaque source valent sa
+    /// quantité (la dernière source du milieu l'emporte sur une case commune ; une source dont le centre est dans la
+    /// boîte mais dont le disque déborde est tronquée à la boîte) et les cases d'obstacle valent `0.0` pour toujours,
+    /// même sous une source. Avec `Milieu::default()`, l'état est le même, octet pour octet, que celui de
+    /// [`Simulation::nouvelle`], pour toute graine.
+    ///
+    /// Refuse avec [`ErreurSimulation::MilieuInvalide`] une source dont le centre est hors de la boîte ou de
+    /// quantité négative ou non finie, un obstacle hors de la boîte ou à l'envers (`x0 > x1` ou `y0 > y1`), un
+    /// obstacle qui contient la case de la spore ; les autres réglages sont refusés comme par `nouvelle`.
+    pub fn nouvelle_avec_milieu(
+        reglages: Reglages,
+        milieu: Milieu,
+        graine: u64,
+    ) -> Result<Simulation, ErreurSimulation> {
+        todo!("étape 5 : nouvelle_avec_milieu {reglages:?} {milieu:?} {graine}")
+    }
+
+    /// Le milieu de la simulation : ses taches et ses obstacles, tels qu'ils ont été donnés.
+    pub fn milieu(&self) -> &Milieu {
+        todo!("étape 5 : milieu")
     }
 
     /// Avance la simulation d'un pas de temps : le substrat diffuse, puis les apex s'étendent en le consommant.
@@ -514,4 +575,17 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
     let reglages =
         Reglages { largeur, hauteur, spore, substrat_initial, diffusion, croissance, affinite, cout, anastomose };
     Ok((reglages, duree))
+}
+
+/// Comme [`lire_scenario`], avec deux directives de plus, optionnelles et répétables, dans n'importe quel ordre :
+///
+/// - `source <x> <y> <rayon> <quantite>` : trois entiers non signés puis un nombre ;
+/// - `obstacle <x0> <y0> <x1> <y1>` : quatre entiers non signés, avec `x0 ≤ x1` et `y0 ≤ y1`.
+///
+/// Une ligne mal formée rend [`ErreurLecture::LigneInvalide`] avec son numéro. Les contrats « dans la boîte » ne se
+/// vérifient pas ici mais à la construction ([`Simulation::nouvelle_avec_milieu`]). Un texte sans ces directives donne
+/// les mêmes réglages et la même durée que [`lire_scenario`], et un [`Milieu`] vide. [`lire_scenario`] ne change pas :
+/// elle continue de refuser `source` et `obstacle`.
+pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
+    todo!("étape 5 : lire_scenario_complet {texte:?}")
 }

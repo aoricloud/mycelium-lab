@@ -106,6 +106,24 @@ impl Substrat {
         retire
     }
 
+    /// Bloque le rectangle de cases `x0..=x1` × `y0..=y1` : ces cases valent `0.0` pour toujours, ne reçoivent
+    /// rien et ne donnent rien. Leur quantité du moment est retirée (la masse totale baisse d'autant).
+    ///
+    /// Contrat : panique si `x0 > x1`, `y0 > y1` ou si une borne sort de la grille. Bloquer deux fois la même
+    /// case est permis. Ensuite, [`Substrat::pas`] traite un voisin bloqué comme un bord (aucun flux), une case
+    /// bloquée reste à `0.0`, [`Substrat::valeur`] et [`Substrat::retirer`] y rendent `0.0`, et
+    /// [`Substrat::deposer`] y panique (le message contient « bloquée »).
+    pub fn bloquer(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
+        todo!("étape 5 : bloquer {x0} {y0} {x1} {y1}")
+    }
+
+    /// Vrai si la case `(x, y)` est bloquée.
+    ///
+    /// Contrat : panique si la case est hors de la grille.
+    pub fn est_bloquee(&self, x: usize, y: usize) -> bool {
+        todo!("étape 5 : est_bloquee {x} {y}")
+    }
+
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
     ///
     /// Contrat : la masse totale est conservée (aux erreurs d'arrondi près) ; l'ancien champ est lu en entier
