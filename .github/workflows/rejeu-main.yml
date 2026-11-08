@@ -1,0 +1,22 @@
+# Rejoue la CI sur main après la fusion d'une PR du dépôt. Une fusion faite par l'auto-fusion (le jeton du dépôt) ne
+# déclenche pas le push de ci.yml ; workflow_dispatch, lui, part même quand il vient de GITHUB_TOKEN.
+# Il ne lit ni ne lance aucun code de la PR : pas de checkout, pas de pull_request_target, et un fork est exclu.
+name: rejeu-main
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  rejouer:
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
