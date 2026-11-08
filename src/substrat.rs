@@ -153,6 +153,17 @@ impl Substrat {
         self.bloquees[y * self.largeur + x]
     }
 
+    /// Le gradient du champ dans la case `(x, y)`, par différences centrées sur les quatre cases voisines :
+    /// `gx = (droite - gauche) / 2` et `gy = (bas - haut) / 2`, avec `y` qui croît avec l'indice de ligne.
+    ///
+    /// Comme dans [`Substrat::pas`], un voisin hors de la grille ou bloqué est remplacé par la case elle-même
+    /// (aucun flux). Le gradient d'un champ uniforme est exactement `(0.0, 0.0)` ; celui d'une case bloquée aussi.
+    ///
+    /// Contrat : panique si `x >= largeur()` ou `y >= hauteur()`.
+    pub fn gradient(&self, x: usize, y: usize) -> (f64, f64) {
+        todo!("étape 6 : gradient {x} {y}")
+    }
+
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
     ///
     /// Contrat : la masse totale est conservée (aux erreurs d'arrondi près) ; l'ancien champ est lu en entier

@@ -63,6 +63,7 @@ use crate::croissance::{COS, NB_DIRECTIONS, SIN, Segment};
 use crate::empreinte;
 use crate::releves::Releve;
 use crate::substrat::{self, Substrat};
+use crate::tropisme::Tropismes;
 
 /// Les réglages d'une simulation couplée, tels qu'ils se lisent dans un scénario ou se posent à la main.
 ///
@@ -140,6 +141,9 @@ pub enum ErreurSimulation {
     MilieuInvalide,
     /// Le substrat refuse ses paramètres de diffusion (voir [`substrat::ErreurSubstrat`]).
     Substrat(substrat::ErreurSubstrat),
+    /// Un tropisme est hors contrat : `chimiotropisme` non fini, négatif ou supérieur à 45
+    /// ([`crate::tropisme::FORCE_MAXIMALE`]).
+    TropismeInvalide,
 }
 
 /// Un apex de la simulation : sa position, sa direction et son état.
@@ -291,9 +295,28 @@ impl Simulation {
         Ok(simulation)
     }
 
+    /// Comme [`Simulation::nouvelle_avec_milieu`], avec des [`Tropismes`] : avec `Tropismes::default()` (force nulle),
+    /// l'état est le même, octet pour octet, que celui de `nouvelle_avec_milieu`, pour toute graine et tout milieu.
+    ///
+    /// Refuse avec [`ErreurSimulation::TropismeInvalide`] un `chimiotropisme` non fini, négatif ou supérieur à 45 ;
+    /// les contrôles des réglages et du milieu sont ceux d'avant, et passent en premier.
+    pub fn nouvelle_avec_tropismes(
+        reglages: Reglages,
+        milieu: Milieu,
+        tropismes: Tropismes,
+        graine: u64,
+    ) -> Result<Simulation, ErreurSimulation> {
+        todo!("étape 6 : nouvelle_avec_tropismes {reglages:?} {milieu:?} {tropismes:?} {graine}")
+    }
+
     /// Le milieu de la simulation : ses taches et ses obstacles, tels qu'ils ont été donnés.
     pub fn milieu(&self) -> &Milieu {
         &self.milieu
+    }
+
+    /// Les tropismes de la simulation, tels qu'ils ont été donnés.
+    pub fn tropismes(&self) -> &Tropismes {
+        todo!("étape 6 : tropismes")
     }
 
     /// Avance la simulation d'un pas de temps : le substrat diffuse, puis les apex s'étendent en le consommant.
@@ -465,10 +488,12 @@ impl Simulation {
     ///   `f64::to_bits` en petit-boutiste (8 octets chacun), `direction` (`u32`) et `actif` (`u8`, 1 ou 0) ;
     /// - puis les trois compteurs en `u64` : ramifications, anastomoses, pointes ;
     /// - puis [`Substrat::ecrire_canonique`], dont le format est décrit dans le module `substrat` ;
-    /// - puis, seulement si le milieu n'est pas vide, sa queue : le nombre de sources en `u64`, chacune (`x`, `y`,
-    ///   `rayon` en `u32`, `quantite` par `f64::to_bits`) en petit-boutiste, le nombre d'obstacles en `u64`, puis
-    ///   chacun (`x0`, `y0`, `x1`, `y1` en `u32`), tout dans l'ordre des vecteurs du milieu. Un milieu vide n'ajoute
-    ///   rien : l'écriture est celle d'avant T0.
+    /// - puis, seulement si le milieu n'est pas vide ou si `chimiotropisme` n'est pas nul, la queue du milieu : le
+    ///   nombre de sources en `u64`, chacune (`x`, `y`, `rayon` en `u32`, `quantite` par `f64::to_bits`) en
+    ///   petit-boutiste, le nombre d'obstacles en `u64`, puis chacun (`x0`, `y0`, `x1`, `y1` en `u32`), tout dans
+    ///   l'ordre des vecteurs du milieu (un milieu vide, avec un tropisme actif, écrit deux `u64` à zéro) ;
+    /// - puis, seulement si `chimiotropisme` n'est pas nul, `chimiotropisme.to_bits()` en petit-boutiste (8 octets).
+    ///   Une force nulle (ou `-0.0`) et un milieu vide n'ajoutent rien : l'écriture est celle d'avant T0.
     ///
     /// La graine et les réglages n'y figurent pas : deux simulations de même état ont la même écriture.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
@@ -684,4 +709,18 @@ fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Mil
 /// elle continue de refuser `source` et `obstacle`.
 pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
     lire_scenario_commun(texte, true)
+}
+
+/// Comme [`lire_scenario_complet`], avec une directive de plus, optionnelle et au plus une fois, à n'importe quelle
+/// place :
+///
+/// - `chimiotropisme <force>` : un nombre (`f64`), la force du chimiotropisme.
+///
+/// Une seconde ligne `chimiotropisme`, ou une ligne mal formée (mot en trop ou en moins, nombre illisible), rend
+/// [`ErreurLecture::LigneInvalide`] avec son numéro. La valeur n'est pas vérifiée ici mais à la construction
+/// ([`Simulation::nouvelle_avec_tropismes`]). Sans cette ligne, les [`Tropismes`] sont ceux de
+/// `Tropismes::default()`. [`lire_scenario`] et [`lire_scenario_complet`] ne changent pas : elles continuent de refuser
+/// la directive.
+pub fn lire_scenario_tropismes(texte: &str) -> Result<(Reglages, Milieu, Tropismes, u32), ErreurLecture> {
+    todo!("étape 6 : lire_scenario_tropismes {texte:?}")
 }
