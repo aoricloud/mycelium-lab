@@ -3,7 +3,7 @@
 //!
 //! Un scénario de l'étape 0 (une ligne `boite`) garde son chemin : `empreinte.txt` et `apercu.png`, tirés de
 //! [`Etat`]. Un scénario couplé — un texte qui porte une directive `substrat`, `croissance`, `couplage`,
-//! `anastomose`, `duree`, `source`, `obstacle` ou `chimiotropisme` — passe par [`lire_scenario_tropismes`] puis
+//! `anastomose`, `duree`, `source`, `obstacle`, `chimiotropisme` ou `thigmotropisme` — passe par [`lire_scenario_tropismes`] puis
 //! [`Simulation::nouvelle_avec_tropismes`], et écrit en plus `mesures.csv`. Les obstacles du milieu sont dessinés
 //! en gris dans `apercu.png`.
 use std::path::{Path, PathBuf};
@@ -84,8 +84,17 @@ fn apercu(largeur: u32, hauteur: u32) -> Vec<u8> {
 }
 
 /// Les directives qui font d'un scénario un scénario couplé.
-const DIRECTIVES_COUPLEES: [&str; 8] =
-    ["substrat", "croissance", "couplage", "anastomose", "duree", "source", "obstacle", "chimiotropisme"];
+const DIRECTIVES_COUPLEES: [&str; 9] = [
+    "substrat",
+    "croissance",
+    "couplage",
+    "anastomose",
+    "duree",
+    "source",
+    "obstacle",
+    "chimiotropisme",
+    "thigmotropisme",
+];
 
 /// Vrai si le texte porte au moins une directive du chemin couplé.
 fn est_couple(texte: &str) -> bool {
