@@ -13,9 +13,10 @@ toute main. Le plan est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations 
 1. **Sans dépendance** : rien dans `[dependencies]`, `[dev-dependencies]` ni `[build-dependencies]`. Le générateur
    pseudo-aléatoire, l'écrivain PNG et l'empreinte s'écrivent dans le dépôt.
 2. **Déterministe sur toutes les machines** : même scénario et même graine, même état, sous Linux comme sous Windows.
-   - ni `sin`, `cos`, `tan`, `exp`, `ln`, `powf`, ni aucune autre fonction de `f64` qui passe par la bibliothèque
-     mathématique du système : des tables, ou des versions écrites dans le dépôt ; `+`, `-`, `*`, `/` et `sqrt`
-     restent permis ;
+   - ni `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `log2`, `log10`, `powf`, `powi`, `hypot`, `mul_add`, ni aucune autre
+     fonction de `f64` qui passe par la bibliothèque mathématique du système : des tables, ou des versions écrites
+     dans le dépôt ; sont permis, parce qu'ils sont exacts et donnent le même résultat partout : `+`, `-`, `*`, `/`,
+     `sqrt`, `abs`, `floor`, `min`, `max`, `clamp` et les conversions `as` ;
    - aucune `HashMap` ni aucun `HashSet` parcourus : des `Vec` ou des `BTreeMap` ;
    - un ordre de mise à jour fixe, sans horloge ni fil d'exécution dans la simulation.
 3. **La preuve, c'est l'état et les nombres** : l'empreinte de l'état simulé, par scénario et par graine
