@@ -63,7 +63,7 @@ use crate::croissance::{COS, NB_DIRECTIONS, SIN, Segment};
 use crate::empreinte;
 use crate::releves::Releve;
 use crate::substrat::{self, Substrat};
-use crate::tropisme::Tropismes;
+use crate::tropisme::{self, Tropismes};
 
 /// Les réglages d'une simulation couplée, tels qu'ils se lisent dans un scénario ou se posent à la main.
 ///
@@ -166,6 +166,7 @@ struct Apex {
 pub struct Simulation {
     reglages: Reglages,
     milieu: Milieu,
+    tropismes: Tropismes,
     apex: Vec<Apex>,
     substrat: Substrat,
     index: anastomose::Index,
@@ -202,6 +203,20 @@ impl Simulation {
     pub fn nouvelle_avec_milieu(
         reglages: Reglages,
         milieu: Milieu,
+        graine: u64,
+    ) -> Result<Simulation, ErreurSimulation> {
+        Simulation::nouvelle_avec_tropismes(reglages, milieu, Tropismes::default(), graine)
+    }
+
+    /// Comme [`Simulation::nouvelle_avec_milieu`], avec des [`Tropismes`] : avec `Tropismes::default()` (force nulle),
+    /// l'état est le même, octet pour octet, que celui de `nouvelle_avec_milieu`, pour toute graine et tout milieu.
+    ///
+    /// Refuse avec [`ErreurSimulation::TropismeInvalide`] un `chimiotropisme` non fini, négatif ou supérieur à 45 ;
+    /// les contrôles des réglages et du milieu sont ceux d'avant, et passent en premier.
+    pub fn nouvelle_avec_tropismes(
+        reglages: Reglages,
+        milieu: Milieu,
+        tropismes: Tropismes,
         graine: u64,
     ) -> Result<Simulation, ErreurSimulation> {
         // Le substrat est construit d'abord : une dimension nulle ou un pas de diffusion instable est une erreur
@@ -249,6 +264,15 @@ impl Simulation {
             }
         }
 
+        // Le tropisme se vérifie après les réglages et le milieu, et avant de remplir le substrat : `-0.0` et les
+        // bornes 0 et 45 sont acceptées.
+        if !tropismes.chimiotropisme.is_finite()
+            || tropismes.chimiotropisme < 0.0
+            || tropismes.chimiotropisme > tropisme::FORCE_MAXIMALE
+        {
+            return Err(ErreurSimulation::TropismeInvalide);
+        }
+
         // Au temps 0, chaque case vaut le substrat initial, remplacé par la dernière source qui la contient. La
         // boucle et son ordre sont ceux d'avant T0 : sans source, chaque case reçoit exactement `substrat_initial`.
         for y in 0..reglages.hauteur {
@@ -279,6 +303,7 @@ impl Simulation {
         let mut simulation = Simulation {
             reglages,
             milieu,
+            tropismes,
             apex: vec![premier],
             substrat,
             index,
@@ -295,20 +320,6 @@ impl Simulation {
         Ok(simulation)
     }
 
-    /// Comme [`Simulation::nouvelle_avec_milieu`], avec des [`Tropismes`] : avec `Tropismes::default()` (force nulle),
-    /// l'état est le même, octet pour octet, que celui de `nouvelle_avec_milieu`, pour toute graine et tout milieu.
-    ///
-    /// Refuse avec [`ErreurSimulation::TropismeInvalide`] un `chimiotropisme` non fini, négatif ou supérieur à 45 ;
-    /// les contrôles des réglages et du milieu sont ceux d'avant, et passent en premier.
-    pub fn nouvelle_avec_tropismes(
-        reglages: Reglages,
-        milieu: Milieu,
-        tropismes: Tropismes,
-        graine: u64,
-    ) -> Result<Simulation, ErreurSimulation> {
-        todo!("étape 6 : nouvelle_avec_tropismes {reglages:?} {milieu:?} {tropismes:?} {graine}")
-    }
-
     /// Le milieu de la simulation : ses taches et ses obstacles, tels qu'ils ont été donnés.
     pub fn milieu(&self) -> &Milieu {
         &self.milieu
@@ -316,7 +327,7 @@ impl Simulation {
 
     /// Les tropismes de la simulation, tels qu'ils ont été donnés.
     pub fn tropismes(&self) -> &Tropismes {
-        todo!("étape 6 : tropismes")
+        &self.tropismes
     }
 
     /// Avance la simulation d'un pas de temps : le substrat diffuse, puis les apex s'étendent en le consommant.
@@ -341,6 +352,7 @@ impl Simulation {
         let spore_x = self.reglages.spore.0 as f64 + 0.5;
         let spore_y = self.reglages.spore.1 as f64 + 0.5;
         let reglage_anastomose = self.reglages.anastomose;
+        let force_chimiotropique = self.tropismes.chimiotropisme;
 
         for i in 0..nb_apex_au_debut {
             if !self.apex[i].actif {
@@ -351,6 +363,14 @@ impl Simulation {
             // a. Tourner, même si l'apex n'avance pas ensuite.
             let delta = (self.alea.suivant() % (2 * amplitude + 1)) as i64 - amplitude as i64;
             apex.direction = (apex.direction as i64 + delta).rem_euclid(NB_DIRECTIONS as i64) as usize;
+
+            // a bis. Le chimiotropisme : la pointe lit le gradient de sa case (après la diffusion du pas) et tourne
+            // vers le côté où il y a plus de nutriments. À force nulle, aucun appel ni tirage.
+            if force_chimiotropique > 0.0 {
+                let gradient = self.substrat.gradient(apex.x as usize, apex.y as usize);
+                apex.direction =
+                    tropisme::tourner_chimiotropique(apex.direction, gradient, force_chimiotropique, &mut self.alea);
+            }
 
             // b. La case de départ, où la consommation aura lieu.
             let depart_x = apex.x as usize;
@@ -514,7 +534,8 @@ impl Simulation {
         octets.extend_from_slice(&self.nb_anastomoses.to_le_bytes());
         octets.extend_from_slice(&(self.pointes() as u64).to_le_bytes());
         octets.extend_from_slice(&self.substrat.ecrire_canonique());
-        if !self.milieu.sources.is_empty() || !self.milieu.obstacles.is_empty() {
+        if !self.milieu.sources.is_empty() || !self.milieu.obstacles.is_empty() || self.tropismes.chimiotropisme != 0.0
+        {
             octets.extend_from_slice(&(self.milieu.sources.len() as u64).to_le_bytes());
             for source in &self.milieu.sources {
                 octets.extend_from_slice(&(source.x as u32).to_le_bytes());
@@ -529,6 +550,9 @@ impl Simulation {
                 octets.extend_from_slice(&(obstacle.x1 as u32).to_le_bytes());
                 octets.extend_from_slice(&(obstacle.y1 as u32).to_le_bytes());
             }
+        }
+        if self.tropismes.chimiotropisme != 0.0 {
+            octets.extend_from_slice(&self.tropismes.chimiotropisme.to_bits().to_le_bytes());
         }
         octets
     }
@@ -591,13 +615,20 @@ pub enum ErreurLecture {
 /// Une ligne inconnue ou mal formée rend [`ErreurLecture::LigneInvalide`] avec son numéro, une directive
 /// obligatoire absente [`ErreurLecture::Manquante`] avec son nom.
 pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
-    let (reglages, _, duree) = lire_scenario_commun(texte, false)?;
+    let (reglages, _, _, duree) = lire_scenario_commun(texte, false, false)?;
     Ok((reglages, duree))
 }
 
-/// La lecture commune à [`lire_scenario`] (`avec_milieu == false`) et [`lire_scenario_complet`] (`avec_milieu ==
-/// true`). Quand `avec_milieu` est faux, les directives `source` et `obstacle` restent des lignes inconnues.
-fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
+/// La lecture commune à [`lire_scenario`] (`avec_milieu == false`, `avec_tropismes == false`),
+/// [`lire_scenario_complet`] (`avec_milieu == true`, `avec_tropismes == false`) et
+/// [`lire_scenario_tropismes`] (`avec_milieu == true`, `avec_tropismes == true`). Quand `avec_milieu` est faux, les
+/// directives `source` et `obstacle` restent des lignes inconnues ; quand `avec_tropismes` est faux, `chimiotropisme`
+/// en est une aussi.
+fn lire_scenario_commun(
+    texte: &str,
+    avec_milieu: bool,
+    avec_tropismes: bool,
+) -> Result<(Reglages, Milieu, Tropismes, u32), ErreurLecture> {
     let mut boite: Option<(usize, usize)> = None;
     let mut spore: Option<(usize, usize)> = None;
     let mut substrat: Option<(f64, f64)> = None;
@@ -605,6 +636,7 @@ fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Mil
     let mut couplage: Option<(f64, f64)> = None;
     let mut anastomose: Option<anastomose::Reglage> = None;
     let mut duree: Option<u32> = None;
+    let mut chimiotropisme: Option<f64> = None;
     let mut milieu = Milieu::default();
 
     for (rang, brute) in texte.lines().enumerate() {
@@ -654,6 +686,14 @@ fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Mil
                 Ok(n) => duree = Some(n),
                 Err(_) => return Err(ErreurLecture::LigneInvalide(numero)),
             },
+            ["chimiotropisme", force] if avec_tropismes => {
+                // Seule la lecture se fait ici : `nan`, `inf` et les valeurs hors de `0.0..=45.0` se lisent, c'est
+                // la construction qui les refuse. Une seconde ligne, même identique, est une faute.
+                match force.parse::<f64>() {
+                    Ok(force) if chimiotropisme.is_none() => chimiotropisme = Some(force),
+                    _ => return Err(ErreurLecture::LigneInvalide(numero)),
+                }
+            }
             ["source", x, y, rayon, quantite] if avec_milieu => {
                 match (x.parse::<usize>(), y.parse::<usize>(), rayon.parse::<usize>(), quantite.parse::<f64>()) {
                     (Ok(x), Ok(y), Ok(rayon), Ok(quantite)) => {
@@ -695,7 +735,11 @@ fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Mil
 
     let reglages =
         Reglages { largeur, hauteur, spore, substrat_initial, diffusion, croissance, affinite, cout, anastomose };
-    Ok((reglages, milieu, duree))
+    let mut tropismes = Tropismes::default();
+    if let Some(chimiotropisme) = chimiotropisme {
+        tropismes.chimiotropisme = chimiotropisme;
+    }
+    Ok((reglages, milieu, tropismes, duree))
 }
 
 /// Comme [`lire_scenario`], avec deux directives de plus, optionnelles et répétables, dans n'importe quel ordre :
@@ -708,7 +752,8 @@ fn lire_scenario_commun(texte: &str, avec_milieu: bool) -> Result<(Reglages, Mil
 /// les mêmes réglages et la même durée que [`lire_scenario`], et un [`Milieu`] vide. [`lire_scenario`] ne change pas :
 /// elle continue de refuser `source` et `obstacle`.
 pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), ErreurLecture> {
-    lire_scenario_commun(texte, true)
+    let (reglages, milieu, _, duree) = lire_scenario_commun(texte, true, false)?;
+    Ok((reglages, milieu, duree))
 }
 
 /// Comme [`lire_scenario_complet`], avec une directive de plus, optionnelle et au plus une fois, à n'importe quelle
@@ -722,5 +767,5 @@ pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), Err
 /// `Tropismes::default()`. [`lire_scenario`] et [`lire_scenario_complet`] ne changent pas : elles continuent de refuser
 /// la directive.
 pub fn lire_scenario_tropismes(texte: &str) -> Result<(Reglages, Milieu, Tropismes, u32), ErreurLecture> {
-    todo!("étape 6 : lire_scenario_tropismes {texte:?}")
+    lire_scenario_commun(texte, true, true)
 }

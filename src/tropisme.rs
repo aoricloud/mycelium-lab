@@ -20,6 +20,7 @@
 //! d'avant, octet pour octet. G₀ est un choix de modélisation, non calibré.
 
 use crate::alea::Alea;
+use crate::croissance::{COS, NB_DIRECTIONS, SIN};
 
 /// La constante de saturation de la réponse, dans la même unité que le gradient du substrat : un gradient de cette
 /// norme tourne la pointe de la moitié du virage maximal. Un choix de modélisation, non calibré.
@@ -48,7 +49,17 @@ pub struct Tropismes {
 ///
 /// Si `direction >= 360` (même pour un gradient nul), ou si `force` n'est pas dans `0.0..=45.0` (`FORCE_MAXIMALE`).
 pub fn virage_chimiotropique(direction: usize, gradient: (f64, f64), force: f64) -> f64 {
-    todo!("étape 6 : virage_chimiotropique {direction} {gradient:?} {force}")
+    assert!(direction < NB_DIRECTIONS, "direction doit être inférieure à {NB_DIRECTIONS} : {direction}");
+    assert!((0.0..=FORCE_MAXIMALE).contains(&force), "force doit être dans 0.0..={FORCE_MAXIMALE} : {force}");
+    let (gx, gy) = gradient;
+    let n = (gx * gx + gy * gy).sqrt();
+    if n > 0.0 {
+        let sinus = (COS[direction] * gy - SIN[direction] * gx) / n;
+        let s = n / (n + GRADIENT_DE_REFERENCE);
+        force * s * sinus
+    } else {
+        0.0
+    }
 }
 
 /// La nouvelle direction d'une pointe qui tourne vers le gradient : le virage réel, arrondi au sort.
@@ -59,5 +70,20 @@ pub fn virage_chimiotropique(direction: usize, gradient: (f64, f64), force: f64)
 ///
 /// Comme [`virage_chimiotropique`], quand `force > 0.0` : `direction >= 360`, ou `force` supérieure à 45 ou non finie.
 pub fn tourner_chimiotropique(direction: usize, gradient: (f64, f64), force: f64, alea: &mut Alea) -> usize {
-    todo!("étape 6 : tourner_chimiotropique {direction} {gradient:?} {force} {alea:?}")
+    if force <= 0.0 {
+        return direction;
+    }
+    let v = virage_chimiotropique(direction, gradient, force);
+    let (gx, gy) = gradient;
+    let n = (gx * gx + gy * gy).sqrt();
+    if n == 0.0 {
+        return direction;
+    }
+    let bas = v.floor();
+    let frac = v - bas;
+    let mut d = direction as i64 + bas as i64;
+    if alea.suivant_f64() < frac {
+        d += 1;
+    }
+    d.rem_euclid(NB_DIRECTIONS as i64) as usize
 }
