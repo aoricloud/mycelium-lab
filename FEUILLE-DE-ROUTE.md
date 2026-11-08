@@ -98,8 +98,9 @@ système à l'autre : l'empreinte de référence n'y serait plus la même.
 
 ## Les vagues
 
-Chaque vague part par Lydite sur une issue (`lydite lancer mycelium --issue <n> --decouper --verifier "<preuve>" --pr
-main`), sous le profil `mycelium` : le mur exigé, Sonnet aux mains. GitHub fusionne ce qui est vert. La preuve :
+Chaque vague part par Lydite sur une issue ou sur un plan écrit par la session pilote et accepté par André (`lydite
+lancer nautile --plan <fichier> --pr main`), sous le profil `nautile` : le mur exigé, DeepSeek Flash aux mains (le
+profil `mycelium`, Sonnet, reste le recours). GitHub fusionne ce qui est vert. La preuve :
 `cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`.
 
 | Étape | Tâches (en parallèle dans une vague) | Tests d'acceptation | Aperçu |
@@ -116,7 +117,7 @@ republie. Elle donne aussi la matière d'une vidéo.
 
 ## Après la V0, dans l'ordre, chacune avec sa référence
 
-1. Les tropismes (chimiotropisme vers les nutriments, thigmotropisme contre les obstacles).
+1. Les tropismes (chimiotropisme vers les nutriments, thigmotropisme contre les obstacles) : décidée le 08/11, voir la section suivante.
 2. Les milieux hétérogènes et les obstacles : la lignée de Boswell (2003, 2007), Hopkins et Boswell (2012).
 3. Les stress simples.
 4. Le balayage de paramètres en local (un mode par lots).
@@ -124,6 +125,35 @@ republie. Elle donne aussi la matière d'une vidéo.
 
 Attendent une V0 qui tourne, ou un chercheur : la 3D, Python, un salon, une prépublication, la calibration sur images,
 la compétition entre espèces.
+
+## L'étape 1 d'après la V0 : les tropismes
+
+Décidée par André le 08/11. Les pointes de la colonie ne font aujourd'hui que marcher au hasard : elles apprennent à
+choisir leur chemin. Le **chimiotropisme** les penche vers le côté où il y a plus de nutriments ; le **thigmotropisme**
+leur fait longer un obstacle, ou se ramifier contre lui. Les tropismes entrent dans le couplage
+(`simulation::Simulation`, celui de la vitrine), pas dans le modèle de voisinage de la figure 3.
+
+**Le scénario** gagne des lignes : `source x y rayon quantité` (une tache de nutriments), `obstacle x0 y0 x1 y1` (un
+rectangle de cases infranchissables, sans flux de substrat à travers), `chimiotropisme force` et `thigmotropisme angle
+mémoire` (éteints par défaut). Sans ces lignes, ou à force zéro, le moteur est celui de la V0 bit à bit :
+`references/couplage-graine-1.empreinte` ne change pas.
+
+**Les références**, à vérifier sur l'article avant de geler un test :
+- thigmotropisme : M. Held, O. Kašpar, C. Edwards et D. V. Nicolau, *PNAS* 116(27):13543–13552 (2019), des hyphes de
+  *Neurospora crassa* dans des structures microfluidiques : une hyphe qui touche un obstacle sous un angle inférieur à
+  35° par rapport à sa surface le longe ; au-delà, elle perd sa mémoire de direction et se ramifie contre lui ; elle
+  retrouve sa direction à environ 20° près. D'autres : K. L. Hanson et coll., *Small* 2:1212–1220 (2006) ; E. Asenova
+  et coll., *IEEE Trans. NanoBioscience* 15:613–618 (2016) ;
+- chimiotropisme : D. Turrà et coll., *Nature* 527:521–524 (2015) ; S. Hopkins et G. P. Boswell, *Fungal Ecology*
+  5:124–136 (2012). Une référence surtout qualitative : aucune figure chiffrée à refaire n'a été trouvée à ce jour, et
+  `MODELE.md` le dira. Les vérifications sont alors indépendantes de tout réglage : à force zéro, le moteur de la V0
+  inchangé ; une pointe seule dans un gradient constant, dont l'orientation moyenne est égale à une valeur calculée
+  exactement.
+
+**Les étapes**, deux vagues chacune, les tests d'abord : T0, le terrain (la tache et l'obstacle dans le scénario, le
+substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obstacles et le thigmotropisme. Peut-être
+ensuite, sur la décision d'André : T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche en
+profondeur et à A*), et T4, la vitrine avec un choix de scénario.
 
 ## La référence de la V0
 
