@@ -38,6 +38,28 @@ pub struct Tropismes {
     /// `0.0` l'éteint. Dans `0.0..=FORCE_MAXIMALE` (`0.0..=45.0`, [`crate::simulation::Simulation::nouvelle_avec_tropismes`] refuse le
     /// reste).
     pub chimiotropisme: f64,
+    /// L'angle critique du thigmotropisme, en degrés : une pointe qui touche un obstacle sous un angle (par rapport
+    /// à sa surface) inférieur à celui-ci le longe, sinon elle s'arrête et se ramifie contre lui. `0.0` l'éteint
+    /// (une pointe qui touche reste où elle est). Dans `0.0..=ANGLE_CRITIQUE_MAXIMAL` (`0.0..=90.0`,
+    /// [`crate::simulation::Simulation::nouvelle_avec_tropismes`] refuse le reste).
+    pub thigmotropisme: f64,
+}
+
+/// Le plus grand angle critique permis, en degrés : à 90, seule la perpendiculaire s'arrête. Une borne de contrat,
+/// sans sens biologique.
+pub const ANGLE_CRITIQUE_MAXIMAL: f64 = 90.0;
+
+/// L'écart maximal, en degrés, du retour au cap après un obstacle : la direction retrouvée est celle d'avant, à
+/// plus ou moins cette valeur (Held et al. 2019, chiffre cité d'après les travaux antérieurs du groupe).
+pub const MEMOIRE_DE_DIRECTION: u32 = 20;
+
+/// La face d'un obstacle touchée par une pointe : une ligne de la grille.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Face {
+    /// Une ligne `x = entier` (la normale est selon x : la face est parallèle à l'axe des y).
+    Verticale,
+    /// Une ligne `y = entier` (la normale est selon y : la face est parallèle à l'axe des x).
+    Horizontale,
 }
 
 /// Le virage **réel**, en degrés, d'une pointe de direction `direction` dans le gradient `gradient`.
@@ -86,4 +108,31 @@ pub fn tourner_chimiotropique(direction: usize, gradient: (f64, f64), force: f64
         d += 1;
     }
     d.rem_euclid(NB_DIRECTIONS as i64) as usize
+}
+
+/// L'angle de contact, en degrés entiers, d'une pointe de direction `direction` avec la face `face` : l'écart à la
+/// parallèle à la face, de 0 (parallèle) à 90 (perpendiculaire). Face verticale : `|90 − (d mod 180)|` ; face
+/// horizontale : `min(d mod 180, 180 − d mod 180)`.
+///
+/// # Panics
+///
+/// Si `direction >= 360`.
+pub fn angle_de_contact(direction: usize, face: Face) -> u32 {
+    todo!("étape 7 : angle_de_contact {direction} {face:?}")
+}
+
+/// La direction de glissement : celle des deux directions parallèles à la face (90 ou 270 pour une face verticale,
+/// 0 ou 180 pour une horizontale) dont l'écart angulaire à `direction` est le plus petit ; à égalité, la plus petite.
+///
+/// # Panics
+///
+/// Si `direction >= 360`.
+pub fn direction_de_glissement(direction: usize, face: Face) -> usize {
+    todo!("étape 7 : direction_de_glissement {direction} {face:?}")
+}
+
+/// Les deux directions parallèles à la face, dans l'ordre croissant : `(90, 270)` pour une face verticale, `(0, 180)`
+/// pour une horizontale. C'est l'ordre des naissances à l'arrêt d'une pointe.
+pub fn branches_de_contact(face: Face) -> (usize, usize) {
+    todo!("étape 7 : branches_de_contact {face:?}")
 }
