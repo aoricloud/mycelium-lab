@@ -18,6 +18,27 @@
 //!
 //! Avec une force nulle, ou un gradient nul, la pointe ne tire aucun nombre au hasard de plus : l'état est celui
 //! d'avant, octet pour octet. G₀ est un choix de modélisation, non calibré.
+//!
+//! # Le thigmotropisme (étape T2)
+//!
+//! Un obstacle n'est jamais touché ([`crate::substrat::Substrat::segment_libre`]). Quand le pas prévu d'une pointe
+//! toucherait une case bloquée, c'est un **contact**. À `thigmotropisme 0` (le défaut) la pointe reste où elle est et
+//! retente au pas suivant. À `thigmotropisme a > 0`, on mesure l'angle de contact `α` entre la direction de la pointe et la
+//! face touchée ([`crate::substrat::Substrat::face_de_contact`], [`angle_de_contact`] : de 0 pour le parallèle à 90 pour la
+//! perpendiculaire) :
+//!
+//! - `α < a` : la pointe **longe** l'obstacle (« nestling »), dans celle des deux directions parallèles à la face qui
+//!   dévie le moins de la sienne ([`direction_de_glissement`]) ; elle garde en mémoire sa direction du contact, son cap ;
+//! - `α ≥ a` : elle **s'arrête et se ramifie** contre l'obstacle (« hit & split ») : elle devient inactive et, dans chacune
+//!   des deux directions parallèles à la face ([`branches_de_contact`]) où il y a la place d'un pas, une pointe neuve naît,
+//!   **sans mémoire** (l'article : la mémoire de direction est perdue).
+//!
+//! Une pointe qui longe retrouve son cap, à [`MEMOIRE_DE_DIRECTION`] degrés près, au premier pas où un pas plein dans la
+//! direction du cap ne touche plus l'obstacle (le bout du mur est passé). Référence : M. Held, O. Kašpar, C. Edwards,
+//! D. V. Nicolau, *PNAS* 116(27):13543–13552 (2019) : le seuil de 35° (Results, « Collision with Obstacles at Acute Angles
+//! of Approach » et « Frontal Collision with Obstacles »), paramètre repris de la mesure, pas un résultat du modèle ; le cap
+//! retrouvé « à environ 20° près » est cité par cet article d'après les travaux antérieurs du même groupe. Tout ce calcul se
+//! fait en entiers : aucune trigonométrie.
 
 use crate::alea::Alea;
 use crate::croissance::{COS, NB_DIRECTIONS, SIN};
@@ -118,7 +139,12 @@ pub fn tourner_chimiotropique(direction: usize, gradient: (f64, f64), force: f64
 ///
 /// Si `direction >= 360`.
 pub fn angle_de_contact(direction: usize, face: Face) -> u32 {
-    todo!("étape 7 : angle_de_contact {direction} {face:?}")
+    assert!(direction < NB_DIRECTIONS, "direction doit être inférieure à {NB_DIRECTIONS} : {direction}");
+    let d = direction % 180;
+    match face {
+        Face::Verticale => (90i64 - d as i64).unsigned_abs() as u32,
+        Face::Horizontale => d.min(180 - d) as u32,
+    }
 }
 
 /// La direction de glissement : celle des deux directions parallèles à la face (90 ou 270 pour une face verticale,
@@ -128,11 +154,20 @@ pub fn angle_de_contact(direction: usize, face: Face) -> u32 {
 ///
 /// Si `direction >= 360`.
 pub fn direction_de_glissement(direction: usize, face: Face) -> usize {
-    todo!("étape 7 : direction_de_glissement {direction} {face:?}")
+    assert!(direction < NB_DIRECTIONS, "direction doit être inférieure à {NB_DIRECTIONS} : {direction}");
+    let (a, b) = branches_de_contact(face);
+    let ecart = |u: usize| {
+        let e = u.abs_diff(direction);
+        e.min(360 - e)
+    };
+    if ecart(b) < ecart(a) { b } else { a }
 }
 
 /// Les deux directions parallèles à la face, dans l'ordre croissant : `(90, 270)` pour une face verticale, `(0, 180)`
 /// pour une horizontale. C'est l'ordre des naissances à l'arrêt d'une pointe.
 pub fn branches_de_contact(face: Face) -> (usize, usize) {
-    todo!("étape 7 : branches_de_contact {face:?}")
+    match face {
+        Face::Verticale => (90, 270),
+        Face::Horizontale => (0, 180),
+    }
 }
