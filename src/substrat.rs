@@ -154,7 +154,12 @@ impl Substrat {
     ///
     /// Contrat : panique si une coordonnée n'est pas finie ou sort de `[0, largeur] × [0, hauteur]`.
     pub fn segment_libre(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> bool {
-        todo!("étape 7 : segment_libre {x0} {y0} {x1} {y1}")
+        self.verifier_boite(x0, y0, x1, y1);
+        let (fx0, fy0) = (x0.floor() as i64, y0.floor() as i64);
+        if self.case_bloquee(fx0, fy0) {
+            return false;
+        }
+        self.parcours(x0, y0, x1, y1).is_none()
     }
 
     /// La face par laquelle le segment de `(x0, y0)` à `(x1, y1)` entre dans la première case bloquée qu'il touche,
@@ -167,7 +172,108 @@ impl Substrat {
     ///
     /// Contrat : mêmes paniques que [`Substrat::segment_libre`], et panique si la case `(⌊x0⌋, ⌊y0⌋)` est bloquée.
     pub fn face_de_contact(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<crate::tropisme::Face> {
-        todo!("étape 7 : face_de_contact {x0} {y0} {x1} {y1}")
+        self.verifier_boite(x0, y0, x1, y1);
+        let (fx0, fy0) = (x0.floor() as i64, y0.floor() as i64);
+        assert!(!self.case_bloquee(fx0, fy0), "départ dans la case bloquée ({fx0}, {fy0})");
+        self.parcours(x0, y0, x1, y1)
+    }
+
+    /// Panique si une des quatre coordonnées n'est pas finie ou sort de la boîte fermée.
+    fn verifier_boite(&self, x0: f64, y0: f64, x1: f64, y1: f64) {
+        assert!(
+            x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite(),
+            "coordonnée non finie : ({x0}, {y0}) -> ({x1}, {y1})"
+        );
+        let (l, h) = (self.largeur as f64, self.hauteur as f64);
+        assert!(
+            (0.0..=l).contains(&x0) && (0.0..=l).contains(&x1) && (0.0..=h).contains(&y0) && (0.0..=h).contains(&y1),
+            "coordonnée hors de la boîte [0, {l}] × [0, {h}] : ({x0}, {y0}) -> ({x1}, {y1})"
+        );
+    }
+
+    /// Vrai si la case `(i, j)` est bloquée ; faux hors de la grille (indices négatifs compris).
+    fn case_bloquee(&self, i: i64, j: i64) -> bool {
+        if i < 0 || j < 0 {
+            return false;
+        }
+        let (i, j) = (i as usize, j as usize);
+        if i >= self.largeur || j >= self.hauteur {
+            return false;
+        }
+        self.bloquees[j * self.largeur + i]
+    }
+
+    /// La face par laquelle on entre dans la case `n` depuis la case `p` : seule la colonne change → verticale,
+    /// seule la ligne → horizontale, les deux → la règle du coin.
+    fn face_entree(&self, p: (i64, i64), n: (i64, i64)) -> crate::tropisme::Face {
+        let change_colonne = n.0 != p.0;
+        let change_ligne = n.1 != p.1;
+        if change_colonne && change_ligne {
+            self.face_coin(n, p)
+        } else if change_colonne {
+            crate::tropisme::Face::Verticale
+        } else {
+            crate::tropisme::Face::Horizontale
+        }
+    }
+
+    /// La face d'une entrée exacte par un coin dans la case `c`, en venant de la case diagonale `p` : horizontale si
+    /// seule `(c.0, p.1)` est libre et `(p.0, c.1)` bloquée, verticale dans tous les autres cas.
+    fn face_coin(&self, c: (i64, i64), p: (i64, i64)) -> crate::tropisme::Face {
+        if !self.case_bloquee(c.0, p.1) && self.case_bloquee(p.0, c.1) {
+            crate::tropisme::Face::Horizontale
+        } else {
+            crate::tropisme::Face::Verticale
+        }
+    }
+
+    /// Le parcours d'Amanatides et Woo du segment fermé : `None` s'il ne touche aucune case bloquée, sinon la face
+    /// d'entrée dans la première case bloquée touchée. La case de départ est supposée libre.
+    fn parcours(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<crate::tropisme::Face> {
+        let (fx0, fy0) = (x0.floor() as i64, y0.floor() as i64);
+        let (mut i, fin_i, si) = axe(x0, x1);
+        let (mut j, fin_j, sj) = axe(y0, y1);
+        if (i, j) != (fx0, fy0) && self.case_bloquee(i, j) {
+            return Some(self.face_entree((fx0, fy0), (i, j)));
+        }
+        while fin_i != i || fin_j != j {
+            let fi = if si > 0 { i + 1 } else { i };
+            let fj = if sj > 0 { j + 1 } else { j };
+            let ti = if fin_i != i { (fi as f64 - x0) / (x1 - x0) } else { f64::INFINITY };
+            let tj = if fin_j != j { (fj as f64 - y0) / (y1 - y0) } else { f64::INFINITY };
+            if ti == tj {
+                if (fi, fj) != (i, j) && self.case_bloquee(fi, fj) {
+                    return Some(if si > 0 && sj > 0 {
+                        self.face_coin((fi, fj), (i, j))
+                    } else if si > 0 {
+                        crate::tropisme::Face::Verticale
+                    } else {
+                        crate::tropisme::Face::Horizontale
+                    });
+                }
+                let (pi, pj) = (i, j);
+                i += si;
+                j += sj;
+                if self.case_bloquee(i, j) {
+                    return Some(self.face_coin((i, j), (pi, pj)));
+                }
+            } else if ti < tj {
+                i += si;
+                if self.case_bloquee(i, j) {
+                    return Some(crate::tropisme::Face::Verticale);
+                }
+            } else {
+                j += sj;
+                if self.case_bloquee(i, j) {
+                    return Some(crate::tropisme::Face::Horizontale);
+                }
+            }
+        }
+        let (fx1, fy1) = (x1.floor() as i64, y1.floor() as i64);
+        if (fx1, fy1) != (i, j) && self.case_bloquee(fx1, fy1) {
+            return Some(self.face_entree((i, j), (fx1, fy1)));
+        }
+        None
     }
 
     /// Vrai si la case `(x, y)` est bloquée.
@@ -273,5 +379,18 @@ impl Substrat {
             octets.extend_from_slice(&v.to_bits().to_le_bytes());
         }
         octets
+    }
+}
+
+/// L'axe du parcours pour la coordonnée qui va de `a0` à `a1` : la case de départ, la dernière case parcourue et le
+/// sens. Le plafond s'écrit `-(-a).floor()`, sans fonction mathématique.
+fn axe(a0: f64, a1: f64) -> (i64, i64, i64) {
+    if a1 > a0 {
+        (a0.floor() as i64, (-(-a1).floor()) as i64 - 1, 1)
+    } else if a1 < a0 {
+        ((-(-a0).floor()) as i64 - 1, a1.floor() as i64, -1)
+    } else {
+        let i = a0.floor() as i64;
+        (i, i, 0)
     }
 }
