@@ -16,15 +16,14 @@
 //! - **l'écriture canonique** : sans milieu ni tropisme, celle d'avant ; un angle non nul sur un milieu vide écrit deux `u64`
 //!   nuls, puis l'angle (`to_bits`, petit-boutiste) puis 9 octets par apex (drapeau, `cap`, `g`) ; avec le
 //!   chimiotropisme, ses 8 octets viennent avant ceux de l'angle ; `-0.0` n'écrit rien ; une pointe qui longe a le drapeau 1,
-//!   `cap` égal à sa direction d'avant le contact et `g` à sa direction de glissement ; deux pointes nées d'un arrêt ont le
-//!   drapeau 1, `cap` égal à la direction au contact et `g` à leur direction (l'une des deux branches de contact) ; une
+//!   `cap` égal à sa direction d'avant le contact et `g` à sa direction de glissement ; la pointe qui s'arrête et les deux
+//!   pointes nées de son arrêt n'ont pas de mémoire ; une
 //!   pointe sans mémoire a trois champs nuls ; `ecrire_canonique` et `empreinte` ne dépendent que de l'état ;
 //! - **le déterminisme** : même scénario, même graine, même état à l'octet ; une autre graine, un autre état ;
 //!   `avancer_n(n)` est `n` fois `avancer`, avec obstacles et angle ; les relevés suivent (un par pas, biomasse = somme
 //!   des segments, dans l'ordre).
 //!
-//! Ils laissent ouverts : le texte des erreurs ; le drapeau de la pointe qui s'arrête (elle devient inactive : le prototype
-//! efface sa mémoire, la spécification ne dit rien) ; l'ordre des identifiants des deux pointes d'un arrêt.
+//! Ils laissent ouverts : le texte des erreurs ; l'ordre des identifiants des deux pointes d'un arrêt.
 //!
 //! Ils n'utilisent aucune fonction mathématique de `f64`.
 
