@@ -161,7 +161,19 @@ impl Substrat {
     ///
     /// Contrat : panique si `x >= largeur()` ou `y >= hauteur()`.
     pub fn gradient(&self, x: usize, y: usize) -> (f64, f64) {
-        todo!("étape 6 : gradient {x} {y}")
+        assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
+        let i = y * self.largeur + x;
+        if self.bloquees[i] {
+            return (0.0, 0.0);
+        }
+        let c = self.cases[i];
+        // Comme dans `pas` : un voisin hors de la grille ou bloqué est remplacé par la case elle-même (aucun flux).
+        let gauche = if x == 0 || self.bloquees[i - 1] { c } else { self.cases[i - 1] };
+        let droite = if x + 1 == self.largeur || self.bloquees[i + 1] { c } else { self.cases[i + 1] };
+        let haut = if y == 0 || self.bloquees[i - self.largeur] { c } else { self.cases[i - self.largeur] };
+        let bas =
+            if y + 1 == self.hauteur || self.bloquees[i + self.largeur] { c } else { self.cases[i + self.largeur] };
+        ((droite - gauche) * 0.5, (bas - haut) * 0.5)
     }
 
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
