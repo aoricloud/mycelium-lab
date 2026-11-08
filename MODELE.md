@@ -531,3 +531,86 @@ La sortie de cette commande est celle du § 6. Les tests d'acceptation de l'éta
 ```sh
 cargo test --features etape-3
 ```
+
+# Le chimiotropisme (étape 6)
+
+Ce modèle appartient au couplage (`simulation::Simulation`, celui de la vitrine), pas au modèle de la figure 3 décrit plus
+haut. Il ajoute une seule chose à une pointe : se pencher vers le côté où il y a plus de nutriments.
+
+## Ce que fait le code
+
+À chaque pas, juste après sa marche au hasard, une pointe lit le gradient du substrat dans la case où elle se trouve
+(`Substrat::gradient` : des différences centrées ; un voisin hors de la grille ou bloqué est remplacé par la case
+elle-même, comme dans la diffusion) et tourne de
+
+`force · s · sin(angle du gradient − direction de la pointe)` degrés, avec `s = n / (n + G₀)`,
+
+où `n` est la norme du gradient et `G₀ = 0,01` la constante de saturation : un gradient très faible tourne peu, un
+gradient très fort tourne au plus de `force` degrés, à angle droit. La direction est un entier (un degré par indice de
+table) : le virage réel est donc arrondi **au sort**, sa partie entière plus un degré avec la probabilité de sa partie
+fractionnaire, de sorte qu'en moyenne le virage appliqué est exactement le virage réel. Le scénario règle la force par la
+ligne `chimiotropisme <force>`, dans l'intervalle `[0 ; 45]`. À force nulle (le défaut), ou dans un gradient nul, la pointe
+ne tire aucun nombre de plus : l'état est celui d'avant, octet pour octet, et `references/couplage-graine-1.empreinte` ne
+change pas. Avec une force non nulle, l'écriture canonique de l'état se termine par la force (voir la documentation de
+`Simulation::ecrire_canonique`).
+
+## La référence, et ce qu'elle ne donne pas
+
+Les références sont D. Turrà, M. El Ghalid, F. Rossi et A. Di Pietro, *Nature* 527:521–524 (2015) (le chimiotropisme de
+*Fusarium oxysporum* vers des signaux de la plante hôte), et S. Hopkins et G. P. Boswell, *Fungal Ecology* 5:124–136
+(2012) (un modèle de saut de vitesse de la réponse du mycélium à une répartition inégale des nutriments). **Nous n'avons
+pu lire que les résumés de ces deux articles** : leurs méthodes, leurs figures et leurs équations ne sont pas lues, et
+aucun test n'exige une valeur publiée. C'est donc une reproduction en esprit du chimiotropisme : la forme du virage
+(`force · s · sin`), la constante `G₀ = 0,01`, la borne de 45° et l'arrondi tiré au sort sont des choix de modélisation,
+ni calibrés ni tirés de ces articles.
+
+## Ce que les tests vérifient
+
+- À force nulle, le moteur de la V0 est inchangé bit à bit (les empreintes d'avant ne bougent pas).
+- Pour une pointe seule, immobile, dans un gradient constant, l'orientation moyenne à l'équilibre est une valeur calculée
+  exactement, hors du code testé (`tests/etape_6/chaine-t1-exact.py`, que le juge a recalculée par une autre méthode : mêmes
+  huit chiffres). Pour une amplitude de marche de 20 et `p = force · s` : 0,2016 pour `p = 0,5`, 0,3814 pour 1, 0,6357 pour 2
+  et 0,8410 pour 4.
+- Plus la force est grande, plus la part de la colonie tournée vers la tache est grande (moyenne sur 100 graines, avec une
+  marge mesurée).
+- Les 63 tests ont été jugés avant d'être gelés : 113 fautes volontaires sur 120 sont tuées, les 7 autres n'ont aucun
+  effet observable.
+
+## Pourquoi la force est bornée à 45
+
+L'orientation moyenne ne croît pas sans fin avec la force. À une amplitude de 20, elle vaut 0,9988 pour `p = 45`, 0,8905
+pour `p = 120` et −0,216 pour `p = 360` : au-delà de `p` ≈ 57 (où `p · sin 1° = 1`), la pointe à un degré du gradient le
+dépasse, et finit par le fuir. La borne de 45 garde « plus de force, plus d'orientation » vraie pour toutes les
+amplitudes calculées (de 1 à 359).
+
+## Ce qu'on voit
+
+Sur le scénario `scenarios/chimiotropisme-sans.txt` (la spore en `(20, 60)`, une tache en `(42, 40)`, 100 pas), la part de
+la biomasse qui finit à moins de 12 cases du centre de la tache, moyenne de 40 graines (`cargo run --release --example
+mesure_chimiotropisme` refait ce tableau) :
+
+| Force | Biomasse moyenne | Près de la tache | Colonies qui la touchent |
+|---|---|---|---|
+| 0 | 829,5 | 4,5 % | 19 sur 40 |
+| 2 | 1 104,3 | 6,5 % | 23 sur 40 |
+| 5 | 959,2 | 10,7 % | 24 sur 40 |
+| 10 | 833,8 | 16,7 % | 24 sur 40 |
+| 20 | 661,3 | 22,3 % | 25 sur 40 |
+| 45 | 546,0 | 19,1 % | 26 sur 40 |
+
+Les colonies de ce modèle varient beaucoup d'une graine à l'autre (certaines s'arrêtent très tôt) : une seule graine ne
+prouve rien, la moyenne oui. Les aperçus `apercus/etape-6-chimiotropisme.png` et `apercus/etape-6-sans-chimiotropisme.png`
+montrent la graine 7, choisie parmi les 40 parce que les deux colonies y ont à peu près la même taille et que la
+différence s'y voit.
+
+## Les limites
+
+- Un virage borné à `force` degrés par pas, sans mémoire, fait tourner la pointe en spirale autour d'un maximum du champ au
+  lieu de s'y arrêter : on le voit sur l'aperçu, où les hyphes s'enroulent autour de la tache. Nous ne prétendons pas que de
+  vraies hyphes s'enroulent ainsi.
+- Le gradient est lu dans la case de la pointe : une tache plus loin que la portée de la diffusion (de l'ordre de six
+  cases pour la diffusion de ce scénario après 100 pas, d'après un calcul grossier) ne se sent presque pas.
+- Le gradient lu est celui du champ entier, consommation de la colonie comprise : à force positive, une pointe se penche
+  aussi vers les cases voisines que la colonie n'a pas encore épuisées, pas seulement vers les taches.
+- Le tout est en 2D, sans obstacle autre que les cases bloquées du terrain ; le thigmotropisme est l'étape suivante.
+- Non vérifié : les méthodes, figures et valeurs des deux articles ; l'écriture canonique sur une machine gros-boutiste.
