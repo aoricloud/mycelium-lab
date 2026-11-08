@@ -16,7 +16,8 @@
 //! - [`image`] : écrivain PNG et sommes de contrôle ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`substrat`] : diffusion explicite du substrat ;
-//! - [`mesures`] : biomasse et dimension fractale.
+//! - [`mesures`] : biomasse et dimension fractale ;
+//! - [`tropisme`] : le chimiotropisme, un virage de la pointe vers le côté où il y a plus de nutriments.
 
 pub mod alea;
 pub mod anastomose;
@@ -29,5 +30,6 @@ pub mod releves;
 pub mod scenario;
 pub mod simulation;
 pub mod substrat;
+pub mod tropisme;
 pub mod vitrine;
 pub mod voisinage;
