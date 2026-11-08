@@ -155,6 +155,8 @@ substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obs
 ensuite, sur la décision d'André : T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche en
 profondeur et à A*), et T4, la vitrine avec un choix de scénario.
 
+**Où on en est** (08/11) : T0 (le terrain) et T1 (le chimiotropisme) sont faits ; T2 (les obstacles et le thigmotropisme) est la prochaine étape. Le chimiotropisme est décrit, avec ses limites, dans la dernière partie de `MODELE.md`.
+
 ## La référence de la V0
 
 D'après la réimpression de l'article, le modèle de Meškauskas, Fricker et Moore (2004) est **en 3D** ; leurs colonies
