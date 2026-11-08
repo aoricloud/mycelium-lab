@@ -32,25 +32,32 @@ pub struct Reglage {
     pub delai: u32,
 }
 
+/// Le point du segment `segment` le plus proche du point `(x, y)`, extrémités comprises : la projection
+/// orthogonale bornée aux deux extrémités par `clamp(0.0, 1.0)`, un segment réduit à un point rendant ce point.
+///
+/// Sert à l'étape T2 : une anastomose ne se fait pas à travers un obstacle, le point de contact dit de quel côté.
+pub(crate) fn point_le_plus_proche(x: f64, y: f64, segment: &Segment) -> (f64, f64) {
+    let dx = segment.x1 - segment.x0;
+    let dy = segment.y1 - segment.y0;
+    let carre = dx * dx + dy * dy;
+
+    // Un segment réduit à un point n'a pas de direction : le point le plus proche est ce point.
+    if carre == 0.0 {
+        (segment.x0, segment.y0)
+    } else {
+        // Projection orthogonale, bornée aux deux extrémités.
+        let t = (((x - segment.x0) * dx + (y - segment.y0) * dy) / carre).clamp(0.0, 1.0);
+        (segment.x0 + t * dx, segment.y0 + t * dy)
+    }
+}
+
 /// Distance du point `(x, y)` au segment `segment`, c'est-à-dire à son point le plus proche, extrémités comprises :
 /// jamais la distance à la droite qui prolonge le segment. Un segment réduit à un point rend la distance à ce
 /// point. Une distance nulle signifie que le point est sur le segment.
 ///
 /// Le calcul n'utilise que `+`, `-`, `*`, `/`, `clamp` et `sqrt`.
 pub fn distance_au_segment(x: f64, y: f64, segment: &Segment) -> f64 {
-    let dx = segment.x1 - segment.x0;
-    let dy = segment.y1 - segment.y0;
-    let carre = dx * dx + dy * dy;
-
-    // Un segment réduit à un point n'a pas de direction : la distance est celle au point.
-    let (proche_x, proche_y) = if carre == 0.0 {
-        (segment.x0, segment.y0)
-    } else {
-        // Projection orthogonale, bornée aux deux extrémités.
-        let t = (((x - segment.x0) * dx + (y - segment.y0) * dy) / carre).clamp(0.0, 1.0);
-        (segment.x0 + t * dx, segment.y0 + t * dy)
-    };
-
+    let (proche_x, proche_y) = point_le_plus_proche(x, y, segment);
     let ex = x - proche_x;
     let ey = y - proche_y;
     (ex * ex + ey * ey).sqrt()
@@ -133,18 +140,22 @@ impl Index {
     }
 
     /// Cherche pour l'apex `apex`, au temps courant `temps`, le segment candidat à une anastomose au point
-    /// `(x, y)`.
+    /// `(x, y)`, en écartant ceux que `retenu` refuse : un candidat refusé ne remplace pas le meilleur et la
+    /// recherche continue, si bien que le résultat est le candidat accepté le plus proche.
     ///
-    /// Un segment `s` est candidat si les trois conditions tiennent :
+    /// Sert à l'étape T2 : une anastomose ne se fait pas à travers un obstacle, `retenu` vérifie que le point le
+    /// plus proche du segment n'est pas séparé de l'apex par une case bloquée.
     ///
-    /// - `s.apex != apex` : un apex ne fusionne pas avec ses propres segments ;
-    /// - `temps >= s.temps + reglage.delai` : le segment est assez ancien (la somme est faite sans débordement) ;
-    /// - `distance_au_segment(x, y, s) <= reglage.rayon` : le segment est assez proche, l'égalité au rayon
-    ///   comptant comme dedans.
-    ///
-    /// Rend le numéro du candidat le plus proche, et à distance égale le plus petit numéro (donc le plus ancien
-    /// dans l'ordre des ajouts). Rend `None` si aucun segment n'est candidat.
-    pub fn chercher(&self, x: f64, y: f64, apex: u32, temps: u32, reglage: &Reglage) -> Option<usize> {
+    /// Les conditions de candidature sont celles de [`Index::chercher`], plus l'acceptation par `retenu`.
+    pub(crate) fn chercher_si(
+        &self,
+        x: f64,
+        y: f64,
+        apex: u32,
+        temps: u32,
+        reglage: &Reglage,
+        retenu: impl Fn(&Segment, (f64, f64)) -> bool,
+    ) -> Option<usize> {
         if reglage.rayon < 0.0 {
             return None;
         }
@@ -182,7 +193,7 @@ impl Index {
                             distance < distance_vue || (distance == distance_vue && numero < numero_vu)
                         }
                     };
-                    if meilleur_que {
+                    if meilleur_que && retenu(segment, point_le_plus_proche(x, y, segment)) {
                         meilleur = Some((numero, distance));
                     }
                 }
@@ -190,5 +201,21 @@ impl Index {
         }
 
         meilleur.map(|(numero, _)| numero)
+    }
+
+    /// Cherche pour l'apex `apex`, au temps courant `temps`, le segment candidat à une anastomose au point
+    /// `(x, y)`.
+    ///
+    /// Un segment `s` est candidat si les trois conditions tiennent :
+    ///
+    /// - `s.apex != apex` : un apex ne fusionne pas avec ses propres segments ;
+    /// - `temps >= s.temps + reglage.delai` : le segment est assez ancien (la somme est faite sans débordement) ;
+    /// - `distance_au_segment(x, y, s) <= reglage.rayon` : le segment est assez proche, l'égalité au rayon
+    ///   comptant comme dedans.
+    ///
+    /// Rend le numéro du candidat le plus proche, et à distance égale le plus petit numéro (donc le plus ancien
+    /// dans l'ordre des ajouts). Rend `None` si aucun segment n'est candidat.
+    pub fn chercher(&self, x: f64, y: f64, apex: u32, temps: u32, reglage: &Reglage) -> Option<usize> {
+        self.chercher_si(x, y, apex, temps, reglage, |_, _| true)
     }
 }
