@@ -3,8 +3,9 @@
 //!
 //! Un scénario de l'étape 0 (une ligne `boite`) garde son chemin : `empreinte.txt` et `apercu.png`, tirés de
 //! [`Etat`]. Un scénario couplé — un texte qui porte une directive `substrat`, `croissance`, `couplage`,
-//! `anastomose`, `duree`, `source` ou `obstacle` — passe par [`lire_scenario_complet`] et une [`Simulation`], et
-//! écrit en plus `mesures.csv`. Les obstacles du milieu sont dessinés en gris dans `apercu.png`.
+//! `anastomose`, `duree`, `source`, `obstacle` ou `chimiotropisme` — passe par [`lire_scenario_tropismes`] puis
+//! [`Simulation::nouvelle_avec_tropismes`], et écrit en plus `mesures.csv`. Les obstacles du milieu sont dessinés
+//! en gris dans `apercu.png`.
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -12,7 +13,7 @@ use mycelium_lab::grille::Etat;
 use mycelium_lab::image::ecrire_png;
 use mycelium_lab::releves::en_csv;
 use mycelium_lab::scenario::Scenario;
-use mycelium_lab::simulation::{Simulation, lire_scenario_complet};
+use mycelium_lab::simulation::{Simulation, lire_scenario_tropismes};
 
 const USAGE: &str = "usage : mycelium lancer <scénario> --graine <n> --sortie <dossier>";
 
@@ -83,8 +84,8 @@ fn apercu(largeur: u32, hauteur: u32) -> Vec<u8> {
 }
 
 /// Les directives qui font d'un scénario un scénario couplé.
-const DIRECTIVES_COUPLEES: [&str; 7] =
-    ["substrat", "croissance", "couplage", "anastomose", "duree", "source", "obstacle"];
+const DIRECTIVES_COUPLEES: [&str; 8] =
+    ["substrat", "croissance", "couplage", "anastomose", "duree", "source", "obstacle", "chimiotropisme"];
 
 /// Vrai si le texte porte au moins une directive du chemin couplé.
 fn est_couple(texte: &str) -> bool {
@@ -116,10 +117,10 @@ fn executer_etape_0(texte: &str, a: &Arguments) -> Result<(), String> {
 
 /// Le chemin couplé : la simulation jouée `duree` pas, puis l'empreinte, les mesures et l'aperçu.
 fn executer_couple(texte: &str, a: &Arguments) -> Result<(), String> {
-    let (reglages, milieu, duree) =
-        lire_scenario_complet(texte).map_err(|e| format!("scénario couplé invalide : {e:?}"))?;
-    let mut simulation = Simulation::nouvelle_avec_milieu(reglages, milieu, a.graine)
-        .map_err(|e| format!("réglages ou milieu couplés invalides : {e:?}"))?;
+    let (reglages, milieu, tropismes, duree) =
+        lire_scenario_tropismes(texte).map_err(|e| format!("scénario couplé invalide : {e:?}"))?;
+    let mut simulation = Simulation::nouvelle_avec_tropismes(reglages, milieu, tropismes, a.graine)
+        .map_err(|e| format!("réglages, milieu ou tropismes couplés invalides : {e:?}"))?;
     simulation.avancer_n(duree);
     std::fs::create_dir_all(&a.sortie).map_err(|e| format!("création de {} : {e}", a.sortie.display()))?;
     ecrire(&a.sortie.join("empreinte.txt"), format!("{}\n", simulation.empreinte()).as_bytes())?;
