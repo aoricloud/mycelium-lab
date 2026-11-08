@@ -38,6 +38,7 @@ pub struct Substrat {
     dt: f64,
     dx: f64,
     cases: Vec<f64>,
+    bloquees: Vec<bool>,
 }
 
 impl Substrat {
@@ -58,7 +59,15 @@ impl Substrat {
         if d * dt / (dx * dx) > 0.25 {
             return Err(ErreurSubstrat::PasInstable);
         }
-        Ok(Substrat { largeur, hauteur, d, dt, dx, cases: vec![0.0; largeur * hauteur] })
+        Ok(Substrat {
+            largeur,
+            hauteur,
+            d,
+            dt,
+            dx,
+            cases: vec![0.0; largeur * hauteur],
+            bloquees: vec![false; largeur * hauteur],
+        })
     }
 
     /// Nombre de cases en `x`.
@@ -81,7 +90,8 @@ impl Substrat {
     /// Contrat : panique si `x >= largeur()` ou `y >= hauteur()`.
     pub fn valeur(&self, x: usize, y: usize) -> f64 {
         assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
-        self.cases[y * self.largeur + x]
+        let i = y * self.largeur + x;
+        if self.bloquees[i] { 0.0 } else { self.cases[i] }
     }
 
     /// Ajoute `quantite` à la case `(x, y)` (la masse totale croît d'autant).
@@ -90,7 +100,9 @@ impl Substrat {
     pub fn deposer(&mut self, x: usize, y: usize, quantite: f64) {
         assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
         assert!(quantite.is_finite() && quantite >= 0.0, "quantité invalide : {quantite}");
-        self.cases[y * self.largeur + x] += quantite;
+        let i = y * self.largeur + x;
+        assert!(!self.bloquees[i], "case ({x}, {y}) bloquée : dépôt refusé");
+        self.cases[i] += quantite;
     }
 
     /// Retire au plus `quantite` de la case `(x, y)` et rend ce qui a été retiré.
@@ -101,6 +113,9 @@ impl Substrat {
         assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
         assert!(quantite.is_finite() && quantite >= 0.0, "quantité invalide : {quantite}");
         let i = y * self.largeur + x;
+        if self.bloquees[i] {
+            return 0.0;
+        }
         let retire = quantite.min(self.cases[i]);
         self.cases[i] -= retire;
         retire
@@ -114,14 +129,28 @@ impl Substrat {
     /// bloquée reste à `0.0`, [`Substrat::valeur`] et [`Substrat::retirer`] y rendent `0.0`, et
     /// [`Substrat::deposer`] y panique (le message contient « bloquée »).
     pub fn bloquer(&mut self, x0: usize, y0: usize, x1: usize, y1: usize) {
-        todo!("étape 5 : bloquer {x0} {y0} {x1} {y1}")
+        assert!(x0 <= x1 && y0 <= y1, "rectangle invalide : ({x0}, {y0}) à ({x1}, {y1})");
+        assert!(
+            x1 < self.largeur && y1 < self.hauteur,
+            "rectangle ({x0}, {y0}) à ({x1}, {y1}) hors de la grille {}×{}",
+            self.largeur,
+            self.hauteur
+        );
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let i = y * self.largeur + x;
+                self.cases[i] = 0.0;
+                self.bloquees[i] = true;
+            }
+        }
     }
 
     /// Vrai si la case `(x, y)` est bloquée.
     ///
     /// Contrat : panique si la case est hors de la grille.
     pub fn est_bloquee(&self, x: usize, y: usize) -> bool {
-        todo!("étape 5 : est_bloquee {x} {y}")
+        assert!(x < self.largeur && y < self.hauteur, "case ({x}, {y}) hors de la grille");
+        self.bloquees[y * self.largeur + x]
     }
 
     /// Avance le champ d'un pas de temps `dt` par le schéma à cinq points, bords sans flux.
@@ -132,14 +161,34 @@ impl Substrat {
         let ancien = self.cases.clone();
         let (largeur, hauteur) = (self.largeur, self.hauteur);
         let r = self.nombre_de_diffusion();
+        if !self.bloquees.iter().any(|&b| b) {
+            // Aucune case bloquée : le schéma d'origine, à l'identique.
+            for y in 0..hauteur {
+                for x in 0..largeur {
+                    let i = y * largeur + x;
+                    let c = ancien[i];
+                    let gauche = if x == 0 { c } else { ancien[i - 1] };
+                    let droite = if x + 1 == largeur { c } else { ancien[i + 1] };
+                    let haut = if y == 0 { c } else { ancien[i - largeur] };
+                    let bas = if y + 1 == hauteur { c } else { ancien[i + largeur] };
+                    self.cases[i] = c + r * (gauche + droite + haut + bas - 4.0 * c);
+                }
+            }
+            return;
+        }
+        // Avec des obstacles : un voisin bloqué est traité comme un bord (aucun flux), une case bloquée reste nulle.
         for y in 0..hauteur {
             for x in 0..largeur {
                 let i = y * largeur + x;
+                if self.bloquees[i] {
+                    self.cases[i] = 0.0;
+                    continue;
+                }
                 let c = ancien[i];
-                let gauche = if x == 0 { c } else { ancien[i - 1] };
-                let droite = if x + 1 == largeur { c } else { ancien[i + 1] };
-                let haut = if y == 0 { c } else { ancien[i - largeur] };
-                let bas = if y + 1 == hauteur { c } else { ancien[i + largeur] };
+                let gauche = if x == 0 || self.bloquees[i - 1] { c } else { ancien[i - 1] };
+                let droite = if x + 1 == largeur || self.bloquees[i + 1] { c } else { ancien[i + 1] };
+                let haut = if y == 0 || self.bloquees[i - largeur] { c } else { ancien[i - largeur] };
+                let bas = if y + 1 == hauteur || self.bloquees[i + largeur] { c } else { ancien[i + largeur] };
                 self.cases[i] = c + r * (gauche + droite + haut + bas - 4.0 * c);
             }
         }
