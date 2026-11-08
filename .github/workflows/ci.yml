@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Une fusion faite par l'auto-fusion (le jeton du dépôt) ne déclenche pas le push ci-dessus ; workflow_dispatch, lui,
+  # part même quand il vient de ce jeton : c'est la voie de rejeu-main.yml, et d'une relance à la main.
+  workflow_dispatch:
+  schedule:
+    - cron: "23 */3 * * *"   # toutes les 3 heures, sur main : filet si la relance de rejeu-main.yml ne part pas
 
 permissions:
   contents: read
