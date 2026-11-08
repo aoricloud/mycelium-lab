@@ -132,7 +132,7 @@ fn tout_controler(thigmotropisme: f64, pas: f64, graines: u64) -> (usize, usize,
     (pres, segments, ramifications)
 }
 
-/// À `thigmotropisme 0`, 8 dispositifs × 25 graines : jamais un segment dans un obstacle. (La pointe qui touche reste là et
+/// À `thigmotropisme 0`, 8 dispositifs × 8 graines : jamais un segment dans un obstacle. (La pointe qui touche reste là et
 /// retente : elle ne traverse pas.)
 #[test]
 #[cfg_attr(not(feature = "etape-7"), ignore)]
@@ -143,7 +143,7 @@ fn jamais_un_segment_dans_un_obstacle_sans_thigmotropisme() {
     assert!(segments >= 10_000, "garde : seulement {segments} segments");
 }
 
-/// À `thigmotropisme 35` (la valeur publiée), 8 dispositifs × 25 graines : jamais un segment dans un obstacle, que la pointe
+/// À `thigmotropisme 35` (la valeur publiée), 8 dispositifs × 8 graines : jamais un segment dans un obstacle, que la pointe
 /// longe l'obstacle ou s'arrête et se ramifie contre lui, y compris dans les coins concaves et convexes, entre les piliers,
 /// dans la boîte murée.
 #[test]
@@ -156,7 +156,7 @@ fn jamais_un_segment_dans_un_obstacle_a_35_degres() {
     assert!(ramifications > 0, "garde : aucune ramification");
 }
 
-/// Aux angles critiques 10 et 90 (à 90, toute rencontre non perpendiculaire est longée), 8 dispositifs × 10 graines :
+/// Aux angles critiques 10 et 90 (à 90, toute rencontre non perpendiculaire est longée), 8 dispositifs × 4 graines :
 /// jamais un segment dans un obstacle.
 #[test]
 #[cfg_attr(not(feature = "etape-7"), ignore)]
