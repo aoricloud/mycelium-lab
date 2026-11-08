@@ -2,19 +2,26 @@
 # seule une PR d'une branche lydite/ de ce dépôt vers main (ou kraken/, l'ancien nom, le temps que finissent les
 # vagues lancées avant le changement), jamais d'un fork, et rien de la PR ne se lance ici (ni checkout, ni code).
 # Déclenché par pull_request, jamais pull_request_target. Une PR d'une autre branche, ou vers une autre base, saute
-# ce job : hors de main, aucune vérification n'est exigée, et gh fusionnerait tout de suite.
+# ces jobs : hors de main, aucune vérification n'est exigée, et gh fusionnerait tout de suite.
+#
+# Seule la tête que Lydite a relue et rejouée se fusionne seule : le corps de la PR porte une seule ligne
+# « Reviewed and replayed on commit <sha>. », et ce <sha> est la tête de la PR. Sinon (aucune tâche critique, donc
+# aucune relecture ; une correction sans seconde relecture ; un binaire de Lydite d'avant cette ligne), la PR attend
+# l'humain. `--match-head-commit` refuse la demande si la tête a bougé depuis l'ouverture. Une demande faite tient
+# contre une poussée de qui a le droit d'écrire, et GitHub fusionnerait la tête neuve une fois sa CI verte : un commit
+# poussé ensuite la retire (le job `retirer`).
 name: auto-fusion
 
 on:
   pull_request:
     branches: [main]
-    types: [opened]
+    types: [opened, synchronize]
 
 permissions: {}
 
 jobs:
   demander:
-    if: github.event.pull_request.head.repo.full_name == github.repository && (startsWith(github.head_ref, 'lydite/') || startsWith(github.head_ref, 'kraken/'))
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository && (startsWith(github.head_ref, 'lydite/') || startsWith(github.head_ref, 'kraken/'))
     runs-on: ubuntu-latest
     # Un échec ne rougit pas le run, que Lydite lit comme un check de la PR : elle reste ouverte et verte, sans fusion
     # demandée, et c'est à la session de le voir.
@@ -23,7 +30,52 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - run: gh pr merge "$PR" --auto --merge
+      # Le corps vient de la PR : il passe par l'environnement, jamais dans le texte du script.
+      - run: |
+          lignes=$(printf '%s\n' "$CORPS" | tr -d '\r' | grep -E '^Reviewed and replayed on commit [0-9a-f]{40}\.$' || true)
+          n=$(printf '%s' "$lignes" | grep -c . || true)
+          if [ "$n" != 1 ]; then
+            echo "::notice::Pas de fusion automatique : $n ligne « Reviewed and replayed on commit … » dans le corps."
+            exit 0
+          fi
+          relue=${lignes#Reviewed and replayed on commit }
+          relue=${relue%.}
+          if [ "$relue" != "$TETE" ]; then
+            echo "::notice::Pas de fusion automatique : la tête $TETE n'est pas le commit relu et rejoué $relue."
+            exit 0
+          fi
+          gh pr merge "$PR" --auto --merge --match-head-commit "$relue"
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.html_url }}
+          CORPS: ${{ github.event.pull_request.body }}
+          TETE: ${{ github.event.pull_request.head.sha }}
+
+  retirer:
+    if: github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository && (startsWith(github.head_ref, 'lydite/') || startsWith(github.head_ref, 'kraken/'))
+    runs-on: ubuntu-latest
+    # Comme `demander` : le run reste vert, car Lydite lit les runs et relancerait la CI sur un run rouge ; un échec
+    # se voit sur le job de la PR, en croix rouge.
+    continue-on-error: true
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - run: |
+          # Trois essais : une demande laissée en place fusionnerait cette tête, que personne n'a relue.
+          for essai in 1 2 3; do
+            if auto=$(gh pr view "$PR" --json autoMergeRequest --jq '.autoMergeRequest != null'); then
+              [ "$auto" = true ] || exit 0
+              if gh pr merge "$PR" --disable-auto; then
+                echo "::notice::Fusion automatique retirée : la tête $TETE est arrivée après la relecture."
+                exit 0
+              fi
+            fi
+            [ "$essai" = 3 ] || sleep 10
+          done
+          echo "::error::La fusion automatique reste demandée pour la tête $TETE, que Lydite n'a pas relue : à retirer à la main."
+          exit 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}
+          TETE: ${{ github.event.pull_request.head.sha }}
