@@ -4,12 +4,14 @@
 # Déclenché par pull_request, jamais pull_request_target. Une PR d'une autre branche, ou vers une autre base, saute
 # ces jobs : hors de main, aucune vérification n'est exigée, et gh fusionnerait tout de suite.
 #
-# Seule la tête que Lydite a relue et rejouée se fusionne seule : le corps de la PR porte une seule ligne
-# « Reviewed and replayed on commit <sha>. », et ce <sha> est la tête de la PR. Sinon (aucune tâche critique, donc
-# aucune relecture ; une correction sans seconde relecture ; un binaire de Lydite d'avant cette ligne), la PR attend
-# l'humain. `--match-head-commit` refuse la demande si la tête a bougé depuis l'ouverture. Une demande faite tient
-# contre une poussée de qui a le droit d'écrire, et GitHub fusionnerait la tête neuve une fois sa CI verte : un commit
-# poussé ensuite la retire (le job `retirer`).
+# Seule la tête dont Lydite a rejoué la preuve se fusionne seule : le corps de la PR porte une seule ligne, sous l'une
+# de ces deux formes, et son <sha> est la tête de la PR :
+#   « Reviewed and replayed on commit <sha>. »                                    (relue, puis rejouée)
+#   « Replayed on commit <sha>, not reviewed: no critical task was assembled. »   (aucune tâche critique, rejouée)
+# Sinon (une correction sans seconde relecture, « not replayed », un binaire de Lydite d'avant ces lignes), la PR
+# attend l'humain. `--match-head-commit` refuse la demande si la tête a bougé depuis l'ouverture. Une demande faite
+# tient contre une poussée de qui a le droit d'écrire, et GitHub fusionnerait la tête neuve une fois sa CI verte : un
+# commit poussé ensuite la retire (le job `retirer`).
 name: auto-fusion
 
 on:
@@ -32,19 +34,18 @@ jobs:
     steps:
       # Le corps vient de la PR : il passe par l'environnement, jamais dans le texte du script.
       - run: |
-          lignes=$(printf '%s\n' "$CORPS" | tr -d '\r' | grep -E '^Reviewed and replayed on commit [0-9a-f]{40}\.$' || true)
+          lignes=$(printf '%s\n' "$CORPS" | tr -d '\r' | grep -E '^(Reviewed and replayed on commit [0-9a-f]{40}\.|Replayed on commit [0-9a-f]{40}, not reviewed: no critical task was assembled\.)$' || true)
           n=$(printf '%s' "$lignes" | grep -c . || true)
           if [ "$n" != 1 ]; then
-            echo "::notice::Pas de fusion automatique : $n ligne « Reviewed and replayed on commit … » dans le corps."
+            echo "::notice::Pas de fusion automatique : $n ligne « … replayed on commit … » dans le corps."
             exit 0
           fi
-          relue=${lignes#Reviewed and replayed on commit }
-          relue=${relue%.}
-          if [ "$relue" != "$TETE" ]; then
-            echo "::notice::Pas de fusion automatique : la tête $TETE n'est pas le commit relu et rejoué $relue."
+          rejouee=$(printf '%s' "$lignes" | grep -oE '[0-9a-f]{40}')
+          if [ "$rejouee" != "$TETE" ]; then
+            echo "::notice::Pas de fusion automatique : la tête $TETE n'est pas le commit rejoué $rejouee."
             exit 0
           fi
-          gh pr merge "$PR" --auto --merge --match-head-commit "$relue"
+          gh pr merge "$PR" --auto --merge --match-head-commit "$rejouee"
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.html_url }}
@@ -62,18 +63,18 @@ jobs:
       pull-requests: write
     steps:
       - run: |
-          # Trois essais : une demande laissée en place fusionnerait cette tête, que personne n'a relue.
+          # Trois essais : une demande laissée en place fusionnerait cette tête, dont Lydite n'a pas rejoué la preuve.
           for essai in 1 2 3; do
             if auto=$(gh pr view "$PR" --json autoMergeRequest --jq '.autoMergeRequest != null'); then
               [ "$auto" = true ] || exit 0
               if gh pr merge "$PR" --disable-auto; then
-                echo "::notice::Fusion automatique retirée : la tête $TETE est arrivée après la relecture."
+                echo "::notice::Fusion automatique retirée : la tête $TETE est arrivée après la preuve rejouée."
                 exit 0
               fi
             fi
             [ "$essai" = 3 ] || sleep 10
           done
-          echo "::error::La fusion automatique reste demandée pour la tête $TETE, que Lydite n'a pas relue : à retirer à la main."
+          echo "::error::La fusion automatique reste demandée pour la tête $TETE, dont Lydite n'a pas rejoué la preuve : à retirer à la main."
           exit 1
         env:
           GH_TOKEN: ${{ github.token }}
