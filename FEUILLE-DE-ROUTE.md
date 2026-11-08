@@ -134,8 +134,8 @@ leur fait longer un obstacle, ou se ramifier contre lui. Les tropismes entrent d
 (`simulation::Simulation`, celui de la vitrine), pas dans le modèle de voisinage de la figure 3.
 
 **Le scénario** gagne des lignes : `source x y rayon quantité` (une tache de nutriments), `obstacle x0 y0 x1 y1` (un
-rectangle de cases infranchissables, sans flux de substrat à travers), `chimiotropisme force` et `thigmotropisme angle
-mémoire` (éteints par défaut). Sans ces lignes, ou à force zéro, le moteur est celui de la V0 bit à bit :
+rectangle de cases infranchissables, sans flux de substrat à travers), `chimiotropisme force` et `thigmotropisme angle`
+(éteints par défaut). Sans ces lignes, ou à force zéro, le moteur est celui de la V0 bit à bit :
 `references/couplage-graine-1.empreinte` ne change pas.
 
 **Les références**, à vérifier sur l'article avant de geler un test :
@@ -155,7 +155,7 @@ substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obs
 ensuite, sur la décision d'André : T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche en
 profondeur et à A*), et T4, la vitrine avec un choix de scénario.
 
-**Où on en est** (08/11) : T0 (le terrain) et T1 (le chimiotropisme) sont faits ; T2 (les obstacles et le thigmotropisme) est la prochaine étape. Le chimiotropisme est décrit, avec ses limites, dans la dernière partie de `MODELE.md`.
+**Où on en est** (08/11) : T0 (le terrain), T1 (le chimiotropisme) et T2 (les obstacles et le thigmotropisme) sont faits. Le chimiotropisme et le thigmotropisme sont décrits, avec leurs limites, dans les deux dernières parties de `MODELE.md`. T3 (un labyrinthe) et T4 (la vitrine avec un choix de scénario) ne sont pas décidés.
 
 ## La référence de la V0
 
