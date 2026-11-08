@@ -612,5 +612,123 @@ différence s'y voit.
   cases pour la diffusion de ce scénario après 100 pas, d'après un calcul grossier) ne se sent presque pas.
 - Le gradient lu est celui du champ entier, consommation de la colonie comprise : à force positive, une pointe se penche
   aussi vers les cases voisines que la colonie n'a pas encore épuisées, pas seulement vers les taches.
-- Le tout est en 2D, sans obstacle autre que les cases bloquées du terrain ; le thigmotropisme est l'étape suivante.
+- Le tout est en 2D, sans obstacle autre que les cases bloquées du terrain ; le thigmotropisme est décrit dans la section suivante.
 - Non vérifié : les méthodes, figures et valeurs des deux articles ; l'écriture canonique sur une machine gros-boutiste.
+
+# Les obstacles et le thigmotropisme (étape 7)
+
+Comme le chimiotropisme, ce modèle appartient au couplage (`simulation::Simulation`, celui de la vitrine), pas au modèle de
+la figure 3. Il ajoute deux choses : **un obstacle n'est jamais touché**, et ce qu'une pointe fait quand son pas la mènerait
+dedans (le thigmotropisme : *thigmo* vient du toucher).
+
+## Ce que fait le code
+
+**La règle du plancher.** Chaque point `(x, y)` du plan est dans la case `(⌊x⌋, ⌊y⌋)`, et un segment est *libre* si aucun de
+ses points, extrémités comprises, n'est dans une case bloquée (`Substrat::segment_libre`). Cette règle vaut toujours, même
+sans thigmotropisme. Si le segment qu'une pointe poserait n'est pas libre, c'est un **contact**.
+
+**À `thigmotropisme 0` (le défaut)**, une pointe qui touche reste où elle est, avec sa nouvelle direction (comme le cas
+« apex bloqué » de la V0), sans laisser de segment ni consommer, et retente au pas suivant.
+
+**À `thigmotropisme a > 0`** (`a` en degrés, dans `[0 ; 90]`), on regarde la face touchée (`Substrat::face_de_contact` : la
+ligne de la grille franchie pour entrer dans la première case bloquée) et l'angle de contact `α` entre la direction de la
+pointe et cette face (0 pour le parallèle, 90 pour la perpendiculaire ; des entiers, aucune trigonométrie) :
+
+- `α < a` : la pointe **longe** l'obstacle. Elle prend celle des deux directions parallèles à la face qui dévie le moins de la
+  sienne (`g`), garde en mémoire son cap d'avant (`cap`) et `g`, et refait son pas dans la direction `g`. À chaque pas
+  suivant, elle tire un écart `δ` entre -20 et 20 degrés ; si un pas plein dans la direction `cap` est libre (le bout du mur
+  est passé) et si son pas réel dans la direction `cap + δ` l'est aussi, elle **retrouve son cap** (`cap + δ`) et la mémoire
+  s'efface ; sinon elle continue de longer. Une pointe qui longe n'est pas soumise au chimiotropisme.
+- `α ≥ a` : la pointe **s'arrête et se ramifie**. Elle devient inactive et, dans chacune des deux directions parallèles à la
+  face (la plus petite d'abord) où un pas plein est libre, une pointe neuve naît à sa position, **sans mémoire**. Chaque
+  naissance compte comme une ramification. Dans un coin concave, la direction tournée vers le mur voisin n'a pas la place :
+  la pointe n'y naît pas.
+- Au bord de la boîte, une pointe qui ne peut plus avancer reste où elle est et perd sa mémoire.
+
+Une anastomose ne se fait pas à travers un obstacle : un candidat que sépare un obstacle est écarté et la recherche continue.
+Le scénario règle l'angle par la ligne `thigmotropisme <angle>`. Avec obstacles et `thigmotropisme 0`, l'état change par
+rapport à T0 dès qu'une pointe touche un mur (les obstacles sont durs) ; sans contact, ou sans obstacle, il est celui
+d'avant, octet pour octet. Avec un angle non nul, l'écriture canonique de l'état se termine par l'angle puis, pour chaque
+pointe, la mémoire qu'elle porte (voir `Simulation::ecrire_canonique`).
+
+## La référence, et ce qu'elle ne donne pas
+
+La référence est M. Held, O. Kašpar, C. Edwards et D. V. Nicolau, « Intracellular mechanisms of fungal space searching in
+microenvironments », *PNAS* 116(27):13543–13552 (2019), *Neurospora crassa* dans des structures microfluidiques. **Elle a été
+lue en entier (texte complet) par le juge des tests**, pas seulement le résumé. Ce que l'article donne, et ce que le code en
+reprend :
+
+| Ce que dit l'article | Dans le code |
+|---|---|
+| Une hyphe qui touche un obstacle sous moins de 35° de sa surface la longe (« nestling », 26 hyphes imagées), « dans la direction de moindre déviation ». | Le seuil `thigmotropisme 35` ; la direction de glissement `g` est la parallèle la plus proche. |
+| Au-delà, sa pointe se divise (« hit & split », 37 événements imagés), en T, les deux branches partant en sens opposés le long de l'obstacle ; **la mémoire de direction est perdue**. | L'arrêt, et deux pointes nées sans mémoire dans les deux sens parallèles à la face. |
+| Après le bout de l'obstacle, l'hyphe retrouve son cap sur une distance d'environ un diamètre (7 µm), à environ 20° près. | Le retour au cap au plus un pas après le bout du mur, à ±20° ; le « 20° » est cité par l'article d'après les travaux antérieurs du groupe, il n'y est pas mesuré. |
+| Quand la place manque (un coin, un obstacle court), une seule branche se forme. | Une pointe ne naît que si un pas plein dans sa direction est libre. |
+
+**Ce que l'article ne donne pas, et que nous avons choisi** : un seuil net à 35° (les 37 collisions imagées sont presque
+perpendiculaires : entre 35° et près de 80°, rien n'est montré) ; un glissement exactement selon un axe de la grille, à
+la distance du contact ; la loi uniforme de l'écart `δ` ; un arrêt instantané (dans l'article : environ deux minutes) ; le
+retour décidé par une sonde. Le 35° est un paramètre repris de la mesure, pas un résultat du modèle. Les « environ 45° » de
+l'article sont l'angle des ramifications latérales en milieu ouvert, non du hit & split : ils ne sont pas dans le code.
+Les travaux antérieurs que l'article cite (canaux étroits : extension jusqu'à dix fois plus lente, ramifications cinq à
+dix fois plus rapprochées) n'ont pas été lus.
+
+## Ce que les tests vérifient
+
+- La règle du plancher et la face d'un contact, **exactement** : 80 000 segments comparés à un oracle écrit dans les tests
+  (des fractions d'entiers, sans arrondi), coins et lignes de la grille compris.
+- Les trois fonctions pures (`angle_de_contact`, `direction_de_glissement`, `branches_de_contact`) sur les 360 directions et
+  les deux faces ; le seuil (`α < a` longe, `α ≥ a` s'arrête) pour sept angles ; le retour au cap (au plus 20°, au plus un
+  pas après le bout du mur) ; le bord de la boîte ; le coin concave ; les pas autres que 1.
+- **L'état complet, octet pour octet**, de 324 colonies à marche au hasard, suivies pas à pas par un modèle de référence
+  écrit à part dans les tests.
+- Jamais un segment dans un obstacle, sur 312 colonies, huit dispositifs, quatre angles et trois pas.
+- L'anastomose qui ne traverse pas un mur (un dispositif déterministe, et son témoin sans mur) ; les refus d'angle ;
+  l'écriture canonique ; la lecture du scénario ; le binaire ; et, sans obstacle ou sans contact, **l'état d'avant, à
+  l'octet**.
+- En moyenne sur 120 graines du scénario `scenarios/mur.txt`, avec une marge d'au moins cinq écarts-types sur d'autres jeux
+  de graines : à 35° la colonie épouse le mur (au moins 3 points de biomasse collée de plus qu'à angle nul) et s'y ramifie
+  (au moins 1,3 fois plus de ramifications) ; à 90° elle le contourne (au moins 2 points de biomasse de plus au-delà).
+- Les 66 tests ont été jugés avant d'être gelés : 112 fautes volontaires sur 117 sont tuées, les 5 autres n'ont aucun effet
+  observable.
+
+## Ce qu'on voit
+
+Sur `scenarios/mur.txt` (une spore en `(20, 50)`, un mur de 4 colonnes sur 61 lignes devant elle, 120 pas), moyenne de 40
+graines (`cargo run --release --example mesure_thigmotropisme` refait ce tableau) :
+
+| Angle critique | Biomasse moyenne | Au-delà du mur | Part au-delà | Part collée au mur | Ramifications |
+|---|---|---|---|---|---|
+| 0 | 738,8 | 140,7 | 19,0 % | 3,5 % | 39,6 |
+| 15 | 1 797,8 | 359,9 | 20,0 % | 11,8 % | 138,8 |
+| 35 | 1 327,4 | 326,3 | 24,6 % | 11,1 % | 81,3 |
+| 60 | 1 410,1 | 416,7 | 29,5 % | 10,6 % | 80,8 |
+| 90 | 1 271,5 | 443,3 | 34,9 % | 9,9 % | 69,7 |
+
+À 35°, la colonie **épouse le mur et s'y ramifie** : elle est environ deux fois plus grosse qu'à angle nul, et en passe environ
+deux fois plus de biomasse de l'autre côté. Mais la **part** de sa biomasse au-delà du mur n'augmente presque pas (24,6 %
+contre 19,0 % sur ces 40 graines ; de 3 points en moyenne sur d'autres jeux de graines) : « elle le contourne » n'est vrai
+qu'aux grands angles, où presque tout est longé. À angle nul, une pointe qui touche le mur y reste collée sans laisser
+de segment, jusqu'à ce que sa marche au hasard l'en détourne. Les colonies varient beaucoup d'une graine à l'autre (certaines
+ne touchent jamais le mur) : une seule graine ne prouve rien, la moyenne oui. Les aperçus `apercus/etape-7-mur.png` et
+`apercus/etape-7-sans-thigmotropisme.png` montrent la graine 31 : à 35°, les hyphes s'accumulent le long du mur et s'y
+ramifient ; à angle nul, quelques-unes seulement l'effleurent.
+
+## Les limites
+
+- Un seul angle critique, net, pour une grille aux murs droits ; l'article n'image le comportement entre 35° et la
+  perpendiculaire que près de la perpendiculaire.
+- Le glissement est axial, à la distance du premier contact (moins d'un pas) : la pointe n'est pas avancée jusqu'à la face.
+- L'arrêt est instantané, la ramification d'un coin ou d'un obstacle court ne se fait que si la place d'un pas existe ; pas
+  de ralentissement en canal étroit, pas de ramification vers une ouverture latérale : non modélisés.
+- La mémoire est un cap retrouvé à ±20° (loi uniforme choisie), au plus un pas après le bout du mur ; elle s'efface à chaque
+  retour et au bord de la boîte. L'article dit que la précision du retour ne se dégrade pas sur des virages successifs : ici
+  les écarts `δ` s'ajoutent d'un contact à l'autre.
+- L'échelle (une case, un pas) n'est pas calibrée sur le diamètre d'une hyphe (environ 7 µm).
+- Le passage exact par un coin suit la règle du plancher, sans signification physique (la mesure en est nulle).
+- Non testé directement : qu'un candidat d'anastomose écarté laisse chercher un autre plus loin (le dispositif de test ne le
+  distingue pas de « pas d'anastomose à ce pas »), le comportement à un ULP près d'une ligne de la grille quand les
+  coordonnées ne sont pas des flottants exacts, et le contact avec un substrat qui diffuse ou s'épuise comparé à l'octet à un
+  modèle (couvert par des propriétés générales et des moyennes).
+- Non vérifié : les travaux antérieurs que cite l'article (canaux étroits, mémoire à 20°) ; l'écriture canonique sur une
+  machine gros-boutiste.

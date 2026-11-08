@@ -13,13 +13,36 @@
 //! 1. tourne d'un angle entier tiré uniformément dans `-amplitude_marche..=amplitude_marche` ;
 //! 2. lit le substrat `s` de la case où il se trouve, en déduit la longueur `(pas · s) / (affinite + s)`, bornée
 //!    par ce que la case contient quand `cout > 0` ;
-//! 3. si la longueur est positive et que l'arrivée reste dans `[0, largeur) × [0, hauteur)`, consomme
-//!    `cout · longueur` dans la case de départ et laisse un [`Segment`] ; sinon il garde sa position et sa nouvelle
-//!    direction, sans rien consommer ni se ramifier ;
-//! 4. s'il approche un segment étranger assez ancien, s'anastomose et devient inactif ;
+//! 3. si la longueur est positive et que l'arrivée reste dans `[0, largeur) × [0, hauteur)` **et que le segment ne
+//!    traverse aucune case bloquée**, consomme `cout · longueur` dans la case de départ et laisse un [`Segment`] ;
+//!    sinon il garde sa position et sa nouvelle direction, sans rien consommer ni se ramifier (un segment qui
+//!    traverserait une case bloquée est un **contact**, traité par le thigmotropisme, voir plus bas) ;
+//! 4. s'il approche un segment étranger assez ancien, et qu'aucun obstacle ne les sépare, s'anastomose et devient
+//!    inactif ;
 //! 5. sinon se ramifie avec la probabilité `1 / intervalle`, en créant un apex qui n'agira qu'au pas suivant.
 //!
 //! Un relevé est enregistré après chaque pas, avec celui du temps 0 : il y en a donc `temps() + 1`.
+//!
+//! # Les obstacles et le thigmotropisme (T2)
+//!
+//! Un obstacle n'est jamais touché, à tout réglage ([`Substrat::segment_libre`], règle du plancher). Si le segment
+//! prévu touche une case bloquée, c'est un **contact**. À `thigmotropisme 0`, la pointe reste où elle est, avec sa
+//! nouvelle direction, comme le cas « apex bloqué » : elle retentera au pas suivant. À `thigmotropisme a > 0`, la face
+//! touchée ([`Substrat::face_de_contact`]) donne l'angle de contact `α` ([`tropisme::angle_de_contact`]) :
+//!
+//! - `α < a` : la pointe **longe** l'obstacle : elle mémorise `(cap, g)`, `cap` étant sa direction `d` de ce pas et `g`
+//!   la direction de glissement ([`tropisme::direction_de_glissement`]), et refait son pas dans la direction `g` ; si ce
+//!   pas sort de la boîte, elle reste là et oublie ; s'il touche aussi (coin concave), c'est un arrêt ;
+//! - `α ≥ a` : elle **s'arrête et se ramifie** : elle devient inactive (sans mémoire) et, pour chacune des deux
+//!   directions parallèles à la face ([`tropisme::branches_de_contact`], dans cet ordre), une pointe neuve, **sans
+//!   mémoire**, naît à sa position si un pas plein (`pas`) dans cette direction est libre ; chaque naissance est une
+//!   ramification.
+//!
+//! Une pointe qui a une mémoire `(cap, g)` tire sa marche au hasard (résultat écrasé), puis toujours un écart `δ` dans
+//! `-MEMOIRE_DE_DIRECTION..=MEMOIRE_DE_DIRECTION`, et ne subit pas le chimiotropisme. Si un pas plein dans la direction
+//! `cap` est libre (le bout du mur est passé) **et** si le pas réel dans la direction `cap + δ` l'est aussi, elle
+//! retrouve son cap : direction `cap + δ`, mémoire effacée ; sinon elle continue de longer, direction `g`. Une pointe
+//! bloquée (longueur nulle ou arrivée hors de la boîte), anastomosée ou arrêtée perd sa mémoire.
 //!
 //! # L'écriture canonique
 //!
@@ -142,11 +165,12 @@ pub enum ErreurSimulation {
     /// Le substrat refuse ses paramètres de diffusion (voir [`substrat::ErreurSubstrat`]).
     Substrat(substrat::ErreurSubstrat),
     /// Un tropisme est hors contrat : `chimiotropisme` non fini, négatif ou supérieur à 45
-    /// ([`crate::tropisme::FORCE_MAXIMALE`]).
+    /// ([`crate::tropisme::FORCE_MAXIMALE`]), ou `thigmotropisme` non fini, négatif ou supérieur à 90
+    /// ([`crate::tropisme::ANGLE_CRITIQUE_MAXIMAL`]).
     TropismeInvalide,
 }
 
-/// Un apex de la simulation : sa position, sa direction et son état.
+/// Un apex de la simulation : sa position, sa direction, son état et, s'il longe un obstacle, sa mémoire `(cap, g)`.
 ///
 /// L'identifiant est aussi l'indice de l'apex dans le vecteur : les apex naissent à la fin, dans l'ordre de leur
 /// identifiant, et aucun n'est retiré — un apex anastomosé reste, seulement inactif.
@@ -157,6 +181,9 @@ struct Apex {
     y: f64,
     direction: usize,
     actif: bool,
+    /// La mémoire d'une pointe qui longe un obstacle : `(cap, g)`, la direction d'avant le contact et la direction
+    /// de glissement. `None` pour toute autre pointe.
+    memoire: Option<(usize, usize)>,
 }
 
 /// L'état simulé complet : les apex, le substrat et les nombres cumulés.
@@ -211,8 +238,9 @@ impl Simulation {
     /// Comme [`Simulation::nouvelle_avec_milieu`], avec des [`Tropismes`] : avec `Tropismes::default()` (force nulle),
     /// l'état est le même, octet pour octet, que celui de `nouvelle_avec_milieu`, pour toute graine et tout milieu.
     ///
-    /// Refuse avec [`ErreurSimulation::TropismeInvalide`] un `chimiotropisme` non fini, négatif ou supérieur à 45 ;
-    /// les contrôles des réglages et du milieu sont ceux d'avant, et passent en premier.
+    /// Refuse avec [`ErreurSimulation::TropismeInvalide`] un `chimiotropisme` non fini, négatif ou supérieur à 45, ou
+    /// un `thigmotropisme` non fini, négatif ou supérieur à 90 ; les contrôles des réglages et du milieu sont ceux
+    /// d'avant, et passent en premier.
     pub fn nouvelle_avec_tropismes(
         reglages: Reglages,
         milieu: Milieu,
@@ -265,10 +293,13 @@ impl Simulation {
         }
 
         // Le tropisme se vérifie après les réglages et le milieu, et avant de remplir le substrat : `-0.0` et les
-        // bornes 0 et 45 sont acceptées.
+        // bornes 0 et 45 sont acceptées, comme les bornes 0 et 90 du thigmotropisme.
         if !tropismes.chimiotropisme.is_finite()
             || tropismes.chimiotropisme < 0.0
             || tropismes.chimiotropisme > tropisme::FORCE_MAXIMALE
+            || !tropismes.thigmotropisme.is_finite()
+            || tropismes.thigmotropisme < 0.0
+            || tropismes.thigmotropisme > tropisme::ANGLE_CRITIQUE_MAXIMAL
         {
             return Err(ErreurSimulation::TropismeInvalide);
         }
@@ -296,8 +327,14 @@ impl Simulation {
         // aucun : sans source ni obstacle, l'état est celui d'avant T0, octet pour octet.
         let mut alea = Alea::new(graine);
         let direction = (alea.suivant() % NB_DIRECTIONS as u64) as usize;
-        let premier =
-            Apex { id: 0, x: reglages.spore.0 as f64 + 0.5, y: reglages.spore.1 as f64 + 0.5, direction, actif: true };
+        let premier = Apex {
+            id: 0,
+            x: reglages.spore.0 as f64 + 0.5,
+            y: reglages.spore.1 as f64 + 0.5,
+            direction,
+            actif: true,
+            memoire: None,
+        };
         let index = anastomose::Index::new(reglages.largeur, reglages.hauteur);
 
         let mut simulation = Simulation {
@@ -353,6 +390,8 @@ impl Simulation {
         let spore_y = self.reglages.spore.1 as f64 + 0.5;
         let reglage_anastomose = self.reglages.anastomose;
         let force_chimiotropique = self.tropismes.chimiotropisme;
+        let angle_critique = self.tropismes.thigmotropisme;
+        let a_des_obstacles = !self.milieu.obstacles.is_empty();
 
         for i in 0..nb_apex_au_debut {
             if !self.apex[i].actif {
@@ -364,34 +403,91 @@ impl Simulation {
             let delta = (self.alea.suivant() % (2 * amplitude + 1)) as i64 - amplitude as i64;
             apex.direction = (apex.direction as i64 + delta).rem_euclid(NB_DIRECTIONS as i64) as usize;
 
-            // a bis. Le chimiotropisme : la pointe lit le gradient de sa case (après la diffusion du pas) et tourne
-            // vers le côté où il y a plus de nutriments. À force nulle, aucun appel ni tirage.
-            if force_chimiotropique > 0.0 {
-                let gradient = self.substrat.gradient(apex.x as usize, apex.y as usize);
-                apex.direction =
-                    tropisme::tourner_chimiotropique(apex.direction, gradient, force_chimiotropique, &mut self.alea);
-            }
-
-            // b. La case de départ, où la consommation aura lieu.
+            // b-c. La case de départ, où la consommation aura lieu, la valeur `s` du substrat et la longueur que le
+            //      substrat autorise. Cette lecture passe avant le chimiotropisme et ne tire aucun nombre.
             let depart_x = apex.x as usize;
             let depart_y = apex.y as usize;
             let s = self.substrat.valeur(depart_x, depart_y);
-
-            // c. La longueur que le substrat autorise.
             let mut longueur = if s <= 0.0 { 0.0 } else { (pas * s) / (affinite + s) };
             if cout > 0.0 && cout * longueur > s {
                 longueur = s / cout;
             }
 
-            // d. L'arrivée.
-            let direction = apex.direction;
-            let x1 = apex.x + longueur * COS[direction];
-            let y1 = apex.y + longueur * SIN[direction];
+            // a ter. La mémoire d'une pointe qui longe : la marche au hasard est écrasée, un écart `δ` est toujours
+            //        tiré, et la pointe retrouve son cap si le bout du mur est passé.
+            if let Some((cap, g)) = apex.memoire {
+                let ecart = (self.alea.suivant() % u64::from(2 * tropisme::MEMOIRE_DE_DIRECTION + 1)) as i64
+                    - i64::from(tropisme::MEMOIRE_DE_DIRECTION);
+                let retrouvee = (cap as i64 + ecart).rem_euclid(NB_DIRECTIONS as i64) as usize;
+                if self.pas_libre(apex.x, apex.y, pas, cap) && self.pas_libre(apex.x, apex.y, longueur, retrouvee) {
+                    apex.direction = retrouvee;
+                    apex.memoire = None;
+                } else {
+                    apex.direction = g;
+                }
+            } else if force_chimiotropique > 0.0 {
+                // Le chimiotropisme de T1 : une pointe qui a une mémoire n'y est pas soumise.
+                let gradient = self.substrat.gradient(apex.x as usize, apex.y as usize);
+                apex.direction =
+                    tropisme::tourner_chimiotropique(apex.direction, gradient, force_chimiotropique, &mut self.alea);
+            }
 
-            // e. Un apex bloqué garde sa position et sa nouvelle direction, sans rien laisser ni consommer. La
-            //    borne droite de la boîte est exclue.
+            // d. L'arrivée, dans la direction de la pointe.
+            let mut direction = apex.direction;
+            let mut x1 = apex.x + longueur * COS[direction];
+            let mut y1 = apex.y + longueur * SIN[direction];
+
+            // e. Un apex bloqué garde sa position et sa nouvelle direction, sans rien laisser ni consommer, et perd sa
+            //    mémoire. La borne droite de la boîte est exclue.
             if longueur <= 0.0 || x1 < 0.0 || y1 < 0.0 || x1 >= largeur || y1 >= hauteur {
+                apex.memoire = None;
                 self.apex[i] = apex;
+                continue;
+            }
+
+            // e bis. S'il y a des obstacles et que le segment touche une case bloquée, c'est un contact.
+            let mut arret: Option<tropisme::Face> = None;
+            if a_des_obstacles && let Some(face) = self.substrat.face_de_contact(apex.x, apex.y, x1, y1) {
+                if angle_critique <= 0.0 {
+                    // À angle nul, la pointe reste, garde sa direction, et retentera au pas suivant.
+                    self.apex[i] = apex;
+                    continue;
+                }
+                if (tropisme::angle_de_contact(direction, face) as f64) < angle_critique {
+                    // Elle longe : mémoire du cap et de la direction de glissement, puis le pas est refait.
+                    let g = tropisme::direction_de_glissement(direction, face);
+                    apex.memoire = Some((direction, g));
+                    apex.direction = g;
+                    direction = g;
+                    x1 = apex.x + longueur * COS[g];
+                    y1 = apex.y + longueur * SIN[g];
+                    if x1 < 0.0 || y1 < 0.0 || x1 >= largeur || y1 >= hauteur {
+                        apex.memoire = None;
+                        self.apex[i] = apex;
+                        continue;
+                    }
+                    if let Some(face2) = self.substrat.face_de_contact(apex.x, apex.y, x1, y1) {
+                        // Un coin concave : c'est un arrêt contre la seconde face.
+                        arret = Some(face2);
+                    }
+                } else {
+                    arret = Some(face);
+                }
+            }
+
+            // Un arrêt : la pointe devient inactive, sans mémoire, et chaque branche libre naît à sa position.
+            if let Some(face) = arret {
+                apex.actif = false;
+                apex.memoire = None;
+                self.apex[i] = apex;
+                let (a, b) = tropisme::branches_de_contact(face);
+                for b in [a, b] {
+                    if self.pas_libre(apex.x, apex.y, pas, b) {
+                        let id = self.apex.len() as u32;
+                        self.apex.push(Apex { id, x: apex.x, y: apex.y, direction: b, actif: true, memoire: None });
+                        self.nb_ramifications += 1;
+                    }
+                }
                 continue;
             }
 
@@ -413,22 +509,33 @@ impl Simulation {
                 self.rayon = distance;
             }
 
-            // h. Une anastomose rend l'apex inactif et empêche sa ramification.
-            if let Some(reglage) = reglage_anastomose
-                && self.index.chercher(x1, y1, apex.id, temps, &reglage).is_some()
-            {
-                self.apex[i].actif = false;
-                self.nb_anastomoses += 1;
-                continue;
+            // h. Une anastomose rend l'apex inactif, lui fait perdre sa mémoire et empêche sa ramification. S'il y a
+            //    des obstacles, un candidat que sépare un obstacle est écarté et la recherche continue.
+            if let Some(reglage) = reglage_anastomose {
+                let candidat = if a_des_obstacles {
+                    self.index.chercher_si(x1, y1, apex.id, temps, &reglage, |_, (px, py)| {
+                        self.substrat.segment_libre(x1, y1, px.clamp(0.0, largeur), py.clamp(0.0, hauteur))
+                    })
+                } else {
+                    self.index.chercher(x1, y1, apex.id, temps, &reglage)
+                };
+                if candidat.is_some() {
+                    self.apex[i].actif = false;
+                    self.apex[i].memoire = None;
+                    self.nb_anastomoses += 1;
+                    continue;
+                }
             }
 
-            // i. Se ramifier : un nouvel apex naît à l'arrivée, il n'agira qu'au pas suivant.
+            // i. Se ramifier : un nouvel apex naît à l'arrivée, sans mémoire, dans la direction du pas de la mère
+            //    (celle de glissement pour une pointe qui longe), à plus ou moins `angle_ramification`. Il n'agira
+            //    qu'au pas suivant, et la mère garde sa mémoire.
             if probabilite > 0.0 && self.alea.suivant_f64() < probabilite {
                 let cote = self.alea.suivant() % 2;
                 let decalage = if cote == 0 { angle_ramification } else { -angle_ramification };
                 let direction = (direction as i64 + decalage).rem_euclid(NB_DIRECTIONS as i64) as usize;
                 let id = self.apex.len() as u32;
-                self.apex.push(Apex { id, x: x1, y: y1, direction, actif: true });
+                self.apex.push(Apex { id, x: x1, y: y1, direction, actif: true, memoire: None });
                 self.nb_ramifications += 1;
             }
         }
@@ -442,6 +549,18 @@ impl Simulation {
         for _ in 0..n {
             self.avancer();
         }
+    }
+
+    /// Vrai si un pas de longueur `longueur` dans la direction `direction`, depuis `(x, y)`, arrive dans la boîte
+    /// (borne droite et borne basse exclues) et ne touche aucune case bloquée.
+    fn pas_libre(&self, x: f64, y: f64, longueur: f64, direction: usize) -> bool {
+        let x1 = x + longueur * COS[direction];
+        let y1 = y + longueur * SIN[direction];
+        x1 >= 0.0
+            && y1 >= 0.0
+            && x1 < self.reglages.largeur as f64
+            && y1 < self.reglages.hauteur as f64
+            && self.substrat.segment_libre(x, y, x1, y1)
     }
 
     /// Nombre de pas de temps joués depuis la création.
@@ -508,12 +627,17 @@ impl Simulation {
     ///   `f64::to_bits` en petit-boutiste (8 octets chacun), `direction` (`u32`) et `actif` (`u8`, 1 ou 0) ;
     /// - puis les trois compteurs en `u64` : ramifications, anastomoses, pointes ;
     /// - puis [`Substrat::ecrire_canonique`], dont le format est décrit dans le module `substrat` ;
-    /// - puis, seulement si le milieu n'est pas vide ou si `chimiotropisme` n'est pas nul, la queue du milieu : le
-    ///   nombre de sources en `u64`, chacune (`x`, `y`, `rayon` en `u32`, `quantite` par `f64::to_bits`) en
-    ///   petit-boutiste, le nombre d'obstacles en `u64`, puis chacun (`x0`, `y0`, `x1`, `y1` en `u32`), tout dans
-    ///   l'ordre des vecteurs du milieu (un milieu vide, avec un tropisme actif, écrit deux `u64` à zéro) ;
-    /// - puis, seulement si `chimiotropisme` n'est pas nul, `chimiotropisme.to_bits()` en petit-boutiste (8 octets).
-    ///   Une force nulle (ou `-0.0`) et un milieu vide n'ajoutent rien : l'écriture est celle d'avant T0.
+    /// - puis, seulement si le milieu n'est pas vide ou si un tropisme (`chimiotropisme` ou `thigmotropisme`) n'est pas
+    ///   nul, la queue du milieu : le nombre de sources en `u64`, chacune (`x`, `y`, `rayon` en `u32`, `quantite` par
+    ///   `f64::to_bits`) en petit-boutiste, le nombre d'obstacles en `u64`, puis chacun (`x0`, `y0`, `x1`, `y1` en
+    ///   `u32`), tout dans l'ordre des vecteurs du milieu (un milieu vide, avec un tropisme actif, écrit deux `u64` à
+    ///   zéro) ;
+    /// - puis, seulement si `chimiotropisme` n'est pas nul, `chimiotropisme.to_bits()` en petit-boutiste (8 octets) ;
+    /// - puis, seulement si `thigmotropisme` n'est pas nul, `thigmotropisme.to_bits()` en petit-boutiste (8 octets),
+    ///   suivi, pour chaque apex dans l'ordre des identifiants, de 9 octets : un drapeau (`u8`, 1 si l'apex a une
+    ///   mémoire), puis `cap` (`u32`) et `g` (`u32`) en petit-boutiste, nuls sans mémoire.
+    ///   Une force nulle (ou `-0.0`), un angle critique nul (ou `-0.0`) et un milieu vide n'ajoutent rien : l'écriture
+    ///   est celle d'avant T0.
     ///
     /// La graine et les réglages n'y figurent pas : deux simulations de même état ont la même écriture.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
@@ -534,7 +658,10 @@ impl Simulation {
         octets.extend_from_slice(&self.nb_anastomoses.to_le_bytes());
         octets.extend_from_slice(&(self.pointes() as u64).to_le_bytes());
         octets.extend_from_slice(&self.substrat.ecrire_canonique());
-        if !self.milieu.sources.is_empty() || !self.milieu.obstacles.is_empty() || self.tropismes.chimiotropisme != 0.0
+        if !self.milieu.sources.is_empty()
+            || !self.milieu.obstacles.is_empty()
+            || self.tropismes.chimiotropisme != 0.0
+            || self.tropismes.thigmotropisme != 0.0
         {
             octets.extend_from_slice(&(self.milieu.sources.len() as u64).to_le_bytes());
             for source in &self.milieu.sources {
@@ -553,6 +680,23 @@ impl Simulation {
         }
         if self.tropismes.chimiotropisme != 0.0 {
             octets.extend_from_slice(&self.tropismes.chimiotropisme.to_bits().to_le_bytes());
+        }
+        if self.tropismes.thigmotropisme != 0.0 {
+            octets.extend_from_slice(&self.tropismes.thigmotropisme.to_bits().to_le_bytes());
+            for apex in &self.apex {
+                match apex.memoire {
+                    Some((cap, g)) => {
+                        octets.push(1);
+                        octets.extend_from_slice(&(cap as u32).to_le_bytes());
+                        octets.extend_from_slice(&(g as u32).to_le_bytes());
+                    }
+                    None => {
+                        octets.push(0);
+                        octets.extend_from_slice(&0u32.to_le_bytes());
+                        octets.extend_from_slice(&0u32.to_le_bytes());
+                    }
+                }
+            }
         }
         octets
     }
@@ -623,7 +767,7 @@ pub fn lire_scenario(texte: &str) -> Result<(Reglages, u32), ErreurLecture> {
 /// [`lire_scenario_complet`] (`avec_milieu == true`, `avec_tropismes == false`) et
 /// [`lire_scenario_tropismes`] (`avec_milieu == true`, `avec_tropismes == true`). Quand `avec_milieu` est faux, les
 /// directives `source` et `obstacle` restent des lignes inconnues ; quand `avec_tropismes` est faux, `chimiotropisme`
-/// en est une aussi.
+/// et `thigmotropisme` en sont aussi.
 fn lire_scenario_commun(
     texte: &str,
     avec_milieu: bool,
@@ -637,6 +781,7 @@ fn lire_scenario_commun(
     let mut anastomose: Option<anastomose::Reglage> = None;
     let mut duree: Option<u32> = None;
     let mut chimiotropisme: Option<f64> = None;
+    let mut thigmotropisme: Option<f64> = None;
     let mut milieu = Milieu::default();
 
     for (rang, brute) in texte.lines().enumerate() {
@@ -694,6 +839,14 @@ fn lire_scenario_commun(
                     _ => return Err(ErreurLecture::LigneInvalide(numero)),
                 }
             }
+            ["thigmotropisme", angle] if avec_tropismes => {
+                // Comme le chimiotropisme : la valeur se lit telle quelle (`parse::<f64>`) et n'est vérifiée qu'à la
+                // construction. Une seconde ligne, même identique, est une faute.
+                match angle.parse::<f64>() {
+                    Ok(angle) if thigmotropisme.is_none() => thigmotropisme = Some(angle),
+                    _ => return Err(ErreurLecture::LigneInvalide(numero)),
+                }
+            }
             ["source", x, y, rayon, quantite] if avec_milieu => {
                 match (x.parse::<usize>(), y.parse::<usize>(), rayon.parse::<usize>(), quantite.parse::<f64>()) {
                     (Ok(x), Ok(y), Ok(rayon), Ok(quantite)) => {
@@ -739,6 +892,9 @@ fn lire_scenario_commun(
     if let Some(chimiotropisme) = chimiotropisme {
         tropismes.chimiotropisme = chimiotropisme;
     }
+    if let Some(thigmotropisme) = thigmotropisme {
+        tropismes.thigmotropisme = thigmotropisme;
+    }
     Ok((reglages, milieu, tropismes, duree))
 }
 
@@ -759,13 +915,14 @@ pub fn lire_scenario_complet(texte: &str) -> Result<(Reglages, Milieu, u32), Err
 /// Comme [`lire_scenario_complet`], avec une directive de plus, optionnelle et au plus une fois, à n'importe quelle
 /// place :
 ///
-/// - `chimiotropisme <force>` : un nombre (`f64`), la force du chimiotropisme.
+/// - `chimiotropisme <force>` : un nombre (`f64`), la force du chimiotropisme ;
+/// - `thigmotropisme <angle>` : un nombre (`f64`), l'angle critique du thigmotropisme, en degrés.
 ///
-/// Une seconde ligne `chimiotropisme`, ou une ligne mal formée (mot en trop ou en moins, nombre illisible), rend
-/// [`ErreurLecture::LigneInvalide`] avec son numéro. La valeur n'est pas vérifiée ici mais à la construction
-/// ([`Simulation::nouvelle_avec_tropismes`]). Sans cette ligne, les [`Tropismes`] sont ceux de
+/// Une seconde ligne `chimiotropisme` ou `thigmotropisme`, ou une ligne mal formée (mot en trop ou en moins, nombre
+/// illisible), rend [`ErreurLecture::LigneInvalide`] avec son numéro. La valeur n'est pas vérifiée ici mais à la
+/// construction ([`Simulation::nouvelle_avec_tropismes`]). Sans ces lignes, les [`Tropismes`] sont ceux de
 /// `Tropismes::default()`. [`lire_scenario`] et [`lire_scenario_complet`] ne changent pas : elles continuent de refuser
-/// la directive.
+/// ces directives.
 pub fn lire_scenario_tropismes(texte: &str) -> Result<(Reglages, Milieu, Tropismes, u32), ErreurLecture> {
     lire_scenario_commun(texte, true, true)
 }

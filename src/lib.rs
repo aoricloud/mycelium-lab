@@ -17,7 +17,8 @@
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`substrat`] : diffusion explicite du substrat ;
 //! - [`mesures`] : biomasse et dimension fractale ;
-//! - [`tropisme`] : le chimiotropisme, un virage de la pointe vers le côté où il y a plus de nutriments.
+//! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
+//!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
 
 pub mod alea;
 pub mod anastomose;
