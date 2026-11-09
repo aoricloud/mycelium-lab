@@ -64,6 +64,31 @@ fn lire_arguments(args: &[String]) -> Option<Arguments> {
     Some(Arguments { scenario: scenario?, graine: graine?, sortie: sortie? })
 }
 
+/// Le nombre maximal de cases d'une boîte que le binaire accepte de simuler et de dessiner.
+///
+/// À 1024 × 1024 cases, la simulation couplée garde une quarantaine de mégaoctets (substrat et index
+/// d'anastomose) et l'aperçu en réserve 48 octets par case, soit une cinquantaine de mégaoctets pour ses pixels,
+/// autant pour son tampon PNG : le pic reste sous 200 Mo. Au-delà, la mémoire demandée n'est plus maîtrisable et
+/// l'allocateur peut faire avorter le processus au lieu de rendre un refus ; c'est cette limite, vérifiée avant
+/// toute allocation, qui l'en empêche. Le plus grand scénario du dépôt fait 161 × 161 cases, et 1000 × 1000 reste
+/// accepté.
+const CASES_MAXIMALES: u64 = 1_048_576;
+
+/// Vrai si la boîte dépasse ce que le binaire sait simuler et dessiner.
+fn boite_trop_grande(largeur: u64, hauteur: u64) -> bool {
+    u128::from(largeur) * u128::from(hauteur) > u128::from(CASES_MAXIMALES)
+}
+
+/// Refuse une boîte trop grande, avant toute allocation et toute écriture, pour les deux chemins du binaire.
+fn verifier_la_boite(largeur: u64, hauteur: u64) -> Result<(), String> {
+    if boite_trop_grande(largeur, hauteur) {
+        return Err(format!(
+            "scénario invalide : boîte trop grande ({largeur} × {hauteur} cases, au plus {CASES_MAXIMALES})"
+        ));
+    }
+    Ok(())
+}
+
 /// La boîte vue de dessus : le disque inscrit dans la grille, clair sur fond sombre, en entiers.
 fn apercu(largeur: u32, hauteur: u32) -> Vec<u8> {
     const FOND: [u8; 3] = [24, 24, 28];
@@ -117,6 +142,7 @@ fn executer(a: &Arguments) -> Result<(), String> {
 /// Le chemin de l'étape 0 : une boîte et son état, `empreinte.txt` et `apercu.png`.
 fn executer_etape_0(texte: &str, a: &Arguments) -> Result<(), String> {
     let scenario = Scenario::lire(texte).map_err(|e| format!("scénario invalide : {e:?}"))?;
+    verifier_la_boite(u64::from(scenario.largeur), u64::from(scenario.hauteur))?;
     let etat = Etat::nouveau(&scenario, a.graine);
     std::fs::create_dir_all(&a.sortie).map_err(|e| format!("création de {} : {e}", a.sortie.display()))?;
     ecrire(&a.sortie.join("empreinte.txt"), format!("{}\n", etat.empreinte()).as_bytes())?;
@@ -128,6 +154,7 @@ fn executer_etape_0(texte: &str, a: &Arguments) -> Result<(), String> {
 fn executer_couple(texte: &str, a: &Arguments) -> Result<(), String> {
     let (reglages, milieu, tropismes, duree) =
         lire_scenario_tropismes(texte).map_err(|e| format!("scénario couplé invalide : {e:?}"))?;
+    verifier_la_boite(reglages.largeur as u64, reglages.hauteur as u64)?;
     let mut simulation = Simulation::nouvelle_avec_tropismes(reglages, milieu, tropismes, a.graine)
         .map_err(|e| format!("réglages, milieu ou tropismes couplés invalides : {e:?}"))?;
     simulation.avancer_n(duree);
