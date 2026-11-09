@@ -214,8 +214,8 @@ contredit le texte, ne servent qu'aux rejeux.
 ## Les gestes de l'humain
 
 Faits, une fois : le dépôt, public, sous MIT ; un jeton limité à lui ; l'auto-fusion et la règle de `main` ; la
-première PR (la CI et `auto-fusion.yml`). Reste : ouvrir Pages pour la vitrine. Plus aucune fusion ensuite ; son œil
-revient après coup.
+première PR (la CI et `auto-fusion.yml`) ; Pages, ouvert : la vitrine est en ligne,
+https://aoricloud.github.io/mycelium-lab/. Plus aucune fusion ensuite ; son œil revient après coup.
 
 ## Ce qui existe déjà (non revérifié)
 
