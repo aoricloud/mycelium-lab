@@ -357,6 +357,12 @@ impl Simulation {
         Ok(simulation)
     }
 
+    /// Les réglages de la simulation, tels qu'ils ont été donnés (lecture seule : la boîte, le coût en substrat, etc.).
+    /// L'accesseur ne change aucun état.
+    pub fn reglages(&self) -> &Reglages {
+        &self.reglages
+    }
+
     /// Le milieu de la simulation : ses taches et ses obstacles, tels qu'ils ont été donnés.
     pub fn milieu(&self) -> &Milieu {
         &self.milieu
