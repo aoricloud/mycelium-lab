@@ -732,3 +732,90 @@ ramifient ; à angle nul, quelques-unes seulement l'effleurent.
   modèle (couvert par des propriétés générales et des moyennes).
 - Non vérifié : les travaux antérieurs que cite l'article (canaux étroits, mémoire à 20°) ; l'écriture canonique sur une
   machine gros-boutiste.
+
+# La pièce que la colonie remplit (étape 9, M0)
+
+Cette étape **mesure** : elle ne change rien à la simulation (`piece::mesurer` prend `&Simulation`), et les empreintes de la
+V0 et de T0 à T4 restent celles du dépôt, à l'octet. Elle ne parle ni de raideur ni de résistance : le banc ne prédit pas la
+résistance d'un vrai matériau. Ce sont des définitions et des invariants exacts, sans article de référence ; aucun chiffre de
+l'étude du matériau marqué « à vérifier » n'y est employé.
+
+## Ce que fait le code
+
+**La carte de densité** (`piece::carte_de_densite`). Pour chaque case, la longueur d'hyphe qu'elle contient. Chaque segment de
+la colonie est coupé aux lignes de la grille qu'il franchit ; chaque morceau appartient à la case qui contient son milieu
+(règle du plancher, comme T2) et lui apporte sa longueur. Un segment qui longe le bord haut ou droit de la boîte compte dans la
+dernière ligne ou colonne. Un passage exact par un coin laisse zéro aux cases qui ne font que toucher le coin. La somme des
+cases est la somme des longueurs des segments, c'est-à-dire la biomasse, à l'arrondi près.
+
+**Un seuil de densité.** Une case est *occupée* à un seuil `s ≥ 0` si sa densité est strictement supérieure à `s`. Au seuil
+nul, toute case où passe de l'hyphe est occupée ; or une colonie part d'une seule spore et ses segments se suivent : ses cases
+occupées sont d'un seul tenant. Le seuil donne un sens aux mesures qui suivent : à une longueur d'hyphe par case (seuil 1), les
+colonies de la vitrine se découpent en plusieurs morceaux.
+
+**Les morceaux et la traversée.** Deux cases occupées sont voisines si elles se touchent par un côté ou un coin (huit
+voisins) : un hyphe qui passe exactement par un coin de case ne laisse que des cases en diagonale, qui font un seul morceau.
+`piece::morceaux` rend la taille de chaque morceau ; `piece::traversee` le nombre de cases du plus court chemin de cases
+occupées d'un bord de la boîte à l'autre, ou rien.
+
+**Le bilan de nourriture.** Ce que la colonie a consommé est `cout × biomasse` ; la nourriture restante plus la nourriture
+consommée égale la nourriture de départ, à l'arrondi près : l'écart est d'au plus 7,1·10⁻¹¹ sur une nourriture de 9 756 à
+25 921, à chaque pas des six scénarios de la vitrine (un test l'exige à 10⁻⁹ près en relatif). Le substrat diffuse sans perte
+et l'hyphe consomme exactement `cout` par unité de longueur : c'est une propriété du modèle que M0 rend visible.
+
+**`piece::mesurer` et `piece::mesurer_au_seuil`** rendent une `MesuresPiece` : cases libres et occupées, remplissage (cases
+occupées sur cases libres), densité moyenne et maximale, biomasse, les quatre nombres du bilan, le plus grand morceau, le
+nombre de morceaux et les deux traversées (gauche à droite, haut à bas). `mesurer` est le seuil nul. L'exemple
+`cargo run --release --example mesure_piece -- <scénario> <graine> [<dossier>]` imprime ces quatorze nombres, un par ligne, et
+écrit `densite.png`, la carte de couleurs de la densité (du violet au jaune quand elle monte ; le mur en gris, le fond sombre).
+Le binaire `mycelium` et la page ne changent pas.
+
+## Ce que les tests vérifient
+
+- **La carte, exactement** : des cas à la main (un segment dans une case, sur plusieurs, en diagonale par des coins, le long
+  d'une ligne de grille, fini sur une ligne ou sur le bord), comparée à des fractions exactes pour des extrémités en huitièmes
+  de case et à la méthode des dalles pour des extrémités quelconques ; l'ordre des additions, au bit près ; la nullité exacte
+  des cases que le segment ne traverse pas.
+- **Sur la simulation** : la somme de la carte égale la biomasse ; la densité est nulle dans les cases bloquées ; le bilan de
+  nourriture tient à chaque pas ; `mesurer` ne change pas l'état ; les six empreintes de référence ne bougent pas.
+- **Les morceaux et la traversée** : des grilles écrites à la main et des grilles au hasard, comparées à deux calculs
+  indépendants (une union de classes, des relaxations successives).
+- **Le seuil** : strictement supérieur, la monotonie (quand il monte, les cases occupées se raréfient, le plus grand morceau ne
+  grandit pas, une traversée ne naît pas).
+- **L'exemple** : sa sortie caractère pour caractère, chaque pixel de l'image, le code de sortie 2 en cas d'erreur.
+- 82 tests ; un juge a joué 209 fautes volontaires, 188 sont tuées ; les 21 autres sont sans effet observable, chacune classée
+  avec sa raison (trois ne le sont que sur les colonies d'aujourd'hui).
+
+## Ce qu'on voit
+
+Mesures au seuil 0 puis au seuil 1 (une longueur d'hyphe par case), à la fin de la durée de chaque scénario de la vitrine
+(`cargo run --release --example mesure_piece` refait le seuil 0 ; le seuil 1 passe par `mesurer_au_seuil`) :
+
+| Scénario (graine, pas) | Cases occupées, seuil 0 | Remplissage | Cases occupées, seuil 1 | Morceaux, seuil 1 | Plus grand morceau, seuil 1 |
+|---|---|---|---|---|---|
+| libre (1, 80) | 1 129 | 4,4 % | 638 | 80 | 119 |
+| terrain (1, 80) | 113 | 1,2 % | 74 | 6 | 51 |
+| tache (7, 100) | 753 | 7,5 % | 438 | 39 | 237 |
+| tache-sans (7, 100) | 915 | 9,1 % | 535 | 57 | 207 |
+| mur (31, 120) | 2 085 | 21,4 % | 1 323 | 98 | 853 |
+| mur-sans (31, 120) | 1 177 | 12,1 % | 726 | 59 | 424 |
+
+Au seuil nul, chaque colonie est d'un seul morceau. Sur ces six colonies, seules celles du mur (avec et sans thigmotropisme)
+touchent à la fois le haut et le bas de la boîte (la traversée haut-bas vaut 100 cases) ; aucune ne va du bord gauche au bord
+droit, et au seuil 1 aucune traversée ne reste. Sur la graine 31, la colonie du mur à 35° est environ deux fois plus dense que
+sans thigmotropisme (densité moyenne 0,261 contre 0,141) et plus remplie (21,4 % contre 12,1 %) : c'est l'accumulation le long
+du mur que T2 décrit, vue par la carte ; une seule graine ne prouve rien, la moyenne sur 40 graines est dans la partie sur T2.
+L'aperçu `apercus/etape-9-densite.png` montre cette carte pour `scenarios/mur.txt`, graine 31.
+
+## Les limites
+
+- La densité est une **longueur d'hyphe par case**, pas un diamètre, une masse volumique ou une porosité mesurée : une case
+  traversée par un long hyphe et une case qui contient plusieurs brins courts de même longueur totale ne se distinguent pas.
+- Le **seuil** est un choix de M0 (strictement supérieur), sans valeur physique ; les morceaux dépendent de lui.
+- Les **huit voisins** sont un choix de modélisation (voir plus haut).
+- La **traversée** compte des cases occupées, pas des hyphes continus : deux hyphes voisines qui ne se sont pas anastomosées
+  font un chemin de cases occupées ; le calcul de raideur (M3) devra regarder les liaisons réelles.
+- Le tout est en 2D, à l'échelle de l'hyphe ; rien n'est calé sur un vrai moule.
+- L'image est à 4 pixels par case (2 pour une boîte de 161 × 161, pour rester sous 500 Ko) ; au-delà d'environ 404 × 404 cases,
+  même à 1 pixel par case elle dépasse 500 Ko (aucun scénario n'y arrive ; ni testé, ni corrigé).
+- Rien n'a été vérifié sous Linux par le juge (le dépôt le fait par sa CI).
