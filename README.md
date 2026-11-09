@@ -1,51 +1,56 @@
 # Mycelium Lab
 
-Un moteur libre de simulation de croissance mycélienne, en Rust, orienté recherche : un labo virtuel. Il simule la
-croissance d'un réseau d'hyphes (extension des apex, ramification, anastomose, transport des nutriments), en tire des
-mesures (biomasse, densité, topologie, dimension fractale) et compare des scénarios, avec un rendu qu'on prend
-plaisir à regarder.
+A free simulator of mycelium growth, in Rust, built for research: a virtual lab. It grows a network of hyphae (tip
+extension, branching, anastomosis, nutrient transport), measures it (biomass, density, topology, fractal dimension) and
+compares scenarios.
 
-**Où il en est** : les étapes 0 à 4 de la V0 (voir [FEUILLE-DE-ROUTE.md](FEUILLE-DE-ROUTE.md)) sont faites — la
-simulation, le couplage de la colonie et du substrat, la figure de référence refaite en nombres avec son écart dit
-dans [MODELE.md](MODELE.md), la vitrine — avec leurs tests d'acceptation et leurs aperçus dans `apercus/`.
+**▶ Run it in your browser: https://aoricloud.github.io/mycelium-lab/** (six scenarios, WebAssembly, nothing loaded
+from outside the page).
 
-## Ce qui le tient
+> [!NOTE]
+> **This repository is written by AI agents, under [Lydite](https://github.com/aoricloud/lydite).** A human writes the
+> direction and keeps the settings; the agents write the code, and Lydite replays the proof before any pull request.
+> Recent pull requests carry a receipt (cost, agents, retries) and the line `Reviewed and replayed on commit …`; GitHub
+> only merges a pull request whose head is that commit, once the CI is green on Linux and Windows. See
+> [#51](https://github.com/aoricloud/mycelium-lab/pull/51), or
+> [all merged pull requests](https://github.com/aoricloud/mycelium-lab/pulls?q=is%3Apr+is%3Amerged).
+> As of 9 November 2026: 35 pull requests by Lydite merged in three days; the 17 that carry a costed receipt add up
+> to $4.91 for the agents (estimated; they run on a low-cost model, DeepSeek; the earlier pull requests had no receipt,
+> and the session that writes the plans is not counted).
 
-- Rust sans dépendance ; même scénario et même graine, même état, sous Linux comme sous Windows.
-- La preuve est l'état simulé et des nombres, et une figure publiée refaite en nombres ; les images sont pour l'œil.
-- Les règles du dépôt sont dans [AGENTS.md](AGENTS.md) ; le modèle, ses équations et ses limites, dans
-  [MODELE.md](MODELE.md).
+## Where it stands
 
-## L'essayer
+The first version (growth, the coupling of the colony and its substrate, a published figure redone in numbers, this web
+page) is merged, and so are the tropisms after it: a terrain with walls, growth toward a nutrient patch (chemotropism),
+growth along a wall (thigmotropism), each with and without the effect, all six scenarios on the page. Measuring a grown
+piece is merged too: a density map, a threshold, the food balance, the largest connected piece and the crossing from one
+edge to the other (`cargo run --release --example mesure_piece`). The roadmap's next step is the mould: shapes for the
+colony to fill, the maze among them. [MODELE.md](MODELE.md) says, for each model, its equations, its reference and its
+limits: this bench is 2D, at the scale of the hypha, and does not predict the strength of a real material.
 
-Sur un clone :
+## What holds it
+
+- Rust with no dependency; the same scenario and the same seed give the same state, on Linux and on Windows.
+- The proof is the simulated state and numbers, and a published figure redone in numbers; images are for the eye.
+- The page shows the SHA-256 of the state: the same seed gives the same 64 characters in the browser and natively.
+- The rules of the repository are in [AGENTS.md](AGENTS.md).
+
+## Try it
 
 ```sh
-# la preuve complète : les tests, le lint et le format
+# the full proof: tests, lint and format
 cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check
 
-# réécrit les trois aperçus de l'étape 1 dans apercus/
-cargo run --example apercus_etape_1
-
-# un scénario de l'étape 0 tient en une ligne, boite 64 48
+# a one-line scenario
 echo 'boite 64 48' > boite.txt
 cargo run -- lancer boite.txt --graine 1 --sortie sortie
 ```
 
-La dernière commande écrit `empreinte.txt` et `apercu.png` dans `sortie/`.
+The last command writes `empreinte.txt` and `apercu.png` in `sortie/`. A scenario's address can be shared:
+`https://aoricloud.github.io/mycelium-lab/#scenario=mur&graine=31`.
 
-La vitrine est dans `docs/` — le dossier que GitHub Pages publie une fois que l'humain l'a ouvert ; elle se regarde en
-ouvrant un petit serveur de fichiers dans `docs/`, par exemple `python3 -m http.server` (un navigateur ne charge pas un
-module WebAssembly depuis `file://`).
-Elle propose six scénarios dans un menu (la colonie libre, le terrain, la tache de nutriments avec et sans
-chimiotropisme, le mur avec et sans thigmotropisme) ; son adresse se partage : `#scenario=mur&graine=31`.
+The rest of this repository (the model notes, the rules, the roadmap and the page) is in French.
 
-## Comment il se construit
+## License
 
-Mycelium Lab est construit par Lydite, un orchestrateur d'agents : ses mains travaillent sur les issues, chacune sur
-une branche `lydite/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. L'humain qui mène
-le dépôt en garde les réglages et regarde après coup.
-
-## Licence
-
-MIT, voir [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
