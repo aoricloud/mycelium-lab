@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 
 [features]
-default = ["etape-0", "etape-1", "etape-2", "etape-3", "etape-4", "etape-5", "etape-6", "etape-7"]
+default = ["etape-0", "etape-1", "etape-2", "etape-3", "etape-4", "etape-5", "etape-6", "etape-7", "etape-8"]
 etape-0 = []
 etape-1 = []
 etape-2 = []
@@ -21,3 +21,4 @@ etape-4 = []
 etape-5 = []
 etape-6 = []
 etape-7 = []
+etape-8 = []

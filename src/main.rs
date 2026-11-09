@@ -145,8 +145,8 @@ const PIXELS_PAR_CASE: usize = 4;
 /// Couleur claire de la colonie.
 const COLONIE: [u8; 3] = [236, 240, 214];
 
-/// Couleur des cases d'obstacle : un gris franc, ni noir ni la teinte du substrat le plus clair.
-const OBSTACLE: [u8; 3] = [96, 96, 96];
+/// Couleur des cases d'obstacle : un gris foncé, net sur un substrat intact (vers 175) et distinct du noir d'une case sans substrat.
+const OBSTACLE: [u8; 3] = [48, 48, 48];
 
 /// La boîte vue de dessus : un bloc de `PIXELS_PAR_CASE` pixels par case, dont la luminosité suit le substrat
 /// restant, et chaque segment de la colonie tracé en clair par l'algorithme de Bresenham entier.

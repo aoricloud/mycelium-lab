@@ -211,6 +211,11 @@ fn le_module_n_importe_rien() {
 
 /// 4 (suite). Le module exporte exactement les fonctions `mycelium_*` de la liste, ni plus ni moins ; la mémoire
 /// `memory` est tolérée, rien d'autre (aucune autre exportation, de quelque genre que ce soit).
+///
+/// L'étape 8 ajoute quatre exportations : avec `etape-8`, ce test n'est pas compilé et c'est
+/// `le_module_exporte_les_douze_fonctions_de_l_etape_4_et_les_quatre_nouvelles` (`etape_8_artefact.rs`) qui fixe la
+/// liste exacte, ces douze et les quatre nouvelles.
+#[cfg(not(feature = "etape-8"))]
 #[test]
 #[cfg_attr(not(feature = "etape-4"), ignore)]
 fn le_module_exporte_exactement_les_fonctions_de_la_vitrine() {

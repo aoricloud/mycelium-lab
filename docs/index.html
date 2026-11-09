@@ -66,6 +66,15 @@
     color: var(--encre-douce);
   }
 
+  .limite {
+    max-width: 62ch;
+    margin: 0.7rem 0 0;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--encre-douce);
+    opacity: 0.9;
+  }
+
   .atelier {
     display: grid;
     gap: clamp(1rem, 2.5vw, 1.75rem);
@@ -99,31 +108,30 @@
     touch-action: manipulation;
   }
 
+  /* Le message d'état se lit SOUS l'image, dans le cadre : il ne la couvre jamais, quelle que soit la largeur, et
+     passe à la ligne quand il est long (le message d'arrêt tient sur deux ou trois lignes d'un écran étroit).
+     On réserve deux lignes pour que la page ne saute pas quand il s'allonge. */
   .etat {
-    position: absolute;
-    top: 1.25rem;
-    left: 1.25rem;
-    max-width: calc(100% - 2.5rem);
-    padding: 0.4rem 0.7rem;
-    border: 1px solid var(--trait);
-    border-radius: 999px;
-    background: rgba(5, 9, 9, 0.62);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    min-height: 2.9em;
+    margin: 0.7rem 0.15rem 0;
     font-size: 0.78rem;
+    line-height: 1.45;
     color: var(--encre-douce);
-    pointer-events: none;
+    overflow-wrap: anywhere;
   }
 
   .legende {
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    margin: 0.7rem 0.15rem 0;
+    margin: 0.4rem 0.15rem 0;
     font-size: 0.72rem;
     letter-spacing: 0.02em;
     color: var(--encre-douce);
   }
+
+  /* L'attribut `hidden` cache la légende des obstacles ; sans cette règle, `display: flex` l'emporterait. */
+  .legende[hidden] { display: none; }
 
   .echantillon {
     width: 3.4rem;
@@ -132,6 +140,26 @@
     border: 1px solid var(--trait);
     border-radius: 999px;
     background: linear-gradient(90deg, rgb(12, 17, 16), rgb(54, 68, 44));
+  }
+
+  /* Le dégradé d'une case à la teinte pleine de la tache de nutriments (voir dessinerSubstrat dans app.js). */
+  .echantillon-tache {
+    width: 3.4rem;
+    height: 0.5rem;
+    flex: none;
+    border: 1px solid var(--trait);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgb(54, 68, 44), rgb(84, 158, 104));
+  }
+
+  /* Les mêmes couleurs que le dessin des obstacles dans app.js : remplissage ardoise, liseré clair. */
+  .echantillon-obstacle {
+    width: 3.4rem;
+    height: 0.5rem;
+    flex: none;
+    border: 1px solid #9fb0b8;
+    border-radius: 2px;
+    background: #5b6b73;
   }
 
   .panneau {
@@ -165,7 +193,8 @@
     color: var(--encre-douce);
   }
 
-  input[type="number"] {
+  input[type="number"],
+  select {
     width: 100%;
     padding: 0.7rem 0.8rem;
     border: 1px solid var(--trait);
@@ -174,6 +203,22 @@
     color: var(--mesure);
     font: inherit;
     font-variant-numeric: tabular-nums;
+  }
+
+  select { cursor: pointer; }
+
+  /* Les options d'un menu déroulant gardent leur propre fond : on les fixe pour qu'elles restent lisibles. */
+  select option {
+    background: #0c1513;
+    color: var(--mesure);
+  }
+
+  .description-scenario {
+    min-height: 3.2em;
+    margin: -0.2rem 0 0.9rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--encre-douce);
   }
 
   input[type="range"] {
@@ -186,6 +231,7 @@
 
   input[type="number"]:focus-visible,
   input[type="range"]:focus-visible,
+  select:focus-visible,
   button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -311,6 +357,8 @@
   .lecture p {
     max-width: 74ch;
     margin: 0;
+    /* L'empreinte de référence (64 caractères d'un seul tenant) ne doit pas déborder d'un écran étroit. */
+    overflow-wrap: anywhere;
     font-size: 0.98rem;
     line-height: 1.7;
     color: var(--encre-douce);
@@ -350,22 +398,49 @@
       derrière elle, se ramifie et s'anastomose. La simulation tourne dans votre navigateur, en
       WebAssembly, sans rien charger d'autre que cette page.
     </p>
+    <p id="limite" class="limite">
+      Ce banc est en 2D, à l'échelle de l'hyphe.
+      Il ne prédit pas la résistance d'un vrai matériau : il montre ce que la forme et la nourriture font au réseau.
+    </p>
   </header>
 
   <section class="atelier" aria-label="La simulation et ses commandes">
     <figure class="cadre">
       <canvas id="boite" width="900" height="900" role="img"
               aria-label="Boîte carrée sombre où poussent les hyphes clairs de la colonie."></canvas>
-      <figcaption id="etat" class="etat" role="status" aria-live="polite">Chargement du module…</figcaption>
+      <p id="etat" class="etat" role="status" aria-live="polite">Chargement du module…</p>
       <p class="legende">
         <span class="echantillon" aria-hidden="true"></span>
         Substrat : clair = intact, sombre = consommé — contraste amplifié ×60
+      </p>
+      <p id="legende-tache" class="legende" hidden>
+        <span class="echantillon-tache" aria-hidden="true"></span>
+        Tache de nutriments : plus de substrat que le départ, teinté plus vif
+      </p>
+      <p id="legende-obstacle" class="legende" hidden>
+        <span class="echantillon-obstacle" aria-hidden="true"></span>
+        Obstacle : des cases que les hyphes ne franchissent pas
       </p>
     </figure>
 
     <aside class="panneau">
       <section class="bloc" aria-labelledby="titre-commandes">
         <h2 id="titre-commandes">Commandes</h2>
+
+        <label class="champ" for="scenario">
+          <span>Scénario</span>
+          <select id="scenario" aria-describedby="description-scenario">
+            <option value="libre" selected>Colonie libre</option>
+            <option value="terrain">Terrain : deux murs et un passage</option>
+            <option value="tache">Tache de nutriments, avec chimiotropisme</option>
+            <option value="tache-sans">Tache de nutriments, sans chimiotropisme</option>
+            <option value="mur">Mur, avec thigmotropisme</option>
+            <option value="mur-sans">Mur, sans thigmotropisme</option>
+          </select>
+        </label>
+        <p id="description-scenario" class="description-scenario">
+          Une colonie libre dans une boîte de 161 × 161 cases : elle pousse, se ramifie et s'anastomose.
+        </p>
 
         <label class="champ" for="graine">
           <span>Graine</span>
@@ -379,7 +454,7 @@
 
         <div class="boutons">
           <button id="pause" type="button" aria-pressed="false">Pause</button>
-          <button id="pas80" type="button">Jusqu'au pas 80</button>
+          <button id="pas-reference" type="button">Jusqu'au pas 80</button>
         </div>
 
         <label class="champ" for="vitesse">
@@ -427,8 +502,9 @@
     <h2 id="titre-lecture">Ce que l'on voit, ce que l'empreinte prouve</h2>
     <p>
       Chaque trait clair est un <strong>segment d'hyphe</strong> laissé par une pointe en croissance.
-      La colonie part de la spore au centre, avance d'un pas à la fois, se ramifie quand le hasard le
-      décide et s'anastomose lorsque deux branches se rejoignent. Le substrat, d'abord uniforme,
+      La colonie part de la spore, avance d'un pas à la fois, se ramifie quand le hasard le
+      décide et s'anastomose lorsque deux branches se rejoignent. Le substrat, d'abord uniforme (sauf là
+      où un scénario pose une tache de nutriments),
       s'assombrit là où les hyphes l'ont consommé : la boîte se vide derrière la colonie. L'image
       amplifie ce très faible écart — il vaut quelques millièmes — pour le rendre lisible, sans
       jamais changer les valeurs que le module calcule.
@@ -437,11 +513,13 @@
       L'<strong>empreinte</strong> est le SHA-256 de l'état complet, calculé par le module lui-même.
       Deux simulations de la même graine au même pas produisent exactement les mêmes 64 caractères :
       c'est une preuve vérifiable hors de la page, et c'est ainsi que l'on sait que le module
-      WebAssembly calcule la même chose que le code Rust natif. Pour la graine 1 au pas 80, elle vaut
+      WebAssembly calcule la même chose que le code Rust natif. Pour le scénario « libre », la graine 1
+      au pas 80, elle vaut
       <strong>2223a1f3bcbc8627866aba084052cac06e93b05842bacc0ba94778bc23ed1083</strong>, exactement le
       contenu de <code>references/couplage-graine-1.empreinte</code> du dépôt
-      <strong>aoricloud/mycelium-lab</strong>. Le bouton « Jusqu'au pas 80 » s'arrête sur cet état :
-      l'empreinte affichée est alors celle de la référence.
+      <strong>aoricloud/mycelium-lab</strong>. Le bouton « Jusqu'au pas N » s'arrête sur le pas de
+      référence du scénario (sa durée, écrite dans son fichier) : avec la même graine, l'empreinte
+      affichée est alors celle que donne le programme natif.
     </p>
   </section>
 
