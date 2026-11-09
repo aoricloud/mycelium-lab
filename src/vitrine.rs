@@ -161,3 +161,28 @@ pub extern "C" fn mycelium_empreinte_mot(i: u32) -> u32 {
     let debut = i as usize * 8;
     u32::from_str_radix(&empreinte[debut..debut + 8], 16).expect("un mot d'empreinte est de l'hexadécimal")
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Les quatre fonctions de l'étape 8, en place mais vides : sans `no_mangle`, donc sans être exportées par le module.
+// Elles ne servent qu'à ce que les tests de l'étape 8 compilent avant la vague de code ; ils y échouent.
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Vide : ne choisit rien et rend 0.
+pub fn mycelium_choisir_scenario(_numero: u32) -> u32 {
+    0
+}
+
+/// Vide : rend 0.
+pub fn mycelium_duree() -> u32 {
+    0
+}
+
+/// Vide : rend 0.
+pub fn mycelium_nb_obstacles() -> u32 {
+    0
+}
+
+/// Vide : rend `NaN`.
+pub fn mycelium_obstacle(_i: u32, _k: u32) -> f64 {
+    f64::NAN
+}
