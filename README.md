@@ -37,6 +37,8 @@ La dernière commande écrit `empreinte.txt` et `apercu.png` dans `sortie/`.
 La vitrine est dans `docs/` — le dossier que GitHub Pages publie une fois que l'humain l'a ouvert ; elle se regarde en
 ouvrant un petit serveur de fichiers dans `docs/`, par exemple `python3 -m http.server` (un navigateur ne charge pas un
 module WebAssembly depuis `file://`).
+Elle propose six scénarios dans un menu (la colonie libre, le terrain, la tache de nutriments avec et sans
+chimiotropisme, le mur avec et sans thigmotropisme) ; son adresse se partage : `#scenario=mur&graine=31`.
 
 ## Comment il se construit
 

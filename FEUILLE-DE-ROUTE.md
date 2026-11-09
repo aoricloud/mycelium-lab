@@ -151,11 +151,27 @@ rectangle de cases infranchissables, sans flux de substrat à travers), `chimiot
   exactement.
 
 **Les étapes**, deux vagues chacune, les tests d'abord : T0, le terrain (la tache et l'obstacle dans le scénario, le
-substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obstacles et le thigmotropisme. Peut-être
-ensuite, sur la décision d'André : T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche en
-profondeur et à A*), et T4, la vitrine avec un choix de scénario.
+substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obstacles et le thigmotropisme ; T4,
+la vitrine avec un choix de scénario. T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche
+en profondeur et à A*), est repliée dans M1, le moule, de la direction décrite plus bas.
 
-**Où on en est** (08/11) : T0 (le terrain), T1 (le chimiotropisme) et T2 (les obstacles et le thigmotropisme) sont faits. Le chimiotropisme et le thigmotropisme sont décrits, avec leurs limites, dans les deux dernières parties de `MODELE.md`. T3 (un labyrinthe) et T4 (la vitrine avec un choix de scénario) ne sont pas décidés.
+**Où on en est** (09/11) : T0 (le terrain), T1 (le chimiotropisme), T2 (les obstacles et le thigmotropisme) et T4 (la vitrine avec un choix de scénario : six scénarios, les murs dessinés, une adresse `#scenario=…&graine=…` qui se partage) sont faits. Le chimiotropisme et le thigmotropisme sont décrits, avec leurs limites, dans les deux dernières parties de `MODELE.md`. T3 (un labyrinthe) est repliée dans M1 ; la suite est la direction décrite ci-dessous.
+
+## La direction d'après T2 : du procédé à la structure (M0 à M5)
+
+Décidée par André le 08/11, d'après l'étude du matériau (`etude-mycelium-materiau-synthese.md`). Le banc devient un
+atelier de moulage numérique : on choisit une forme (des obstacles durs), on place la spore et la nourriture, la
+colonie remplit la forme, et l'on mesure la pièce obtenue. Il montre ce que le moule et la nourriture font au réseau ;
+**il ne prédit pas la résistance d'un vrai matériau**. Il reste en 2D, à l'échelle de l'hyphe (de petits moules, de
+l'ordre du millimètre) ; la 3D viendra plus tard, en chantier à part. Les nouveaux réglages (diamètre d'hyphe, raideur
+de la paroi, ramification selon la place) vont dans un profil séparé : la V0 et sa figure 3 restent intactes.
+
+**L'ordre** : T4, la vitrine des scénarios (faite) ; M0, mesurer la pièce (une carte de densité, le bilan de
+nourriture, le plus grand morceau connecté, sans changer l'état) ; M1, le moule (des formes, dont le labyrinthe de T3)
+; M2, une croissance calée sur des chiffres publiés ; M3, le calcul de raideur d'un réseau de barres, dans une couche
+à part, des cas d'école à réponse exacte d'abord, la flexion ensuite ; M4, la raideur selon la densité ; M5,
+facultatif, des particules et la comparaison à un classement publié (Rigobello et Ayres, 2022). Aucun chiffre marqué «
+à vérifier » par l'étude n'entre dans un test sans relecture à la source.
 
 ## La référence de la V0
 
