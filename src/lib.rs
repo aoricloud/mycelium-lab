@@ -17,6 +17,8 @@
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`substrat`] : diffusion explicite du substrat ;
 //! - [`mesures`] : biomasse et dimension fractale ;
+//! - [`piece`] : mesurer la pièce que la colonie remplit (carte de densité, bilan de nourriture, plus grand morceau
+//!   connecté, traversée d'un bord à l'autre) — l'étape M0 : elle mesure, elle ne change rien à la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
 
@@ -27,6 +29,7 @@ pub mod empreinte;
 pub mod grille;
 pub mod image;
 pub mod mesures;
+pub mod piece;
 pub mod releves;
 pub mod scenario;
 pub mod simulation;
