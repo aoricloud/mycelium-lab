@@ -17,6 +17,9 @@
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`substrat`] : diffusion explicite du substrat ;
 //! - [`mesures`] : biomasse et dimension fractale ;
+//! - [`moule`] : donner une forme à l'espace libre (brique, L, disque, anneau, labyrinthe), la développer en lignes
+//!   `obstacle` d'un scénario, et mesurer comment la colonie remplit ce moule et en sort — l'étape M1 : elle ne change rien au
+//!   noyau de la simulation ;
 //! - [`piece`] : mesurer la pièce que la colonie remplit (carte de densité, bilan de nourriture, plus grand morceau
 //!   connecté, traversée d'un bord à l'autre) — l'étape M0 : elle mesure, elle ne change rien à la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
@@ -29,6 +32,7 @@ pub mod empreinte;
 pub mod grille;
 pub mod image;
 pub mod mesures;
+pub mod moule;
 pub mod piece;
 pub mod releves;
 pub mod scenario;
