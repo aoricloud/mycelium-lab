@@ -1282,16 +1282,17 @@ porte `EA eᵀ G e` (de 2 à 722 inconnues, à 1e-11 près).
 
 ## Le mécanisme : le plus petit mode, pas le plus petit pivot
 
-Un **mécanisme** (un carré sans diagonale, une barre non tenue en travers, trop peu d'appuis, un nœud sans barre) rend la
+Un **mécanisme** (un carré sans diagonale, une barre non tenue en travers, trop peu d'appuis, un nœud sans barre dont un déplacement n'est pas
+imposé) rend la
 matrice singulière : **un système singulier ne rend jamais un nombre**, il rend `Mecanisme`. En `f64`, « singulière » demande
 une mesure et un seuil.
 
 **Le plus petit pivot ne convient pas.** Mesuré par le prototype de l'étape et rejoué par son juge, sur 20 000 grilles de
 barres au hasard par ligne (de 2 × 2 à 6 × 6 nœuds,
 `EA = 10^k`, `k` de 0 au contraste ; valides avec trois appuis, mécanismes avec deux) : le plus petit pivot d'un réseau valide
-descend avec le contraste des raideurs (2e-3 ; 9e-9 à 1e6 ; 1e-11 à 1e9) pendant que celui d'un mécanisme, qui devrait être nul,
-monte avec lui (4e-14 ; 3e-9 à 1e6 ; 5e-7 à 1e9). Ils se croisent vers 1e6 : au-delà, aucun seuil sur le pivot ne sépare un
-réseau valide d'un mécanisme.
+descend avec le contraste des raideurs (2e-3 sans contraste ; 9e-9 à 1e6 ; 1e-11 à 1e9) pendant que celui d'un mécanisme, qui devrait être nul,
+monte avec lui (4e-14 sans contraste ; 3e-9 à 1e6 ; 5e-7 à 1e9). Ils se croisent entre 1e6 et 1e7 : au-delà, aucun seuil sur le pivot ne sépare
+un réseau valide d'un mécanisme.
 
 **Le plus petit mode convient.** C'est la plus petite valeur propre de la matrice mise à l'échelle, estimée par deux pas
 d'itération inverse (le vecteur de départ pèse chaque inconnue par l'inverse de son pivot). Mesuré sur 2 000 réseaux par ligne
@@ -1302,8 +1303,11 @@ d'itération inverse (le vecteur de départ pèse chaque inconnue par l'inverse 
 | plus petit mode valide | 1,7e-4 | 1,1e-7 | 3,2e-9 | 2,3e-11 | 6,9e-12 | 7,1e-13 | 2,6e-14 | 8,8e-15 | 0 |
 | plus grand mode de mécanisme | 5,0e-16 | 5,6e-16 | 4,5e-16 | 5,3e-16 | 4,7e-16 | 5,6e-16 | 4,4e-16 | 4,4e-16 | 5,2e-16 |
 
-Le mode d'un mécanisme reste un bruit d'arrondi (au plus 6,2e-16, poutres de l'étape 14 comprises ; au plus 9e-17 pour des grilles
-de 12 × 12 à 28 × 28 nœuds), quel que soit le contraste. **`SEUIL_SINGULIER` = 1e-12** : seize cents fois ce bruit. Un réseau valide est
+Le mode d'un mécanisme reste un bruit d'arrondi, quel que soit le contraste : au plus 6,2e-16 sur ces grilles (poutres de
+l'étape 14 comprises), au plus 9e-17 pour des grilles de 12 × 12 à 28 × 28 nœuds. Un relecteur, avec le générateur des tests
+(raideurs de `1,5 ± 0,5` fois `10^k`) et un portage Python du code, a trouvé jusqu'à 5,3e-15 pour un contraste de 1e13 à 1e15
+(toujours un appui en moins) : ce qui reste est de l'ordre de 1e-16 à 5e-15. **`SEUIL_SINGULIER` = 1e-12** : de 190 à 1 600 fois
+ce bruit. Un réseau valide est
 accepté tant que son mode dépasse le seuil, et **l'erreur relative de son résultat vaut au plus 2,5e-16 divisé par son mode**
 (mesuré sur deux ressorts en série de raideurs 1 et `r`, `r` de 1 à 1e11, sur des consoles de 1 à 600 poutres et sur le toit
 de l'étape 14 ; ce n'est pas un théorème : les tests permettent dix fois plus) : trois à
@@ -1339,6 +1343,10 @@ refus est alors la réponse honnête.
 
 ## Les limites
 
+- **Des grandeurs dans la plage normale de `f64`** : une barre plus courte que 1,5e-154 environ (le carré de sa longueur est sous le
+  plus petit nombre normal) peut rendre des efforts faux sans refus (un triangle réduit à 2e-162 : 11 % d'écart) ; une raideur
+  `EA/L` qui déborde est classée `Mecanisme` ; une raideur ou une charge sous-normale peut rendre des nombres non finis. Rien
+  de réaliste n'approche ces bornes, mais elles ne sont pas contrôlées (mesuré par un relecteur, avec un portage Python).
 - **Un réseau abstrait, pas un matériau** : ni section, ni module, ni rupture, ni flambement ; le banc ne prédit pas la
   résistance d'un vrai matériau.
 - **Petits déplacements, comportement linéaire** : la raideur est celle de la forme de départ. Un vrai mycélium est humide, mou
