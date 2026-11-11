@@ -1215,7 +1215,8 @@ ramifications de la fenêtre.
   il se lit sur une courbe.
   Le garde-fou 35 à 682 µm entre dans un test (chaque graine doit y tomber) bien que de seconde main : au sens strict de la règle de
   `FEUILLE-DE-ROUTE.md` (aucun chiffre « à vérifier » dans un test sans relecture à la source), c'est une exception, que l'humain peut
-  retirer en sortant une ligne du test.
+  retirer. La vérification graine par graine tient en une ligne de `tests/etape_12_profils.rs` ; les deux bornes restent aussi dans
+  des constantes de `src/calage.rs` et dans le tableau de référence `tests/etape_12/tableau.txt`.
 - **Le chiffre dépend du milieu et de la souche** : pour *Mucor hiemalis*, la courbe de Trinci 1974 (gélose au malt, 25 °C) donne
   environ 354 µm, le tableau de Moore (de seconde main, milieu glucosé, 25 °C) 95 µm. L'ancre du profil rapide est la première, lue
   à la source ; un chiffre de longueur par pointe ne se cite jamais sans son milieu.
