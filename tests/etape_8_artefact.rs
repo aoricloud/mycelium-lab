@@ -242,6 +242,11 @@ fn le_module_est_leger_n_importe_rien_et_embarque_les_six_scenarios() {
 /// 7 (suite). Le module exporte exactement les douze fonctions de l'étape 4 et les quatre de l'étape 8, ni plus ni
 /// moins ; la mémoire `memory` est tolérée, rien d'autre (aucune autre exportation, de quelque genre que ce soit). Un
 /// nom n'est exporté qu'une fois.
+///
+/// L'étape 11 ajoute deux exportations : avec `etape-11`, ce test n'est pas compilé et c'est
+/// `le_module_exporte_exactement_les_dix_huit_fonctions` (`etape_11_artefact.rs`) qui fixe la liste exacte, ces seize et
+/// les deux nouvelles.
+#[cfg(not(feature = "etape-11"))]
 #[test]
 #[cfg_attr(not(feature = "etape-8"), ignore)]
 fn le_module_exporte_les_douze_fonctions_de_l_etape_4_et_les_quatre_nouvelles() {

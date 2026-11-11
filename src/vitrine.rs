@@ -202,6 +202,30 @@ pub extern "C" fn mycelium_substrat(x: u32, y: u32) -> f64 {
     substrat.valeur(x, y)
 }
 
+/// La densité d'hyphe de la case `(x, y)` : la somme des longueurs des morceaux de segment qui y passent, comme la
+/// carte de densité de l'étape M0 (`piece::carte_de_densite`). Une case sans hyphe, ou bloquée par un obstacle, vaut `0.0`.
+///
+/// Rend `NaN` si la case est hors de la boîte, et avant tout démarrage.
+///
+/// **Bouchon de l'étape 11** (la vague des tests) : rend toujours `-1.0`, une valeur fausse, sans jamais paniquer. La vague
+/// du code le remplace.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_densite(x: u32, y: u32) -> f64 {
+    let _ = (x, y);
+    -1.0
+}
+
+/// La plus grande densité de la carte, celle qui met à l'échelle les couleurs de la page.
+///
+/// Rend `0.0` pour une carte vide (aucun segment : le temps 0) et `NaN` avant tout démarrage.
+///
+/// **Bouchon de l'étape 11** (la vague des tests) : rend toujours `-1.0`, une valeur fausse, sans jamais paniquer. La vague
+/// du code le remplace.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_densite_max() -> f64 {
+    -1.0
+}
+
 /// Le nombre d'obstacles du milieu de la simulation en cours ; 0 avant tout démarrage.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_nb_obstacles() -> u32 {
