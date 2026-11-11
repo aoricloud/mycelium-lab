@@ -1,0 +1,11 @@
+# Profil « rapide et clairsemé » (étape 12, M2) : une hyphe qui ramifie peu. Ancre : Mucor hiemalis, environ 354 µm
+# d'hyphe par pointe (Trinci 1974, fig. 4, lu sur la courbe), soit 50,6 cases à 7 µm la case. Il ne diffère de
+# couplage.txt que par l'intervalle de ramification, la boîte, la spore et la durée : la fenêtre de croissance des
+# graines 1 à 20 se referme avant le pas 380, loin du bord.
+boite 601 601
+spore 300 300
+substrat 1.0 0.2
+croissance 1.0 32.0 30 20
+couplage 0.1 0.002
+anastomose 0.5 10
+duree 380
