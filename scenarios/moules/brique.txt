@@ -1,0 +1,20 @@
+# Une brique (étape M1, le moule). La cavité est le rectangle 30..69 × 35..64 de la boîte de 100 × 100 : 40 × 30 = 1 200 cases
+# libres ; tout le reste est un obstacle, que la ligne `moule` fait écrire (voir `moule::developper`). La spore est au centre de
+# la brique.
+# Réglages : ceux des scénarios existants (`substrat 1.0 0.2`, `couplage 0.1 0.002`, `anastomose 0.5 10`), sauf deux choses,
+# mesurées sur 30 graines (voir `MODELE.md`) : l'intervalle de ramification vaut 8 au lieu de 20 (`croissance 1.0 8.0 30 20`) et
+# `thigmotropisme 35` est ajouté (comme dans `mur.txt`). Dans une cavité fermée, chaque pointe finit par s'anastomoser ou par
+# s'arrêter contre la paroi : la colonie s'éteint, et à l'intervalle 20 elle s'éteint avec moins de la moitié de la cavité
+# remplie ; à 8 elle en remplit 68 à 96 % (moyenne 87 %). Sans thigmotropisme, une pointe contre la paroi reste immobile ;
+# avec, elle la longe ou s'y ramifie. La règle de T2 vient de canaux de quelques micromètres : rien ne dit qu'elle vaut contre
+# la paroi d'un moule. `duree 250` : toutes les pointes se sont arrêtées bien avant (vers le pas 80 à 130).
+# Mesure : `cargo run --release --example mesure_moule -- scenarios/moules/brique.txt 1`
+boite 100 100
+spore 50 50
+substrat 1.0 0.2
+croissance 1.0 8.0 30 20
+couplage 0.1 0.002
+anastomose 0.5 10
+duree 250
+thigmotropisme 35
+moule brique 30 35 69 64
