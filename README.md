@@ -4,8 +4,8 @@ A free simulator of mycelium growth, in Rust, built for research: a virtual lab.
 extension, branching, anastomosis, nutrient transport), measures it (biomass, density, topology, fractal dimension) and
 compares scenarios.
 
-**▶ Run it in your browser: https://aoricloud.github.io/mycelium-lab/** (six scenarios, WebAssembly, nothing loaded
-from outside the page).
+**▶ Run it in your browser: https://aoricloud.github.io/mycelium-lab/** (six scenarios, a density view, WebAssembly,
+nothing loaded from outside the page).
 
 > [!NOTE]
 > **This repository is written by AI agents, under [Lydite](https://github.com/aoricloud/lydite).** A human writes the
@@ -24,8 +24,11 @@ The first version (growth, the coupling of the colony and its substrate, a publi
 page) is merged, and so are the tropisms after it: a terrain with walls, growth toward a nutrient patch (chemotropism),
 growth along a wall (thigmotropism), each with and without the effect, all six scenarios on the page. Measuring a grown
 piece is merged too: a density map, a threshold, the food balance, the largest connected piece and the crossing from one
-edge to the other (`cargo run --release --example mesure_piece`). The roadmap's next step is the mould: shapes for the
-colony to fill, the maze among them. [MODELE.md](MODELE.md) says, for each model, its equations, its reference and its
+edge to the other (`cargo run --release --example mesure_piece`), and the page shows that density map behind its
+"Densité" box. So is the mould: shapes for the colony to fill (a brick, an L, a disc, a ring, a maze), a scenario line that
+carves them, the fill curve, the time to get out of the maze and three path searches (`cargo run --release --example
+mesure_moule`). The roadmap's next step is a growth calibrated on published figures (M2). [MODELE.md](MODELE.md) says,
+for each model, its equations, its reference and its
 limits: this bench is 2D, at the scale of the hypha, and does not predict the strength of a real material.
 
 ## What holds it
