@@ -1396,7 +1396,7 @@ part du dépôt).
 ## Les cas d'école
 
 `cargo run --release --example cas_poutres` écrit les 61 valeurs. La plus grande erreur relative est de 3e-15, sauf le module
-du nid d'abeille (1,1e-13 à `t/l` = 0,02 : il sort d'une soustraction qui perd `1/(4 (t/l)²)`) ; les tests demandent 2e-12.
+du nid d'abeille (1,1e-13 à `t/l` = 0,02 : il sort d'une soustraction qui perd un facteur `1/(8 (t/l)²)` environ) ; les tests demandent 2e-12.
 Partout `EA = 5` et `EI = 3`, sauf mention.
 
 | Cas | Valeurs exactes | Statut |
@@ -1472,12 +1472,16 @@ Le module vient de trois énergies : `E* = C₁₁ − C₁₂²/C₂₂`, `ν* 
 
 ## Les limites
 
-- **Euler-Bernoulli** : pas de déformation de **cisaillement** ; elle dépasse 1 % de la flexion dès qu'une poutre est plus
-  épaisse que le dixième de sa longueur environ.
+- **Euler-Bernoulli** : pas de déformation de **cisaillement** ; elle croît comme le carré de l'élancement : environ 0,8 `(h/L)²`
+  de la flexion pour une console, 3 `(h/L)²` pour une paroi tenue aux deux bouts comme celles du nid d'abeille (2,9 % à `t/l` = 0,1,
+  26 % à 0,3).
 - **Petits déplacements, comportement linéaire, nœuds ponctuels et parfaitement rigides.** Un vrai mycélium est humide, mou et
   non linéaire.
 - **Le nid d'abeille de la littérature est un réseau infini**, et sa formule simple vaut pour `t/l` petit.
 - **Une longue file de poutres alignées est mal conditionnée** (le plus petit mode d'une console de `n` poutres décroît comme
   `1/n⁴`) : au-delà de 800 environ, elle est refusée. La solution étant exacte aux nœuds, une poutre droite se maille d'un seul
   élément.
+- **Des longueurs dans la plage où `L³` est un nombre normal de `f64`** (de 3e-103 à 5e102 environ) : plus courte, une poutre peut
+  rendre une flexion fausse sans refus (8 % à 3e-108) ; plus longue, elle est classée `Mecanisme`. Rien de réaliste n'approche ces
+  bornes, mais elles ne sont pas contrôlées (mesuré par un relecteur, avec un portage Python).
 - **Une matrice pleine** : quelques milliers d'inconnues au plus.
