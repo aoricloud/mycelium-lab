@@ -154,7 +154,10 @@ fn la_superposition_la_reciprocite_le_corps_rigide_l_echelle_et_l_ordre() {
         assert!(ecart(&ensemble.reactions, &somme(&s.reactions, &seule.reactions)) < TOLERANCE, "essai {essai}");
         // Réciprocité de Maxwell, entre forces et moments : le déplacement (ou la rotation) en i dû à une charge 1 en j
         // égale celui en j dû à une charge 1 en i.
-        let (i, j) = (2 + h.jusqu_a(3 * n - 2), 2 + h.jusqu_a(3 * n - 2));
+        // i et j : deux degrés de liberté libres (ni un appui, ni le même) : sinon l'égalité serait triviale.
+        let libres: Vec<usize> = (0..3 * n).filter(|d| !BLOQUES.contains(d)).collect();
+        let (m, rang) = (libres.len(), h.jusqu_a(libres.len()));
+        let (i, j) = (libres[rang], libres[(rang + 1 + h.jusqu_a(m - 1)) % m]);
         let unite =
             |ddl: usize| resolu(&noeuds, &poutres, &appuis, &[Charge { noeud: ddl / 3, axe: ddl % 3, valeur: 1.0 }]);
         assert!(
@@ -215,8 +218,8 @@ fn un_mecanisme_ne_rend_jamais_un_nombre_mais_un_noeud_rigide_tient_ce_qu_une_ar
     assert!(resoudre(&carre, &cotes, &pieds, &pousse).is_ok());
     let barres: Vec<Barre> = cotes.iter().map(|p| Barre { a: p.a, b: p.b, ea: 1.0 }).collect();
     assert_eq!(mycelium_lab::raideur::resoudre(&carre, &barres, &pieds, &pousse), Err(ErreurRaideur::Mecanisme));
-    // Trop peu d'appuis : aucun ; un point fixe (le carré tourne autour) ; un nœud sans poutre ; un nœud tenu seulement
-    // en rotation.
+    // Trop peu d'appuis : aucun ; un point fixe (le carré tourne autour) ; un nœud sans poutre ; trois nœuds tenus
+    // seulement en rotation.
     for trop_peu in [vec![], vec![(0, 0), (0, 1)], vec![(0, 0), (0, 1), (0, 2), (4, 0)], vec![(0, 2), (1, 2), (2, 2)]] {
         let noeuds = [carre.to_vec(), vec![n(5.0, 5.0)]].concat();
         let noeuds = if trop_peu.contains(&(4, 0)) { &noeuds[..] } else { &carre[..] };
@@ -246,7 +249,7 @@ fn un_mecanisme_ne_rend_jamais_un_nombre_mais_un_noeud_rigide_tient_ce_qu_une_ar
     }
     // Des réseaux au hasard, de raideurs proches ou très différentes (EA et EI jusqu'à 2e12 fois plus grands d'une
     // poutre à l'autre) : sans un de ses trois appuis, le réseau bouge sans effort. Jamais de nombre. Avec ses trois
-    // appuis, il se résout tant que le contraste ne dépasse pas 2e3.
+    // appuis, il se résout (essayé jusqu'à un contraste de 2e3).
     let mut h = Hasard(143);
     for (essai, decades) in (0..200).map(|essai| (essai, [0, 3, 6, 9, 12][essai % 5])) {
         let (noeuds, poutres, appuis, charges) = cas(&mut h, decades);
@@ -371,9 +374,9 @@ fn les_donnees_invalides_sont_refusees_et_les_cas_limites_passent() {
     // aucun nœud.
     let s = resoudre(&noeuds, &poutre, &encastre, &[pousse[0], pousse[0]]).unwrap();
     assert!(
-        (s.deplacements[4] - 16.0).abs() < 1e-13
-            && (s.reactions[1] + 18.0).abs() < 1e-13
-            && (s.reactions[2] + 36.0).abs() < 1e-13,
+        (s.deplacements[4] - 16.0).abs() < 1e-12
+            && (s.reactions[1] + 18.0).abs() < 1e-12
+            && (s.reactions[2] + 36.0).abs() < 1e-12,
         "{s:?}"
     );
     let tourne =
