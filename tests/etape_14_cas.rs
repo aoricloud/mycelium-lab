@@ -8,7 +8,8 @@ use exemple::barres::{DERIVE, LU, tableau};
 use mycelium_lab::poutres::{Poutre, matrice_de_raideur, matrice_locale};
 use mycelium_lab::raideur::Noeud;
 
-/// La tolérance des cas d'école : la plus grande erreur mesurée est de 2e-14 ; une erreur de formule fait 1e-2 à 1.
+/// La tolérance des cas d'école : la plus grande erreur mesurée est de 1,1e-13 (le module du nid d'abeille à `t/l` = 0,02), de
+/// 3e-15 ailleurs ; une erreur de formule fait 1e-2 à 1.
 const TOLERANCE: f64 = 2e-12;
 
 fn lire(chemin: &str) -> String {
@@ -123,10 +124,20 @@ fn le_nid_d_abeille_a_le_module_publie_et_l_etirement_des_parois_le_corrige() {
         let (ecart_du_module, ecart_du_poisson) = (1.0 - module / module_en_flexion(rapport), 1.0 - poisson);
         assert!((ecart_du_module / (3.0 * carre) - 1.0).abs() < 0.22, "t/l = {rapport} : écart {ecart_du_module:e}");
         assert!((ecart_du_poisson / (4.0 * carre) - 1.0).abs() < 0.22, "t/l = {rapport} : écart {ecart_du_poisson:e}");
-        // Des parois dix mille fois plus raides en étirement (presque inextensibles) : la formule publiée et ν* = 1, à
-        // 3 (t/l)²/10⁴ et 4 (t/l)²/10⁴ près (au plus 4e-5), sauf pour les parois les plus minces, trop mal conditionnées.
+        // Des parois dix mille fois plus raides en étirement (presque inextensibles), sauf pour les parois les plus minces,
+        // trop mal conditionnées : la formule dérivée avec `3 (t/l)²/10⁴` à la place de `3 (t/l)²`, à 1e-7 près (l'erreur du
+        // calcul est d'au plus 3e-9, à t/l = 0,02) ; et, comme borne physique, la formule publiée et ν* = 1 à `3 (t/l)²/10⁴`
+        // et `4 (t/l)²/10⁴` près (au plus 4e-5).
         if rapport >= 0.02 {
-            let (module, poisson) = nid(rapport, 1e4);
+            let ((module, poisson), petit) = (nid(rapport, 1e4), carre / 1e4);
+            assert!(
+                (module * (1.0 + 3.0 * petit) / module_en_flexion(rapport) - 1.0).abs() < 1e-7,
+                "t/l = {rapport}, inextensible : {module:e}"
+            );
+            assert!(
+                (poisson * (1.0 + 3.0 * petit) / (1.0 - petit) - 1.0).abs() < 1e-7,
+                "t/l = {rapport}, inextensible : ν* = {poisson}"
+            );
             assert!(
                 (module / module_en_flexion(rapport) - 1.0).abs() < 3.1e-4 * carre,
                 "t/l = {rapport}, inextensible : {module:e}"
