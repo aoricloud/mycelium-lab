@@ -42,7 +42,8 @@
 //!
 //! Comme `raideur` : `+ - * /` et `sqrt` seulement, des boucles dans un ordre fixe, aucune `HashMap`.
 
-use crate::raideur::{Appui, Charge, ErreurRaideur, Noeud};
+use crate::raideur::{Appui, Charge, ErreurRaideur, Noeud, longueur_et_direction, ranger_appuis_et_charges};
+use crate::systeme;
 
 /// Une poutre entre les nœuds `a` et `b`, de raideur axiale `ea` (force) et de raideur en flexion `ei` (force × longueur²).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -71,8 +72,47 @@ type Matrice6 = [[f64; 6]; 6];
 
 /// La matrice 6 × 6 d'une poutre de longueur `longueur`, dans son repère (voir plus haut). Exactement symétrique.
 pub fn matrice_locale(ea: f64, ei: f64, longueur: f64) -> Matrice6 {
-    let _ = (ea, ei, longueur);
-    [[0.0; 6]; 6] // bouchon
+    let (l, a, b) = (longueur, ea / longueur, ei / (longueur * longueur * longueur));
+    let (b12, b6l, b4l2, b2l2) = (12.0 * b, 6.0 * b * l, 4.0 * b * l * l, 2.0 * b * l * l);
+    [
+        [a, 0.0, 0.0, -a, 0.0, 0.0],
+        [0.0, b12, b6l, 0.0, -b12, b6l],
+        [0.0, b6l, b4l2, 0.0, -b6l, b2l2],
+        [-a, 0.0, 0.0, a, 0.0, 0.0],
+        [0.0, -b12, -b6l, 0.0, b12, -b6l],
+        [0.0, b6l, b2l2, 0.0, -b6l, b4l2],
+    ]
+}
+
+/// Le produit de deux matrices 6 × 6.
+fn fois(a: &Matrice6, b: &Matrice6) -> Matrice6 {
+    let mut produit = [[0.0; 6]; 6];
+    for i in 0..6 {
+        for j in 0..6 {
+            for l in 0..6 {
+                produit[i][j] += a[i][l] * b[l][j];
+            }
+        }
+    }
+    produit
+}
+
+/// La poutre prête à servir : la rotation `T` du repère du réseau vers le sien, le produit `k T` (les efforts d'extrémité
+/// de la poutre sont `k T u`), et ses six degrés de liberté.
+fn poutre_calculee(noeuds: &[Noeud], p: &Poutre) -> Result<(Matrice6, Matrice6, [usize; 6]), ErreurRaideur> {
+    if !(p.ea.is_finite() && p.ea > 0.0 && p.ei.is_finite() && p.ei > 0.0) {
+        return Err(ErreurRaideur::DonneeInvalide("poutre : ea et ei doivent être finis et strictement positifs"));
+    }
+    let (longueur, c, s) = longueur_et_direction(noeuds, p.a, p.b)?;
+    let r = [[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]];
+    let mut t = [[0.0; 6]; 6];
+    for i in 0..3 {
+        for j in 0..3 {
+            (t[i][j], t[i + 3][j + 3]) = (r[i][j], r[i][j]);
+        }
+    }
+    let ddl = [3 * p.a, 3 * p.a + 1, 3 * p.a + 2, 3 * p.b, 3 * p.b + 1, 3 * p.b + 2];
+    Ok((t, fois(&matrice_locale(p.ea, p.ei, longueur), &t), ddl))
 }
 
 /// La matrice de raideur du réseau avant tout appui : `3n × 3n` (`n` nœuds), pleine, exactement symétrique, rangée ligne par
@@ -83,8 +123,25 @@ pub fn matrice_locale(ea: f64, ei: f64, longueur: f64) -> Matrice6 {
 /// [`ErreurRaideur::DonneeInvalide`] : une coordonnée non finie ; une poutre dont un indice sort de la liste, de longueur nulle,
 /// ou dont `ea` ou `ei` n'est pas fini et strictement positif.
 pub fn matrice_de_raideur(noeuds: &[Noeud], poutres: &[Poutre]) -> Result<Vec<f64>, ErreurRaideur> {
-    let _ = poutres;
-    Ok(vec![0.0; 9 * noeuds.len() * noeuds.len()]) // bouchon
+    if noeuds.iter().any(|n| !(n.x.is_finite() && n.y.is_finite())) {
+        return Err(ErreurRaideur::DonneeInvalide("nœud : coordonnée non finie"));
+    }
+    let n = 3 * noeuds.len();
+    let mut k = vec![0.0; n * n];
+    for p in poutres {
+        let (t, kt, ddl) = poutre_calculee(noeuds, p)?;
+        // `Tᵀ (k T)` : on calcule le triangle supérieur et on le recopie, pour que la matrice soit exactement symétrique.
+        for i in 0..6 {
+            for j in i..6 {
+                let kij: f64 = (0..6).map(|l| t[l][i] * kt[l][j]).sum();
+                k[ddl[i] * n + ddl[j]] += kij;
+                if i != j {
+                    k[ddl[j] * n + ddl[i]] += kij;
+                }
+            }
+        }
+    }
+    Ok(k)
 }
 
 /// Calcule le réseau : assemble ([`matrice_de_raideur`]), impose les appuis, résout, puis tire de la solution les six
@@ -94,19 +151,25 @@ pub fn matrice_de_raideur(noeuds: &[Noeud], poutres: &[Poutre]) -> Result<Vec<f6
 ///
 /// - [`ErreurRaideur::DonneeInvalide`] : celles de [`matrice_de_raideur`] ; un appui ou une charge hors limites (l'axe va de 0
 ///   à 2) ou de valeur non finie ; un appui répété sur le même degré de liberté ;
-/// - [`ErreurRaideur::Mecanisme`] : la matrice libre est singulière (au seuil de [`crate::systeme::SEUIL_SINGULIER`]).
+/// - [`ErreurRaideur::Mecanisme`] : la matrice libre est singulière (au seuil de [`systeme::SEUIL_SINGULIER`]).
 pub fn resoudre(
     noeuds: &[Noeud],
     poutres: &[Poutre],
     appuis: &[Appui],
     charges: &[Charge],
 ) -> Result<SolutionPoutres, ErreurRaideur> {
-    let _ = (appuis, charges);
-    let zeros = vec![0.0; 3 * noeuds.len()];
+    let k = matrice_de_raideur(noeuds, poutres)?;
+    let (forces, imposes) = ranger_appuis_et_charges(noeuds.len(), 3, appuis, charges)?;
+    let resolution = systeme::resoudre_avec_imposes(&k, &forces, &imposes)?;
+    let mut efforts = Vec::with_capacity(poutres.len());
+    for p in poutres {
+        let (_, kt, ddl) = poutre_calculee(noeuds, p)?;
+        efforts.push(kt.map(|ligne| (0..6).map(|j| ligne[j] * resolution.deplacements[ddl[j]]).sum()));
+    }
     Ok(SolutionPoutres {
-        deplacements: zeros.clone(),
-        reactions: zeros,
-        efforts: vec![[0.0; 6]; poutres.len()],
-        energie: -1.0,
-    }) // bouchon
+        deplacements: resolution.deplacements,
+        reactions: resolution.reactions,
+        efforts,
+        energie: resolution.energie,
+    })
 }
