@@ -1124,7 +1124,7 @@ encore jeune à la fin, ou éteinte dans une cavité fermée, ne mesure pas une 
 près des mycéliums de 10 à 90 pointes de Trinci, et une boîte de 601 × 601 suffit au profil rapide.
 
 **Les deux profils** sont `couplage.txt` avec un autre `intervalle` de ramification (chaque pointe se ramifie à chaque pas avec la
-probabilité `1 / intervalle`), une autre boîte et une autre durée ; l'anastomose (rayon 0,5, délai 10) est celle de
+probabilité `1 / intervalle`) et une autre durée (le rapide a aussi une autre boîte et une autre spore) ; l'anastomose (rayon 0,5, délai 10) est celle de
 `couplage.txt`.
 
 | Profil | Ancre | `intervalle` | Boîte | Durée |
@@ -1195,8 +1195,9 @@ ramifications de la fenêtre.
   écrite à part ; le temps de doublement et les cinq temps de Trinci ; l'écart relatif et les six lignes du tableau I ; la fenêtre à
   la main et sur 4 000 suites au hasard contre une machine à états ; la moyenne d'une fenêtre ; les refus ; ni fonction interdite ni
   `HashMap` ; cette section (les cinq sources et leur statut, les chiffres, les nombres du tableau, l'échec).
-- **`etape_12_profils.rs`** (les graines 1 à 20 des deux profils, jouées une fois, quatre secondes sur la VM, douze secondes de
-  calcul) : les fichiers ne diffèrent de `couplage.txt` que par l'intervalle, la boîte, la spore et la durée ; chaque fenêtre est
+- **`etape_12_profils.rs`** (les graines 1 à 20 des deux profils, jouées une fois, quatre secondes sur la VM, dix secondes de
+  calcul) : les fichiers ne diffèrent de `couplage.txt` que par l'intervalle et la durée (le rapide aussi par la boîte et la spore) ;
+  chaque fenêtre est
   refermée loin du bord ; la moyenne dans l'ancre ± 15 %, chaque graine dans le garde-fou, le rapide au-dessus du dense ; le dense
   dans la tolérance en moyenne ; **l'échec du rapide** et sa cause ; le tableau de l'exemple, au caractère ; les mesures contre
   des oracles ; le déterminisme ; arrêter le jeu à la fermeture ne change rien ; les refus de l'exemple. Les tests appellent les
@@ -1207,11 +1208,14 @@ ramifications de la fenêtre.
 ## Les limites
 
 - **Une case ne se mesure pas** : 7 µm est un choix (le haut de 5 à 7 µm, une hyphe de *Neurospora crassa*), et Trinci mesure
-  d'autres espèces. Aucune échelle de temps : on compare des rapports, pas des « par heure ».
+  d'autres espèces et d'autres souches. Aucune échelle de temps : on compare des rapports, pas des « par heure ».
 - **Aucune densité chiffrée dans Schoder** : son compromis vitesse/densité reste une phrase.
 - **La fourchette 35 à 682 µm est de seconde main** (le chapitre de Bull et Trinci n'est pas lu), **sans confirmation
   indépendante** : les mesures indépendantes lues (90 à 445 µm) y tombent, sans la confirmer. Et 354 µm n'est écrit nulle part :
   il se lit sur une courbe.
+  Le garde-fou 35 à 682 µm entre dans un test (chaque graine doit y tomber) bien que de seconde main : au sens strict de la règle de
+  `FEUILLE-DE-ROUTE.md` (aucun chiffre « à vérifier » dans un test sans relecture à la source), c'est une exception, que l'humain peut
+  retirer en sortant une ligne du test.
 - **Le chiffre dépend du milieu et de la souche** : pour *Mucor hiemalis*, la courbe de Trinci 1974 (gélose au malt, 25 °C) donne
   environ 354 µm, le tableau de Moore (de seconde main, milieu glucosé, 25 °C) 95 µm. L'ancre du profil rapide est la première, lue
   à la source ; un chiffre de longueur par pointe ne se cite jamais sans son milieu.
