@@ -17,6 +17,8 @@
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`substrat`] : diffusion explicite du substrat ;
 //! - [`mesures`] : biomasse et dimension fractale ;
+//! - [`calage`] : mesurer la colonie en unités qu'une publication donne (longueur d'hyphe par pointe, taux de croissance,
+//!   fenêtre de croissance) — l'étape 12 (M2) : elle mesure, elle ne change rien au noyau de la simulation ;
 //! - [`moule`] : donner une forme à l'espace libre (brique, L, disque, anneau, labyrinthe), la développer en lignes
 //!   `obstacle` d'un scénario, et mesurer comment la colonie remplit ce moule et en sort — l'étape M1 : elle ne change rien au
 //!   noyau de la simulation ;
@@ -27,6 +29,7 @@
 
 pub mod alea;
 pub mod anastomose;
+pub mod calage;
 pub mod croissance;
 pub mod empreinte;
 pub mod grille;
