@@ -1071,3 +1071,153 @@ l'écran, le temps d'une image) ; des boîtes non carrées (les six scénarios s
   Firefox et Safari n'ont pas été essayés.
 - Lire 25 921 cases par image coûte environ 2 ms sous Node (mesure du prototype) ; le temps réel d'une image dans un navigateur
   n'a pas été mesuré.
+
+# Le calage sur des chiffres publiés (étape 12, M2)
+
+Cette étape **met en regard** : elle écrit une échelle, mesure la longueur d'hyphe par pointe de la colonie et ses taux de
+croissance, règle deux profils de réglages sur des chiffres publiés, et dit où le banc les retrouve et où il ne les retrouve pas.
+Elle ne change rien au noyau : `croissance.rs`, `simulation.rs`, `substrat.rs`, `voisinage.rs` sont ceux d'avant, et les
+empreintes de la V0 (figure 3), de T0 à T4, de M0 et de M1 sont celles du dépôt, à l'octet. Elle ne promet ni la ramification
+selon la place (un modèle à nous, rangé avec M4), ni une **échelle de temps** (des micromètres par heure : un pas de temps n'a
+pas de durée ici, les taux se disent par pas), ni la page de la vitrine, ni la résistance d'un vrai matériau. Le compromis entre
+vitesse et densité de Schoder et coll. (2024) n'y est qu'une phrase : leur densité est **qualitative** (une échelle à quatre
+niveaux, à l'œil : **aucune densité chiffrée**), et rien de Schoder n'entre dans un test.
+
+## Les sources, et leur statut
+
+Le mot de la colonne « Statut » dit ce que nous en avons lu : **lu à la source** (l'image des pages ou le texte intégral),
+**de seconde main** (rapporté par quelqu'un d'autre, ou le résumé seul), **choix** (une valeur que nous écrivons, que la source ne
+donne pas comme une mesure).
+
+| Source | Statut | Ce qu'on y prend |
+|---|---|---|
+| Held, Kašpar, Edwards et Nicolau 2019, *PNAS* 116(27) | **choix** | « 5 à 7 µm », le diamètre d'une hyphe de *Neurospora crassa* (Méthodes), et « ∼7 µm », une valeur de normalisation (légende de la fig. 2), sans écart ni effectif : **une case = 7 µm** est un choix, le haut de la fourchette |
+| Trinci 1974, *J. Gen. Microbiol.* 81 | **lu à la source** (l'image des pages : le PDF est un scan) | le tableau I (les taux), le tableau II (l'extension par pointe), la définition de la longueur par pointe (longueur totale ÷ nombre de pointes, p. 226), la courbe de la fig. 4 (*Mucor*) |
+| Bull et Trinci 1977, *Adv. Microb. Physiol.* 15, par le tableau de la page de David Moore | **de seconde main** : le chapitre n'est pas lu | la fourchette « 35 à 682 µm » (21 espèces, 25 °C) ; seul le tableau est attribué à Bull et Trinci, la phrase est de Moore ; aucune confirmation indépendante |
+| Thykaer et coll. 2009 | **de seconde main** : le résumé seul | *P. chrysogenum*, 47 µm par pointe, qui recoupe les 48 µm du tableau de Moore |
+| Schoder et coll. 2024, *Mycobiology* 52(2) | **lu à la source** (texte intégral ; figures non lues) | une phrase : il faut trouver un équilibre entre la densité du mycélium et sa vitesse ; qualitatif, entre espèces |
+
+| Quoi | Valeur | Statut |
+|---|---|---|
+| Échelle | une case = **7 µm** | **choix** (Held 2019) |
+| Taux spécifiques par heure, longueur α_h / pointes α_t (tableau I) | *A. nidulans* 0,25 / 0,23 ; *G. candidum* 0,43 / 0,40 ; *M. hiemalis* 0,60 / 0,56 ; *P. chrysogenum* 0,27 / 0,28 ; *N. crassa* spco 1 0,34 / 0,38 (25 °C) et 0,55 / 0,52 (37 °C) | **lu à la source** (relu sur l'image par deux lecteurs et par le juge) |
+| Plus grand écart relatif des deux taux | 0,04 / 0,34 = **0,118** (*N. crassa*, 25 °C), le taux de la longueur au dénominateur ; tolérance des tests : **0,12** | calculé sur le tableau I |
+| Longueur par pointe de *M. hiemalis* | palier de la fig. 4 : **354 µm** (trois lectures de la courbe : 350, 354, 355) | **lu à la source**, mais sur une courbe en échelle log : aucune valeur n'est écrite dans l'article |
+| Longueur par pointe de *P. chrysogenum* | **47 à 48 µm** | **de seconde main** (Thykaer 47, Moore 48), recoupé |
+| Fourchette des longueurs par pointe | **35 à 682 µm** | **de seconde main** : un garde-fou large, jamais une cible |
+
+## Ce que fait le code
+
+**`src/calage.rs`** lit les relevés d'une simulation jouée : `longueur_par_pointe_cases` (`biomasse / pointes`, `None` sans
+pointe) et `en_micrometres` (× 7), `taux_de_croissance` (la pente de la droite des moindres carrés de `logarithme(valeur)` en
+fonction du pas, entre deux indices inclus), `temps_de_doublement` (`ln 2 / taux`), `ecart_relatif` (`|taux des pointes − taux
+de la biomasse| / taux de la biomasse`, le dénominateur de Trinci), `fenetre_de_croissance` et `longueur_par_pointe_moyenne` (la
+moyenne des `biomasse / pointes` des relevés de la fenêtre). Sans fonction de `f64` du système : le logarithme est
+`mesures::logarithme`.
+
+**La fenêtre de croissance.** Trinci mesure de jeunes mycéliums, pendant que les pointes se forment sans arrêt. La fenêtre va du
+**premier relevé qui a au moins 40 pointes** jusqu'au relevé **juste avant le premier qui en a plus de 200**. Entre les deux, le
+nombre de pointes peut repasser sous 40 (il monte par à-coups et perd une pointe à chaque anastomose) : la première définition,
+« le premier intervalle entre 40 et 400 pointes », coupait ainsi la fenêtre de 4 à 6 graines sur 20 du profil rapide après un ou
+deux relevés. **Une colonie qui ne dépasse pas 200 pointes pendant la durée jouée n'a pas de fenêtre** (`None`) : une colonie
+encore jeune à la fin, ou éteinte dans une cavité fermée, ne mesure pas une phase de croissance. Le haut est 200 et non 400 : plus
+près des mycéliums de 10 à 90 pointes de Trinci, et une boîte de 601 × 601 suffit au profil rapide.
+
+**Les deux profils** sont `couplage.txt` avec un autre `intervalle` de ramification (chaque pointe se ramifie à chaque pas avec la
+probabilité `1 / intervalle`), une autre boîte et une autre durée ; l'anastomose (rayon 0,5, délai 10) est celle de
+`couplage.txt`.
+
+| Profil | Ancre | `intervalle` | Boîte | Durée |
+|---|---|---|---|---|
+| `calage-rapide.txt`, rapide et clairsemé | *M. hiemalis*, 354 µm (50,6 cases) ; bande ± 15 % : 300,9 à 407,1 µm | **32** | 601 × 601, spore au centre | 380 |
+| `calage-dense.txt`, lent et dense | *P. chrysogenum*, 47 à 48 µm (6,8 cases) ; bande : 40,0 à 55,2 µm | **7,5** | 161 × 161, spore au centre | 100 |
+
+L'intervalle est réglé sur **cent graines** (1 à 100), pas sur les vingt des tests : le rapide à 32 donne 348,9 µm en moyenne
+(−1,4 % de l'ancre) ; le dense à 8 en donnait 52,2 (+10 %, alors que les graines 1 à 20 seules donnaient 49,8), à 7 il en
+donne 45,2, à **7,5 il en donne 48,4** (+1,9 % du milieu de l'ancre). La bande est l'ancre à ± 15 %, l'incertitude de lecture
+des courbes de Trinci : jamais plus étroite.
+
+**L'exemple** `cargo run --release --example mesure_calage [-- <première graine> <dernière graine> [rapide|dense]]` joue chaque
+graine jusqu'à la fermeture de sa fenêtre (la suite ne changerait rien aux mesures) et écrit, par graine, la fenêtre, la longueur
+par pointe en µm, les deux taux et leur écart, puis le résumé du profil. Sans argument : les graines 1 à 20 des deux profils,
+dix secondes de calcul environ ; c'est le tableau de `tests/etape_12/tableau.txt`.
+
+## Ce qu'on mesure (graines 1 à 20)
+
+| | Rapide (ancre 354 µm) | Dense (ancre 47 à 48 µm) |
+|---|---|---|
+| Longueur par pointe, moyenne | **348,9 µm** | **46,8 µm** |
+| Écart-type d'une graine à l'autre | 47,6 µm | 4,0 µm |
+| Plus petite, plus grande | 281,1 ; 429,5 µm | 40,3 ; 57,4 µm |
+| Dans le garde-fou de 35 à 682 µm (de seconde main) | 20 sur 20 | 20 sur 20 |
+| Fenêtre | 92 à 151 relevés | 11 à 16 relevés |
+| Taux moyen par pas : biomasse ; pointes | 0,0190 ; 0,0135 | 0,1287 ; 0,1231 |
+| **Écart relatif des taux moyens** | **0,288** | **0,043** |
+| Écart de chaque graine : moyenne ; plus grand ; graines au-dessus de 0,12 | 0,283 ; 0,451 ; 18 | 0,075 ; 0,192 ; 4 |
+
+Le rapide est au-dessus du dense pour chaque graine (plus de deux fois). Sur cent graines, les nombres tiennent : le rapide 348,9
+µm et 0,236 d'écart des taux moyens (trois graines, dont la 55, n'ont pas de fenêtre en 380 pas, et la plus éloignée arrive à
+295 cases du centre pour 300 de demi-boîte), le dense 48,4 µm et 0,029.
+
+## Le résultat que le banc ne reproduit pas
+
+**Trinci écrit que la longueur d'hyphe et le nombre de pointes croissent « à peu près au même taux » : au plus 0,118 d'écart
+relatif sur son tableau I. Le profil dense le reproduit en moyenne (0,043 sur les graines 1 à 20, 0,029 sur cent) ; le profil
+rapide ne le reproduit pas (0,288 sur les graines 1 à 20, 0,236 sur cent ; 18 graines sur 20 et 87 sur 97 dépassent 0,12).**
+André a tranché : l'échec est dit tel quel. La tolérance n'est pas relâchée ; un test fige l'échec et se retournera le jour où
+l'écart repassera sous 0,12. Même le dense ne la tient pas graine par graine (4 graines sur 20) : sa fenêtre n'a que 11 à 16
+relevés.
+
+**D'où ça vient.** Dans le profil rapide, une ramification sur deux (de 41 à 64 % selon la graine) finit en anastomose : la
+pointe meurt, l'hyphe reste. La longueur croît du nombre de pointes vivantes à chaque pas ; elle garde donc la mémoire des pas où
+les pointes croissaient plus vite. Or le taux des pointes **baisse** dans la fenêtre (pour 16 graines sur 20, il est plus bas
+dans la seconde moitié que dans la première) : plus la colonie se remplit, plus les pointes rencontrent une hyphe. La longueur
+par pointe monte alors d'environ 35 à 60 cases d'un bout à l'autre de la fenêtre, et les deux taux s'écartent. Une colonie plane
+qui ne grandit plus que par son bord a des pointes qui croissent comme son tour et une longueur comme sa surface : un écart qui
+tend vers 0,5. Les jeunes mycéliums de Trinci n'en sont pas là. Dans le dense, l'anastomose ne touche que 0 à 7 % des
+ramifications de la fenêtre.
+
+**Deux replis mesurés pour André, non retenus et figés dans aucun test** :
+
+- **compter les pointes formées** (`1 + ramifications`) : 0,023 (rapide) et 0,028 (dense) d'écart des taux moyens. Mais ce
+  n'est pas la propriété de Trinci : dans ce modèle, chaque pas de chaque pointe vivante ajoute la même longueur et la même chance
+  de ramifier, donc le nombre de ramifications suit la biomasse divisée par l'intervalle **par construction**. L'accord ne dit
+  rien des pointes.
+- **un profil rapide sans la ligne `anastomose`**, à `intervalle` 55 (boîte 801 × 801, durée 600 : la colonie va jusqu'à 339
+  cases du centre) : 359,1 µm, 0,014 d'écart des taux moyens, 0,074 en moyenne par graine, 6 graines sur 20 au-dessus de 0,12 ;
+  sur cent graines 355,3 µm, 0,003, 0,079 et 26. Sans anastomose, aucune pointe ne meurt : le modèle devient une ramification
+  pure, où l'égalité des taux est attendue.
+
+## Ce que les tests vérifient
+
+- **`etape_12_calage.rs`** (exact, sans simulation) : l'échelle et les constantes ; `biomasse / pointes` ; le taux de suites
+  géométriques à 1e-9, sur une plage aux deux bouts inclus, les moindres carrés et non la pente des deux bouts, contre une formule
+  écrite à part ; le temps de doublement et les cinq temps de Trinci ; l'écart relatif et les six lignes du tableau I ; la fenêtre à
+  la main et sur 4 000 suites au hasard contre une machine à états ; la moyenne d'une fenêtre ; les refus ; ni fonction interdite ni
+  `HashMap` ; cette section (les cinq sources et leur statut, les chiffres, les nombres du tableau, l'échec).
+- **`etape_12_profils.rs`** (les graines 1 à 20 des deux profils, jouées une fois, quatre secondes sur la VM, douze secondes de
+  calcul) : les fichiers ne diffèrent de `couplage.txt` que par l'intervalle, la boîte, la spore et la durée ; chaque fenêtre est
+  refermée loin du bord ; la moyenne dans l'ancre ± 15 %, chaque graine dans le garde-fou, le rapide au-dessus du dense ; le dense
+  dans la tolérance en moyenne ; **l'échec du rapide** et sa cause ; le tableau de l'exemple, au caractère ; les mesures contre
+  des oracles ; le déterminisme ; arrêter le jeu à la fermeture ne change rien ; les refus de l'exemple. Les tests appellent les
+  fonctions de l'exemple, inclus comme un module : jamais un binaire périmé.
+- Ils **ne vérifient pas** : d'autres graines que 1 à 20 (les cent graines ci-dessus sont une mesure du juge) ; que les ancres
+  sont justes (elles sont lues sur une courbe ou de seconde main) ; la biologie ; les deux replis.
+
+## Les limites
+
+- **Une case ne se mesure pas** : 7 µm est un choix (le haut de 5 à 7 µm, une hyphe de *Neurospora crassa*), et Trinci mesure
+  d'autres espèces. Aucune échelle de temps : on compare des rapports, pas des « par heure ».
+- **Aucune densité chiffrée dans Schoder** : son compromis vitesse/densité reste une phrase.
+- **La fourchette 35 à 682 µm est de seconde main** (le chapitre de Bull et Trinci n'est pas lu), **sans confirmation
+  indépendante** : les mesures indépendantes lues (90 à 445 µm) y tombent, sans la confirmer. Et 354 µm n'est écrit nulle part :
+  il se lit sur une courbe.
+- **Le chiffre dépend du milieu et de la souche** : pour *Mucor hiemalis*, la courbe de Trinci 1974 (gélose au malt, 25 °C) donne
+  environ 354 µm, le tableau de Moore (de seconde main, milieu glucosé, 25 °C) 95 µm. L'ancre du profil rapide est la première, lue
+  à la source ; un chiffre de longueur par pointe ne se cite jamais sans son milieu.
+- **La longueur par pointe d'une colonie qui sature n'est pas stable** : dans le profil rapide, elle monte tout au long de la
+  fenêtre (de 35 à 60 cases environ) ; la moyenne de la fenêtre tombe sur l'ancre de Trinci, qui est, elle, un palier. Elle dépend
+  donc du choix de la fenêtre (40 à 200 pointes).
+- **Un calage, pas une calibration** : un seul réglage, l'intervalle, est ajusté ; d'une graine à l'autre, la longueur varie de
+  14 % (rapide) et de 9 % (dense).
+- **Le banc ne prédit pas la résistance d'un vrai matériau.**
