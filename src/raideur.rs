@@ -68,8 +68,9 @@ pub struct Charge {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErreurRaideur {
     /// La structure a un mécanisme : un mouvement sans énergie (un carré sans diagonale, une barre dont le nœud libre
-    /// n'est pas tenu en travers, trop peu d'appuis, un nœud sans barre), ou elle est si mal conditionnée que le calcul
-    /// ne la distingue pas d'un mécanisme (voir [`crate::systeme`]). Aucun déplacement n'est rendu.
+    /// n'est pas tenu en travers, trop peu d'appuis, un nœud sans barre dont un déplacement n'est pas imposé), ou elle
+    /// est si mal conditionnée que le calcul ne la distingue pas d'un mécanisme (voir [`crate::systeme`]). Aucun
+    /// déplacement n'est rendu.
     Mecanisme,
     /// Une donnée impossible : le texte dit laquelle.
     DonneeInvalide(&'static str),

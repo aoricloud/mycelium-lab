@@ -13,10 +13,11 @@
 //! Un **mécanisme** est un mouvement qui ne coûte aucune énergie : la matrice est singulière, sa plus petite valeur
 //! propre est nulle. **Un système singulier ne rend jamais un nombre** : il rend [`Mecanisme`]. La mesure est le
 //! **plus petit mode** ([`plus_petit_mode`]) : la plus petite valeur propre de `Â`, estimée par deux pas d'itération
-//! inverse. L'arrondi laisse celle d'un mécanisme sous 1e-15, quelles que soient les raideurs ; celle d'un réseau valide
-//! dont les raideurs diffèrent d'un rapport `r` est de l'ordre de `1/r`. Au plus [`SEUIL_SINGULIER`], le système est
-//! refusé. Un réseau valide refusé ainsi (des raideurs dans un rapport de plus de 1e10 environ) est si mal conditionné
-//! que `f64` ne le distingue plus d'un mécanisme : son résultat n'aurait pas quatre chiffres justes.
+//! inverse. L'arrondi laisse celle d'un mécanisme sous quelques 1e-15 (le plus souvent vers 5e-16), quelles que soient
+//! les raideurs ; celle d'un réseau valide dont les raideurs diffèrent d'un rapport `r` est de l'ordre de `1/r` pour
+//! une chaîne, cent à mille fois moins pour les grilles mesurées. Au plus [`SEUIL_SINGULIER`], le système est refusé.
+//! Un réseau valide refusé ainsi (des raideurs dans un rapport de plus de 1e10 environ) est si mal conditionné que
+//! `f64` ne le distingue plus d'un mécanisme : son résultat pourrait ne pas avoir quatre chiffres justes.
 //!
 //! Le plus petit **pivot** de la factorisation ne convient pas à cette mesure : l'arrondi le laisse monter à 5e-7 pour
 //! un mécanisme dès que les raideurs diffèrent (les mesures sont dans `MODELE.md`).
@@ -27,8 +28,9 @@
 //! bit, sur toutes les machines. Ni `HashMap`, ni fil d'exécution.
 
 /// Un plus petit mode (voir [`plus_petit_mode`]) au plus égal à ce nombre est pris pour un mécanisme. **Mesuré** (voir
-/// `MODELE.md`) : le plus petit mode d'un mécanisme ne dépasse pas 1e-15 (réseaux au hasard, raideurs dans un rapport de
-/// 1 à 1e15) ; l'erreur relative d'un résultat est d'au plus `2,5e-16 / mode` sur les cas mesurés : trois à quatre chiffres au seuil.
+/// `MODELE.md`) : le plus petit mode d'un mécanisme ne dépasse pas quelques 1e-15 (réseaux au hasard, raideurs dans un
+/// rapport de 1 à 1e15 ; le plus grand mesuré : 5,3e-15) ; l'erreur relative d'un résultat est d'au plus
+/// `2,5e-16 / mode` sur les cas mesurés : trois à quatre chiffres au seuil.
 pub const SEUIL_SINGULIER: f64 = 1e-12;
 
 /// Le système est singulier : la structure a un mécanisme (un mouvement sans énergie) ou un degré de liberté sans
@@ -149,15 +151,18 @@ pub fn plus_petit_mode(a: &[f64], n: usize) -> f64 {
 ///
 /// # Errors
 ///
-/// [`Mecanisme`] si le plus petit mode de `A` est au plus [`SEUIL_SINGULIER`] : une matrice singulière, ou qui n'est
-/// pas définie positive, ou qui porte un nombre non fini.
+/// [`Mecanisme`] si le plus petit mode de `A` est au plus [`SEUIL_SINGULIER`], ou n'est pas un nombre : une matrice
+/// singulière, ou qui n'est pas définie positive. Seuls la diagonale et le triangle inférieur de `A` sont lus ; un
+/// second membre `b` non fini rend des `NaN` (l'appelant contrôle ses données : `raideur` le fait).
 ///
 /// # Panics
 ///
 /// Panique si `a` n'a pas `b.len()²` nombres.
 pub fn resoudre(a: &[f64], b: &[f64]) -> Result<Vec<f64>, Mecanisme> {
     let Some(facteur) = factoriser(a, b.len()) else { return Err(Mecanisme) };
-    if facteur.plus_petit_mode() <= SEUIL_SINGULIER {
+    // Un pivot minuscule fait déborder l'itération inverse : le mode n'est alors pas un nombre, et la matrice est refusée.
+    let mode = facteur.plus_petit_mode();
+    if mode.is_nan() || mode <= SEUIL_SINGULIER {
         return Err(Mecanisme);
     }
     // `A = S⁻¹ Â S⁻¹` (`S` : l'échelle), donc `x = S Â⁻¹ S b`.
