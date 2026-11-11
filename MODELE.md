@@ -1226,3 +1226,123 @@ ramifications de la fenêtre.
 - **Un calage, pas une calibration** : un seul réglage, l'intervalle, est ajusté ; d'une graine à l'autre, la longueur varie de
   14 % (rapide) et de 9 % (dense).
 - **Le banc ne prédit pas la résistance d'un vrai matériau.**
+
+# Le calcul de raideur : les barres (étape 13, M3)
+
+Cette étape pose un **calcul de raideur d'un réseau de nœuds et de barres articulées**, dans une couche à part
+(`src/systeme.rs`, `src/raideur.rs`), et le vérifie sur des cas d'école dont la réponse est exacte. Elle ne change rien au
+noyau : `croissance.rs`, `simulation.rs`, `substrat.rs`, `voisinage.rs` sont ceux d'avant, et les empreintes de la V0 à M2 sont
+celles du dépôt, à l'octet. Rien n'est relié à la colonie (ce sera l'étape 15). Le réseau est **abstrait** : des nœuds, des
+barres de raideur `EA`, des unités au choix de l'appelant, un calcul linéaire en petits déplacements ; **le banc ne prédit pas la résistance d'un vrai matériau**.
+
+## Les sources, et leur statut
+
+**Lu à la source** : la formule est dans un texte relu. **Dérivé** : calculé à la main, sans source publiée ; chaque valeur
+dérivée a été recalculée en fractions exactes (avec `√2` et `√3` à part), à part du dépôt.
+
+| Quoi | Source | Statut |
+|---|---|---|
+| Raideur d'une barre : `EA/L`, matrice `(EA/L) [[1, −1], [−1, 1]]` | Felippa, *Introduction to Finite Element Methods*, ch. 11, éq. 11.26 ; cours de Kharagpur (NPTEL, *Structural Analysis*, leçon 30, éq. 30.1a) ; MIT 1.050, ch. 5 | **lu à la source** (Kharagpur relu par le juge de l'étape ; les deux autres par ses lecteurs) |
+| Treillis triangulaire de barres articulées : `E* = ρ* Es/3`, `ν* = 1/3`, avec `ρ* = 2√3 t/l` : `E* = (2/√3) EA/l` | MIT 3.054 (Gibson), leçon 4, page 25 : « exact calculation: E = 1.15 Es (t/l) for equilateral triangles » ; Omidi et St-Pierre 2022, *Mater. Des.* 213, tableau 1 | **lu à la source** (MIT relu par le juge ; Omidi par ses lecteurs) ; le lien entre `ρ*` et la barre est calculé |
+| Série (`1/k = 1/k₁ + 1/k₂`), parallèle (`k = k₁ + k₂`), deux barres symétriques, triangle équilatéral, carrés contreventés | aucune source ouverte : des exercices de statique | **dérivé** |
+
+## Ce que fait le code
+
+- **`raideur`** : des `Noeud`s, des `Barre { a, b, ea }`, des `Appui`s (un déplacement imposé sur un axe d'un nœud : zéro pour
+  un appui, non nul pour un bord que l'on pousse), des `Charge`s (des forces aux nœuds). Une barre de longueur `L` et de
+  direction `e = (dx/L, dy/L)` s'allonge de `δ = e·(u_b − u_a)` et porte `N = EA δ/L` (**positif en traction**) ; sa matrice
+  est `(EA/L) g gᵀ` avec `g = (−e, e)`. `resoudre` rend les déplacements, les **réactions** (ce que l'appui exerce sur la
+  structure, `K u − f` aux degrés de liberté imposés), l'effort de chaque barre et l'énergie `½ uᵀ K u`. Une donnée impossible
+  (indice hors limites, longueur nulle, `ea` nul, négatif ou non fini, coordonnée ou valeur non finie, appui répété) rend
+  `DonneeInvalide`.
+- **`systeme`** : une **matrice pleine**, la décomposition de Cholesky, après **mise à l'échelle par la diagonale** (chaque
+  inconnue ramenée à une raideur un). `n³/3` opérations : quelques milliers d'inconnues au plus.
+- Seulement `+ − × ÷` et `sqrt` : le même résultat, bit à bit, sur toutes les machines.
+
+## Les cas d'école
+
+`cargo run --release --example cas_barres` écrit les 45 valeurs (calculée, exacte, erreur relative, statut). La plus grande
+erreur relative est de 1,5e-15 ; les tests demandent 1e-12.
+
+| Cas | Valeurs exactes | Statut |
+|---|---|---|
+| Une barre (`L = 2`, `EA = 3`, tirée de 5) | déplacement `F L/EA = 10/3`, effort 5, réaction −5, énergie 25/3 | lu à la source |
+| Deux barres en série (raideurs 2 et 3/2, tirées de 1) | déplacements 1/2 et 7/6 | dérivé |
+| Deux barres en parallèle (`EA` = 2 et 3, `L = 2`, tirées de 1) | déplacement 2/5, efforts 2/5 et 3/5 | dérivé |
+| Deux barres symétriques 3-4-5 (pieds en (−3, 0) et (3, 0), sommet (0, 4) chargé de (0, −1), `EA = 1`) | effort **−5/8** dans chaque barre, déplacement vertical **−125/32**, horizontal nul, réactions 3/8 et 1/2 | dérivé |
+| Triangle équilatéral de côté 1 (`EA = 1` ; nœud 0 fixe, nœud 1 sur rouleau, sommet tiré de 1 selon `x`) | efforts 1/2 (base), −1, +1 ; réactions −1, −√3/2, +√3/2 ; déplacements 1/2 (rouleau), 9/4 et **−√3/12** (sommet) ; énergie 9/8 | dérivé |
+| Carré de côté 1 et sa diagonale 0-2 (`EA = 1` ; nœud 0 fixe, nœud 1 tenu en `y`, nœud 3 tiré de 1 selon `x`) | diagonale √2, côté 1-2 : −1 ; déplacements `1 + 2√2`, −1, `2 + 2√2` ; énergie `1 + √2` | dérivé |
+| Le même à deux diagonales, nœuds 0 et 1 fixes (hyperstatique) | diagonales `(−4 + 13√2)/23` et `(−4 − 10√2)/23` ; côtés `(−13 + 2√2)/23`, `(10 + 2√2)/23` ; déplacements `(5 + 24√2)/23`, `(−13 + 2√2)/23`, `(18 + 22√2)/23`, `(10 + 2√2)/23` ; énergie `(9 + 11√2)/23` | dérivé |
+| Treillis triangulaire infini (`l = 1`, `EA = 1`) | `E* l/EA = (2/√3)` = 1,1547 ; `ν* = 1/3` | lu à la source |
+
+Le treillis est celui d'un **réseau infini** : on le calcule sur l'étoile d'un nœud libre et de ses six voisins, déplacés de la
+déformation moyenne (chaque barre de l'étoile compte pour moitié). Un test à part prend un morceau fini du treillis, déplace
+son bord d'un champ affine quelconque `u = G x`, et vérifie que l'intérieur suit ce champ et que chaque barre de direction `e`
+porte `EA eᵀ G e` (de 2 à 722 inconnues, à 1e-11 près).
+
+## Le mécanisme : le plus petit mode, pas le plus petit pivot
+
+Un **mécanisme** (un carré sans diagonale, une barre non tenue en travers, trop peu d'appuis, un nœud sans barre) rend la
+matrice singulière : **un système singulier ne rend jamais un nombre**, il rend `Mecanisme`. En `f64`, « singulière » demande
+une mesure et un seuil.
+
+**Le plus petit pivot ne convient pas.** Mesuré par le prototype de l'étape et rejoué par son juge, sur 20 000 grilles de
+barres au hasard par ligne (de 2 × 2 à 6 × 6 nœuds,
+`EA = 10^k`, `k` de 0 au contraste ; valides avec trois appuis, mécanismes avec deux) : le plus petit pivot d'un réseau valide
+descend avec le contraste des raideurs (2e-3 ; 9e-9 à 1e6 ; 1e-11 à 1e9) pendant que celui d'un mécanisme, qui devrait être nul,
+monte avec lui (4e-14 ; 3e-9 à 1e6 ; 5e-7 à 1e9). Ils se croisent vers 1e6 : au-delà, aucun seuil sur le pivot ne sépare un
+réseau valide d'un mécanisme.
+
+**Le plus petit mode convient.** C'est la plus petite valeur propre de la matrice mise à l'échelle, estimée par deux pas
+d'itération inverse (le vecteur de départ pèse chaque inconnue par l'inverse de son pivot). Mesuré sur 2 000 réseaux par ligne
+(les mêmes grilles ; un mécanisme : un appui en moins, ou un nœud de plus pendu à une seule barre) :
+
+| Contraste des raideurs | 1 | 1e4 | 1e6 | 1e8 | 1e9 | 1e10 | 1e11 | 1e12 | 1e15 |
+|---|---|---|---|---|---|---|---|---|---|
+| plus petit mode valide | 1,7e-4 | 1,1e-7 | 3,2e-9 | 2,3e-11 | 6,9e-12 | 7,1e-13 | 2,6e-14 | 8,8e-15 | 0 |
+| plus grand mode de mécanisme | 5,0e-16 | 5,6e-16 | 4,5e-16 | 5,3e-16 | 4,7e-16 | 5,6e-16 | 4,4e-16 | 4,4e-16 | 5,2e-16 |
+
+Le mode d'un mécanisme reste un bruit d'arrondi (au plus 6,2e-16, poutres de l'étape 14 comprises ; au plus 9e-17 pour des grilles
+de 12 × 12 à 28 × 28 nœuds), quel que soit le contraste. **`SEUIL_SINGULIER` = 1e-12** : seize cents fois ce bruit. Un réseau valide est
+accepté tant que son mode dépasse le seuil, et **l'erreur relative de son résultat vaut au plus 2,5e-16 divisé par son mode**
+(mesuré sur deux ressorts en série de raideurs 1 et `r`, `r` de 1 à 1e11, sur des consoles de 1 à 600 poutres et sur le toit
+de l'étape 14 ; ce n'est pas un théorème : les tests permettent dix fois plus) : trois à
+quatre chiffres justes au seuil, sept au moins pour un contraste de 1e6. Un réseau valide refusé (un contraste de plus de 1e10 environ,
+ou plus de 800 poutres alignées bout à bout) est si mal conditionné que le calcul ne le distingue plus d'un mécanisme : le
+refus est alors la réponse honnête.
+
+## Ce que les tests vérifient
+
+- **`etape_13_solveur.rs`** : Cholesky contre une élimination de Gauss écrite à part (200 matrices de 1 à 30 inconnues), le
+  résidu, l'indifférence aux unités (échelles de 1e-6 à 1e6) ; dix matrices singulières écrites à la main et cent au hasard :
+  jamais un nombre ; le plus petit mode (valeurs connues, la mise à l'échelle), le seuil à un facteur 4, l'erreur de deux
+  ressorts en série sous `2,2e-15 / mode` ; les degrés de liberté imposés, les réactions, l'énergie, les paniques.
+- **`etape_13_reseaux.rs`** (cent réseaux au hasard par test, tolérance 2e-11) : la matrice (une barre à la main, symétrique au
+  bit près, assemblée à part, sans force pour une translation ou une rotation d'ensemble) ; `K u = f + R`, l'oracle de Gauss,
+  l'équilibre des forces et des moments, l'effort recalculé, l'énergie de trois façons ; la superposition, la réciprocité de
+  Maxwell, le corps rigide, l'échelle, l'ordre des nœuds et le sens des barres, deux exécutions égales au bit près ; les
+  mécanismes à la main et sur 240 réseaux de contraste 2 à 2e15 (un appui en moins, un nœud pendu) ; les données invalides.
+- **`etape_13_cas.rs`** : les 45 valeurs à 1e-12, leurs statuts, cinq valeurs redites en clair ; le morceau de treillis ; ni
+  fonction interdite ni `HashMap`, le noyau n'importe pas la raideur ; cette section.
+
+## Ce que les tests ne vérifient pas
+
+- Un réseau de plus de 722 inconnues ; un réseau venu d'une colonie ; le temps de calcul.
+- Les valeurs « dérivées » ne sont comparées à aucune publication : elles ont été recalculées en fractions exactes par deux
+  calculs indépendants du code (celui du prototype, celui du juge), c'est tout.
+- Les deux tableaux de mesure ci-dessus viennent des sondes du prototype et du juge (2 000 et 20 000 réseaux par ligne), qui
+  ne sont pas dans le dépôt ; les tests en rejouent 240 réseaux, et les chaînes.
+- Le seuil est mesuré sur des grilles et des chaînes : un réseau d'une autre famille peut avoir un mode plus petit pour un
+  même contraste (il serait refusé, pas faux).
+- Windows : le déterminisme repose sur l'absence de fonction de la bibliothèque mathématique, pas sur un essai des deux machines
+  avant la CI.
+
+## Les limites
+
+- **Un réseau abstrait, pas un matériau** : ni section, ni module, ni rupture, ni flambement ; le banc ne prédit pas la
+  résistance d'un vrai matériau.
+- **Petits déplacements, comportement linéaire** : la raideur est celle de la forme de départ. Un vrai mycélium est humide, mou
+  et non linéaire.
+- **Des barres articulées** : aucune flexion (c'est l'étape 14) ; un réseau peu connecté est un mécanisme.
+- **Une matrice pleine** : mémoire en `n²`, temps en `n³` ; le réseau d'une colonie entière demandera une autre méthode.
+- **Le treillis de la littérature est un réseau infini** ; un morceau fini chargé par ses bords s'en écarte.
