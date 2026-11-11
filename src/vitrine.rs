@@ -48,23 +48,43 @@
 //! est le même, octet pour octet, que celui de l'ancienne lecture (`lire_scenario` puis `Simulation::nouvelle`) :
 //! c'est ce qui garde vraie l'empreinte de référence `references/couplage-graine-1.empreinte`.
 //!
+//! # La densité
+//!
+//! [`mycelium_densite`] et [`mycelium_densite_max`] donnent la carte de densité d'hyphe de l'étape M0
+//! ([`carte_de_densite`], sur les segments de la simulation en cours) : la case `(x, y)` vaut la longueur d'hyphe qui
+//! y passe, et le maximum de la carte met à l'échelle les couleurs de la page. La carte se calcule **une seule fois
+//! après chaque changement** de la simulation (un [`mycelium_demarrer`], un [`mycelium_avancer`] de 1 pas ou plus), à la
+//! première lecture qui le suit, puis elle est gardée jusqu'au changement suivant : lire les `largeur × hauteur`
+//! cases d'une image ne la recalcule pas, et une page qui ne lit jamais la densité n'en paie pas le calcul. Un
+//! [`mycelium_avancer`] de 0 pas ne change rien et garde la carte. Une carte vide (le temps 0, aucun segment) vaut 0.0
+//! partout et son maximum vaut `0.0` : ce n'est pas `NaN`, qui est réservé à « pas de simulation » et à « hors de la
+//! boîte ».
+//!
 //! # Avant tout démarrage
 //!
 //! Tant que [`mycelium_demarrer`] n'a pas été appelé, les fonctions qui rendent un entier rendent 0 et celles qui
 //! rendent un flottant rendent `NaN` ; [`mycelium_avancer`] ne fait rien. Cela vaut aussi pour [`mycelium_duree`],
-//! [`mycelium_nb_obstacles`] et [`mycelium_obstacle`]. Les tests natifs ne le vérifient pas : l'état global est déjà
-//! posé par les autres tests du processus. Un module WebAssembly fraîchement instancié, lui, n'a rien démarré : le
-//! test d'artefact de l'étape 8 le vérifie sur lui.
+//! [`mycelium_nb_obstacles`], [`mycelium_obstacle`], [`mycelium_densite`] et [`mycelium_densite_max`]. Les tests natifs
+//! ne le vérifient pas : l'état global est déjà posé par les autres tests du processus. Un module WebAssembly
+//! fraîchement instancié, lui, n'a rien démarré : les tests d'artefact des étapes 8 et 11 le vérifient sur lui.
 //!
 //! # Hors de portée
 //!
 //! [`mycelium_segment`] rend `NaN` pour un segment ou une coordonnée hors de portée, [`mycelium_obstacle`] pour un
-//! obstacle ou une coordonnée hors de portée, [`mycelium_substrat`] pour une case hors de la boîte, et
-//! [`mycelium_empreinte_mot`] rend 0 pour un mot d'indice 8 ou plus. [`mycelium_choisir_scenario`] rend 0, sans rien
-//! changer, pour un numéro qui n'est pas de 0 à 5.
+//! obstacle ou une coordonnée hors de portée, [`mycelium_substrat`] et [`mycelium_densite`] pour une case hors de la
+//! boîte, et [`mycelium_empreinte_mot`] rend 0 pour un mot d'indice 8 ou plus. [`mycelium_choisir_scenario`] rend 0,
+//! sans rien changer, pour un numéro qui n'est pas de 0 à 5.
+//!
+//! # Aucune panique
+//!
+//! Une panique dans une fonction `extern "C"` fait avorter le processus (le binaire de test, ou le module). Aucune
+//! fonction `mycelium_*` ne doit donc en provoquer : chaque indice est contrôlé avant d'être employé (la carte de
+//! densité se lit par `get`), et [`carte_de_densite`] ne panique pas : elle exige des segments dans
+//! `[0, largeur] × [0, hauteur]`, et la simulation n'en laisse que dans `[0, largeur) × [0, hauteur)`.
 
 use std::sync::{Mutex, MutexGuard};
 
+use crate::piece::{Carte, carte_de_densite};
 use crate::simulation::{Simulation, lire_scenario_tropismes};
 
 /// Les six scénarios de la vitrine, dans l'ordre de leurs numéros (0 à 5), embarqués dans le module.
@@ -79,8 +99,15 @@ const SCENARIOS: [&str; 6] = [
     include_str!("../scenarios/mur-sans.txt"),
 ];
 
-/// Ce que la vitrine retient entre deux appels : la simulation en cours, sa durée, et le scénario du prochain
-/// démarrage.
+/// La carte de densité d'hyphe de la simulation en cours, et son maximum.
+struct Densite {
+    carte: Carte,
+    /// La plus grande case de la carte ; `0.0` pour une carte vide (aucun segment).
+    maximum: f64,
+}
+
+/// Ce que la vitrine retient entre deux appels : la simulation en cours, sa durée, le scénario du prochain démarrage,
+/// et la carte de densité de la simulation en cours.
 struct Vitrine {
     /// La simulation en cours, ou `None` tant que [`mycelium_demarrer`] n'a pas été appelé.
     simulation: Option<Simulation>,
@@ -89,10 +116,14 @@ struct Vitrine {
     duree: u32,
     /// L'indice, dans [`SCENARIOS`], du scénario que construira le prochain [`mycelium_demarrer`] ; 0 au départ.
     choix: usize,
+    /// La carte de densité de la simulation en cours, ou `None` tant qu'elle n'est pas calculée depuis le dernier
+    /// changement de la simulation : [`mycelium_demarrer`] et un [`mycelium_avancer`] de 1 pas ou plus la remettent à
+    /// `None`, [`densite_a_jour`] la calcule.
+    densite: Option<Densite>,
 }
 
 /// L'état global de la vitrine.
-static VITRINE: Mutex<Vitrine> = Mutex::new(Vitrine { simulation: None, duree: 0, choix: 0 });
+static VITRINE: Mutex<Vitrine> = Mutex::new(Vitrine { simulation: None, duree: 0, choix: 0, densite: None });
 
 /// Prend le verrou de l'état global ; un appel qui a paniqué en le tenant ne bloque pas les suivants.
 fn verrou() -> MutexGuard<'static, Vitrine> {
@@ -127,13 +158,21 @@ pub extern "C" fn mycelium_demarrer(graine: u32) {
         .expect("les réglages, le milieu et les tropismes sont valides");
     vitrine.simulation = Some(simulation);
     vitrine.duree = duree;
+    vitrine.densite = None;
 }
 
 /// Avance la simulation de `n` pas de temps ; sans effet si `n` vaut 0 ou si rien n'est démarré.
+///
+/// Un `n` de 1 ou plus rend périmée la carte de densité gardée : la prochaine lecture la recalcule.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_avancer(n: u32) {
-    if let Some(simulation) = verrou().simulation.as_mut() {
+    let mut vitrine = verrou();
+    let Vitrine { simulation, densite, .. } = &mut *vitrine;
+    if let Some(simulation) = simulation.as_mut() {
         simulation.avancer_n(n);
+        if n > 0 {
+            *densite = None;
+        }
     }
 }
 
@@ -202,28 +241,49 @@ pub extern "C" fn mycelium_substrat(x: u32, y: u32) -> f64 {
     substrat.valeur(x, y)
 }
 
+/// La carte de densité de la simulation en cours : celle qui est gardée, ou, à la première lecture qui suit un
+/// changement de la simulation, celle qu'on calcule maintenant puis garde. `None` avant tout démarrage.
+fn densite_a_jour(vitrine: &mut Vitrine) -> Option<&Densite> {
+    if vitrine.densite.is_none() {
+        let simulation = vitrine.simulation.as_ref()?;
+        let substrat = simulation.substrat();
+        let carte = carte_de_densite(substrat.largeur(), substrat.hauteur(), simulation.segments());
+        let mut maximum = 0.0f64;
+        for &valeur in carte.valeurs() {
+            maximum = maximum.max(valeur);
+        }
+        vitrine.densite = Some(Densite { carte, maximum });
+    }
+    vitrine.densite.as_ref()
+}
+
 /// La densité d'hyphe de la case `(x, y)` : la somme des longueurs des morceaux de segment qui y passent, comme la
-/// carte de densité de l'étape M0 (`piece::carte_de_densite`). Une case sans hyphe, ou bloquée par un obstacle, vaut `0.0`.
+/// carte de densité de l'étape M0 ([`carte_de_densite`]). Une case sans hyphe, ou bloquée par un obstacle, vaut `0.0`.
 ///
-/// Rend `NaN` si la case est hors de la boîte, et avant tout démarrage.
-///
-/// **Bouchon de l'étape 11** (la vague des tests) : rend toujours `-1.0`, une valeur fausse, sans jamais paniquer. La vague
-/// du code le remplace.
+/// Rend `NaN` si la case est hors de la boîte, et avant tout démarrage. Voir « La densité » dans la doc du module.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_densite(x: u32, y: u32) -> f64 {
-    let _ = (x, y);
-    -1.0
+    let mut vitrine = verrou();
+    let Some(densite) = densite_a_jour(&mut vitrine) else {
+        return f64::NAN;
+    };
+    let (largeur, hauteur) = (densite.carte.largeur(), densite.carte.hauteur());
+    let (x, y) = (x as usize, y as usize);
+    // Le contrôle porte sur chaque coordonnée : un `x` trop grand ne glisse pas sur la ligne suivante.
+    if x >= largeur || y >= hauteur {
+        return f64::NAN;
+    }
+    densite.carte.valeurs().get(y * largeur + x).copied().unwrap_or(f64::NAN)
 }
 
 /// La plus grande densité de la carte, celle qui met à l'échelle les couleurs de la page.
 ///
-/// Rend `0.0` pour une carte vide (aucun segment : le temps 0) et `NaN` avant tout démarrage.
-///
-/// **Bouchon de l'étape 11** (la vague des tests) : rend toujours `-1.0`, une valeur fausse, sans jamais paniquer. La vague
-/// du code le remplace.
+/// Rend `0.0` pour une carte vide (aucun segment : le temps 0) et `NaN` avant tout démarrage. Voir « La densité » dans
+/// la doc du module.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_densite_max() -> f64 {
-    -1.0
+    let mut vitrine = verrou();
+    densite_a_jour(&mut vitrine).map_or(f64::NAN, |densite| densite.maximum)
 }
 
 /// Le nombre d'obstacles du milieu de la simulation en cours ; 0 avant tout démarrage.
