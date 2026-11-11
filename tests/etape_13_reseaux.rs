@@ -2,7 +2,7 @@
 //! énergie, superposition, réciprocité, corps rigide, échelle, ordre), les mécanismes et les données invalides.
 //!
 //! La tolérance des invariants vient de la mesure : sur ces réseaux (des grilles de 2 × 2 à 5 × 5 nœuds, `EA` de 1 à 2),
-//! le plus grand écart est de l'ordre de 1e-13 ; une erreur de formule fait des écarts de 1e-3 à 1.
+//! le plus grand écart mesuré est de 5e-13 (le plus souvent bien moins) ; une erreur de formule fait des écarts de 1e-3 à 1.
 
 #[path = "etape_13/outils.rs"]
 mod outils;
@@ -162,7 +162,10 @@ fn la_superposition_la_reciprocite_le_corps_rigide_l_echelle_et_l_ordre() {
         assert!(ecart(&ensemble.efforts, &somme(&s.efforts, &seule.efforts)) < TOLERANCE, "essai {essai}");
         assert!(ecart(&ensemble.reactions, &somme(&s.reactions, &seule.reactions)) < TOLERANCE, "essai {essai}");
         // Réciprocité de Maxwell : le déplacement en i dû à une force 1 en j égale celui en j dû à une force 1 en i.
-        let (i, j) = (2 + h.jusqu_a(2 * n - 2), 2 + h.jusqu_a(2 * n - 2));
+        // i et j sont deux degrés de liberté libres et différents (les appuis sont les degrés de liberté 0, 1 et 3).
+        let libres: Vec<usize> = (2..2 * n).filter(|&d| d != 3).collect();
+        let (m, rang) = (libres.len(), h.jusqu_a(libres.len()));
+        let (i, j) = (libres[rang], libres[(rang + 1 + h.jusqu_a(m - 1)) % m]);
         let unite =
             |ddl: usize| resolu(&noeuds, &barres, &appuis, &[Charge { noeud: ddl / 2, axe: ddl % 2, valeur: 1.0 }]);
         assert!(
@@ -233,8 +236,10 @@ fn un_mecanisme_ne_rend_jamais_un_nombre_quel_que_soit_le_contraste_des_raideurs
             let s =
                 resoudre(&carre, &contrevente, &pieds, &charge).unwrap_or_else(|_| panic!("diagonale {diagonale:e}"));
             // La statique : la diagonale porte √2, le côté 1-2 porte −1 (les pieds sont fixes, le côté 3-0 ne porte rien).
+            // Tolérance 1e-5 : l'erreur d'un système mal conditionné vaut au plus 2,2e-15 / mode, et le mode de la partie libre
+            // est de 1,8e-10 quand la diagonale est un milliard de fois plus molle (mesuré : 8e-7, soit une marge de 12).
             assert!(
-                (s.efforts[4] - 2.0_f64.sqrt()).abs() < 1e-6 && (s.efforts[1] + 1.0).abs() < 1e-6,
+                (s.efforts[4] - 2.0_f64.sqrt()).abs() < 1e-5 && (s.efforts[1] + 1.0).abs() < 1e-5,
                 "{diagonale:e} : {:?}",
                 s.efforts
             );
@@ -251,7 +256,7 @@ fn un_mecanisme_ne_rend_jamais_un_nombre_quel_que_soit_le_contraste_des_raideurs
     assert_eq!(resoudre(&ligne, &[b(0, 1, 1.0), b(1, 2, 1.0)], &bouts, &[]), Err(ErreurRaideur::Mecanisme));
     assert_eq!(resoudre(&ligne, &[b(0, 2, 1.0)], &bouts, &[]), Err(ErreurRaideur::Mecanisme));
     assert_eq!(resoudre(&carre, &[cotes(1.0), vec![b(0, 2, 1.0)]].concat(), &[], &[]), Err(ErreurRaideur::Mecanisme));
-    // Des réseaux au hasard, de raideurs toutes proches (contraste 2) ou très différentes (jusqu'à 2e12) : sans un de
+    // Des réseaux au hasard, de raideurs toutes proches (contraste 2) ou très différentes (jusqu'à 2e15) : sans un de
     // ses trois appuis, le réseau tourne ; avec un nœud de plus pendu à une seule barre, ce nœud balance. Jamais de
     // nombre. Avec ses trois appuis, le réseau se résout tant que le contraste ne dépasse pas 2e6.
     let mut h = Hasard(134);

@@ -6,7 +6,7 @@ mod exemple;
 
 use mycelium_lab::raideur::{Appui, Barre, Noeud, resoudre};
 
-/// La tolérance des cas d'école : la plus grande erreur mesurée est de 2e-15 ; une erreur de formule fait 1e-2 à 1.
+/// La tolérance des cas d'école : la plus grande erreur mesurée est de 1,5e-15 ; une erreur de formule fait 1e-2 à 1.
 const TOLERANCE: f64 = 1e-12;
 
 fn lire(chemin: &str) -> String {
@@ -44,10 +44,12 @@ fn les_valeurs_exactes_des_cas_d_ecole_sont_retrouvees() {
     let tableau = exemple::tableau(&cas);
     assert_eq!(tableau.lines().count(), 46);
     assert!(tableau.lines().all(|ligne| ligne.split(" | ").count() == 5), "{tableau}");
-    assert!(
-        tableau.contains("deux barres : effort de la première | -6.250000000000000e-1 | -6.250000000000000e-1 | "),
-        "{tableau}"
-    );
+    // Une ligne, ses colonnes (cas | calculé | exact | …) : le calculé se compare à 1e-12 près, le format se fige sur l'exact.
+    let ligne =
+        tableau.lines().find(|l| l.starts_with("deux barres : effort de la première | ")).expect("la ligne du cas");
+    let colonnes: Vec<&str> = ligne.split(" | ").collect();
+    assert_eq!(colonnes[2], "-6.250000000000000e-1", "{tableau}");
+    assert!((colonnes[1].parse::<f64>().expect("un nombre") + 0.625).abs() < TOLERANCE, "{tableau}");
 }
 
 /// Un morceau de treillis triangulaire : les nœuds `(i, j)`, `0 ≤ i, j ≤ cote`, en `(i + j/2, j √3/2)`, et les barres
