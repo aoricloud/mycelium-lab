@@ -1007,3 +1007,67 @@ graines 1 à 10, et de 61 à 71 sur 30 graines. Les aperçus `apercus/etape-10-l
 - Le temps de sortie compte la **fin d'un segment** dans le rectangle : une hyphe qui traverse la chambre sans y finir un
   pas n'est pas comptée ; avec une chambre de 9 cases et un pas de 0,909, le cas ne s'est pas présenté sur 30 graines.
 - Rien n'a été vérifié sous Linux par le juge (le dépôt le fait par sa CI).
+
+# La carte de densité sur la page (étape 11)
+
+Cette étape **montre** : elle ne change rien à la simulation ni au calcul de la carte. La vitrine apprend à dessiner la carte de
+densité de M0 (`piece::carte_de_densite`) à la place du substrat, quand on coche la case « Densité ». Le noyau, le binaire
+`mycelium` et les empreintes de la V0, de T0 à T4, de M0 et de M1 restent ceux du dépôt, à l'octet.
+
+## Ce que fait le code
+
+**Deux exportations de plus** dans `src/vitrine.rs` (18 en tout). `mycelium_densite(x, y)` rend la longueur d'hyphe de la case
+`(x, y)` de la simulation en cours, la même au bit près que `piece::carte_de_densite` ; `mycelium_densite_max()` rend la plus
+grande case, la même que `densite_maximale` de `piece::mesurer`. Hors de la boîte, et avant tout démarrage, elles rendent
+`NaN` ; une carte vide (le temps 0) vaut 0.0 partout et son maximum vaut 0.0.
+
+**La carte en cache.** La carte est gardée dans l'état de la vitrine. Un démarrage ou un pas de temps la rend périmée ; elle se
+recalcule à la première lecture qui suit, puis sert à toutes les lectures jusqu'au changement suivant : la page lit jusqu'à
+161 × 161 cases par image sans la recalculer, et une page qui ne coche jamais la case ne la calcule jamais. `avancer(0)` et le
+choix d'un scénario ne la touchent pas.
+
+**La rampe.** Cochée, la page peint une case par pixel d'une couche qu'elle agrandit sans lissage (des carrés nets, comme
+`densite.png`). Une case sans hyphe a la couleur du fond (16, 16, 24) ; une case où passe de l'hyphe a le niveau
+`n = ⌊√min(d / dmax, 1) × 255⌋` puis, canal par canal, `violet + (jaune − violet) × n / 255` en entiers arrondis vers zéro, du
+violet (70, 20, 110) au jaune (255, 240, 90) : la rampe de `couleur_de_densite` dans `examples/mesure_piece.rs`. La racine
+étire les faibles densités : une colonie paraît surtout rose-violet, avec du jaune aux carrefours et le long des murs. Les
+obstacles restent dessinés comme sur la page (ardoise et liseré clair, pas le gris de `densite.png`) ; il n'y a ni substrat,
+ni vignettage, ni tracé des hyphes ; le cadre ne change pas.
+
+**La légende.** « Densité d'hyphe : peu [une barre du violet au jaune] beaucoup » se montre avec la carte ; les légendes du
+substrat et de la tache se cachent, puisque le substrat n'est plus dessiné, et reviennent à la décoche. La barre est un dégradé
+linéaire entre les deux bouts de la rampe : linéaire en niveau, pas en densité.
+
+## Ce que les tests vérifient
+
+- **La carte du module est celle de M0**, case par case et bit à bit, en natif (six scénarios, cinq graines, cinq moments, une
+  colonie suivie jusqu'à la fin de sa croissance) et sous Node avec le vrai module (six scénarios, trois graines, des pas
+  hachés), avec son maximum ; la somme des cases est la biomasse ; les cases des murs valent zéro ; `NaN` hors de la boîte, y
+  compris pour une ligne qui, en WebAssembly 32 bits, reviendrait dans la carte si elle n'était pas contrôlée.
+- **Le cache** : la carte change après un pas, pas après `avancer(0)` ; un démarrage la vide ; l'ordre des lectures n'y fait rien.
+- **Le module** : exactement 18 exportations et leurs signatures, aucune importation.
+- **La page**, jouée dans un faux navigateur avec le vrai module : décochée, elle ne lit jamais la densité et dessine exactement
+  comme avant ; cochée, sa couche est la carte du module sur la rampe, pixel par pixel (douze couches recalculées en Rust avec
+  `piece` et une rampe écrite à part), lue une fois par image, sans lissage, sans hyphe ni vignettage, avec les murs d'avant ;
+  elle suit la marche, la pause, le pas de référence, le changement de scénario, « Relancer », une adresse changée et la fin
+  de la croissance ; les légendes disent ce qui est dessiné.
+- 18 tests ; un juge a joué 158 fautes volontaires dans le code, le module, la page et les scripts : 138 sont tuées ; des 20
+  autres, 17 sont sans effet observable (chacune classée avec sa raison, trois ne le sont que parce que les six boîtes sont
+  carrées), 2 ne le sont que sur les colonies jouées (la case la plus dense n'est jamais un coin), et 1 affaiblit un script
+  de test sans changer ce qu'il écrit.
+
+Ce que les tests **ne** vérifient **pas** : que la carte se calcule à la demande plutôt que tout de suite (les valeurs sont les
+mêmes) ; la page dans un vrai navigateur (un faux navigateur seulement : la règle CSS qui cache une légende, les couleurs à
+l'écran, le temps d'une image) ; des boîtes non carrées (les six scénarios sont carrés).
+
+## Les limites
+
+- La densité est une **longueur d'hyphe par case**, pas une masse, une épaisseur ni une porosité (voir M0).
+- **L'échelle suit le maximum du moment** : le jaune est la case la plus dense de l'image affichée. Deux images (deux pas, deux
+  graines, deux scénarios) ne se comparent donc pas entre elles par leurs couleurs : un même jaune peut valoir 3 ou 300
+  longueurs d'hyphe.
+- La racine de la rampe étire les faibles densités : la carte dit où passe l'hyphe plus qu'elle ne mesure.
+- La page n'est éprouvée que dans un **faux navigateur** (le juge l'a aussi rendue une fois dans un vrai moteur, Chromium) ;
+  Firefox et Safari n'ont pas été essayés.
+- Lire 25 921 cases par image coûte environ 2 ms sous Node (mesure du prototype) ; le temps réel d'une image dans un navigateur
+  n'a pas été mesuré.

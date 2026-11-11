@@ -9,6 +9,9 @@
   Le scénario et la graine se lisent dans l'adresse de la page (`#scenario=<nom>&graine=<n>`, voir
   adresse.js) et s'y réécrivent à chaque démarrage : une adresse recopiée rejoue la même colonie.
 
+  La case « Densité » change le dessin : la colonie se dessine comme la carte de densité d'hyphe de l'étape M0
+  (`densite.png`), du violet (peu) au jaune (beaucoup), que le module calcule (mycelium_densite).
+
   Aucune ressource externe : pas de police, pas d'image, pas de bibliothèque. Le rendu est fait
   avec le contexte 2D du canvas ; la simulation est le module lui-même.
 
@@ -52,6 +55,13 @@ const EXCEDENT_PLEIN = 4;
 const COULEUR_OBSTACLE = "#5b6b73";
 const COULEUR_LISERE_OBSTACLE = "#9fb0b8";
 
+// La carte de densité a les couleurs de `densite.png` (examples/mesure_piece.rs) : une case sans hyphe a la couleur
+// du fond ; une case où passe de l'hyphe suit une rampe du violet (peu) au jaune (la densité maximale de la carte),
+// canal par canal, selon la racine du rapport de sa densité au maximum.
+const FOND_DENSITE = [16, 16, 24];
+const RAMPE_SOMBRE = [70, 20, 110];
+const RAMPE_CLAIRE = [255, 240, 90];
+
 // Périodes de rafraîchissement, en images affichées (et non en pas de simulation).
 const IMAGES_PAR_SUBSTRAT = 4;
 const IMAGES_PAR_EMPREINTE = 90;
@@ -62,8 +72,10 @@ const contexte = canvas.getContext("2d");
 
 const selecteur = document.getElementById("scenario");
 const descriptionScenario = document.getElementById("description-scenario");
+const legendeSubstrat = document.getElementById("legende-substrat");
 const legendeObstacle = document.getElementById("legende-obstacle");
 const legendeTache = document.getElementById("legende-tache");
+const legendeDensite = document.getElementById("legende-densite");
 
 const champGraine = document.getElementById("graine");
 const boutonHasard = document.getElementById("hasard");
@@ -72,6 +84,7 @@ const boutonPause = document.getElementById("pause");
 const boutonPasReference = document.getElementById("pas-reference");
 const curseurVitesse = document.getElementById("vitesse");
 const sortieVitesse = document.getElementById("vitesse-valeur");
+const caseDensite = document.getElementById("densite");
 
 const message = document.getElementById("message");
 const etat = document.getElementById("etat");
@@ -321,6 +334,26 @@ curseurVitesse.addEventListener("input", () => {
   sortieVitesse.textContent = String(vitesse());
 });
 
+// Les légendes suivent le dessin. Case « Densité » cochée : celle de la densité se montre, celles du substrat et de la
+// tache se cachent (le substrat n'est plus dessiné) ; celle des obstacles ne change pas (ils restent dessinés).
+// Décochée : celle du substrat revient, et celle de la tache est remise par dessinerSubstrat, qui sait si le substrat a
+// une tache (dessinerDensite laisse la couche à repeindre).
+function montrerLesLegendes() {
+  const enDensite = caseDensite.checked;
+  legendeDensite.hidden = !enDensite;
+  legendeSubstrat.hidden = enDensite;
+  if (enDensite) {
+    legendeTache.hidden = true;
+  }
+}
+
+// La case « Densité » : les légendes suivent, et l'image est refaite tout de suite (en pause, rien d'autre ne la
+// referait).
+caseDensite.addEventListener("change", () => {
+  montrerLesLegendes();
+  dessiner();
+});
+
 // ---------------------------------------------------------------------------------------------
 // La boucle : une image de navigateur, un ou plusieurs pas de simulation
 // ---------------------------------------------------------------------------------------------
@@ -485,6 +518,41 @@ function dessinerSubstrat() {
   legendeTache.hidden = !aUneTache;
 }
 
+// Peint la carte de densité dans la couche hors écran, une case par pixel, comme `densite.png` de M0 : une case sans
+// hyphe a la couleur du fond, une case où passe de l'hyphe suit la rampe, la densité maximale de la carte tout en haut.
+// Les cases des obstacles n'ont pas d'hyphe : elles sont peintes comme le fond, et les obstacles se dessinent par-dessus.
+// La couche ne tient plus le substrat : il est à repeindre.
+function dessinerDensite() {
+  const dimensions = preparerSubstrat();
+  if (dimensions === null) {
+    return;
+  }
+  const { largeur, hauteur } = dimensions;
+  // Le maximum se lit une fois par image, la carte case par case : le module garde la carte, il ne la recalcule pas.
+  const maximum = module.mycelium_densite_max();
+  const pixels = pixelsSubstrat.data;
+  let i = 0;
+  for (let y = 0; y < hauteur; y += 1) {
+    for (let x = 0; x < largeur; x += 1) {
+      const densite = module.mycelium_densite(x, y);
+      // Le niveau de la rampe, de 0 à 255 ; -1 pour une case sans hyphe (ou `NaN`, qui n'est pas > 0). Une case > 0
+      // garantit un maximum > 0 : on ne divise jamais par 0.
+      const niveau = densite > 0 ? Math.trunc(Math.sqrt(Math.min(densite / maximum, 1)) * 255) : -1;
+      for (let canal = 0; canal < 3; canal += 1) {
+        // `Math.trunc` : la division entière de Rust, qui arrondit vers zéro (le canal bleu descend de 110 à 90).
+        pixels[i + canal] =
+          niveau < 0
+            ? FOND_DENSITE[canal]
+            : RAMPE_SOMBRE[canal] + Math.trunc(((RAMPE_CLAIRE[canal] - RAMPE_SOMBRE[canal]) * niveau) / 255);
+      }
+      pixels[i + 3] = 255;
+      i += 4;
+    }
+  }
+  contexteSubstrat.putImageData(pixelsSubstrat, 0, 0);
+  substratAJour = false;
+}
+
 // Dessine les obstacles du milieu : chacun est un rectangle de cases dont les deux bords sont inclus, donc
 // de x0 à x1 inclus il couvre (x1 - x0 + 1) cases, et de même en hauteur. Le liseré est tracé à l'intérieur de
 // ces cases, pour que l'obstacle n'en déborde pas.
@@ -626,25 +694,35 @@ function dessiner() {
   cheminRectangleArrondi(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins);
   contexte.clip();
 
-  if (!substratAJour) {
+  // Avec la case « Densité », la carte de densité prend la place du substrat, de son vignettage et des hyphes.
+  const enDensite = caseDensite.checked;
+  if (enDensite) {
+    dessinerDensite();
+  } else if (!substratAJour) {
     dessinerSubstrat();
     substratAJour = true;
   }
-  contexte.imageSmoothingEnabled = true;
+  // Le substrat s'agrandit en dégradés doux ; les cases de la densité restent de petits carrés nets, comme dans
+  // `densite.png`.
+  contexte.imageSmoothingEnabled = !enDensite;
   contexte.drawImage(coucheSubstrat, origineX, origineY, largeurBoite, hauteurBoite);
 
-  // Un vignettage qui éteint doucement les bords de la boîte carrée.
-  const rayonVignette = Math.hypot(largeurBoite, hauteurBoite) / 2;
-  const vignette = contexte.createRadialGradient(cx, cy, rayonVignette * 0.45, cx, cy, rayonVignette);
-  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vignette.addColorStop(1, "rgba(0, 0, 0, 0.58)");
-  contexte.fillStyle = vignette;
-  contexte.fillRect(origineX, origineY, largeurBoite, hauteurBoite);
+  if (!enDensite) {
+    // Un vignettage qui éteint doucement les bords de la boîte carrée.
+    const rayonVignette = Math.hypot(largeurBoite, hauteurBoite) / 2;
+    const vignette = contexte.createRadialGradient(cx, cy, rayonVignette * 0.45, cx, cy, rayonVignette);
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.58)");
+    contexte.fillStyle = vignette;
+    contexte.fillRect(origineX, origineY, largeurBoite, hauteurBoite);
+  }
 
   // Les obstacles viennent après le substrat et son vignettage (leur teinte ne s'assombrit pas vers les bords),
-  // et avant les hyphes, qui se tracent par-dessus.
+  // et avant les hyphes, qui se tracent par-dessus ; en densité, ils se dessinent comme d'habitude, sans hyphes.
   dessinerObstacles(origineX, origineY, echelle);
-  dessinerHyphes(origineX, origineY, echelle);
+  if (!enDensite) {
+    dessinerHyphes(origineX, origineY, echelle);
+  }
   contexte.restore();
 
   dessinerBord(origineX, origineY, largeurBoite, hauteurBoite, rayonCoins, cote);
@@ -655,7 +733,9 @@ function dessiner() {
 // ---------------------------------------------------------------------------------------------
 
 // Le menu et le champ disent d'abord ce que l'adresse demande ; la colonie démarre dessus quand le module est là.
+// La case « Densité » peut arriver cochée (un navigateur restitue les cases au rechargement) : les légendes suivent.
 appliquerAdresse();
+montrerLesLegendes();
 ajusterTaille();
 window.addEventListener("resize", ajusterTaille);
 if (typeof ResizeObserver === "function") {
