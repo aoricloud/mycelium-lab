@@ -1354,3 +1354,130 @@ refus est alors la réponse honnête.
 - **Des barres articulées** : aucune flexion (c'est l'étape 14) ; un réseau peu connecté est un mécanisme.
 - **Une matrice pleine** : mémoire en `n²`, temps en `n³` ; le réseau d'une colonie entière demandera une autre méthode.
 - **Le treillis de la littérature est un réseau infini** ; un morceau fini chargé par ses bords s'en écarte.
+
+# Les poutres (étape 14, M3)
+
+Cette étape ajoute au calcul de raideur les **poutres à nœuds rigides** (`src/poutres.rs`) : une poutre s'étire (`EA`) **et
+fléchit** (`EI`), et un nœud a une rotation que ses poutres partagent. Le solveur est celui de l'étape 13 ; le noyau ne change
+pas, et rien n'est relié à la colonie. C'est le modèle d'**Euler-Bernoulli**, linéaire, en petits déplacements, sur un réseau
+abstrait : **le banc ne prédit pas la résistance d'un vrai matériau**.
+
+## Les sources, et leur statut
+
+Les statuts sont ceux de l'étape 13 : **lu à la source**, ou **dérivé** (calculé à la main, recalculé en fractions exactes à
+part du dépôt).
+
+| Quoi | Source | Statut |
+|---|---|---|
+| La matrice 6 × 6 de la poutre (ordre `u₁, v₁, θ₁, u₂, v₂, θ₂`) et sa rotation `K = Tᵀ k T` | cours de Kharagpur (NPTEL, *Structural Analysis*, leçon 30 : éq. 30.1a, 30.2 à 30.4, 30.10, et les nombres de l'exemple 30.1) ; MIT 13.122, notes 36 (le bloc 4 × 4 de flexion) ; Politechnika Warszawska FEM1 10B ; CALFEM `beam1e` | **lu à la source** (Kharagpur et MIT relus par le juge de l'étape ; les deux autres par ses lecteurs) |
+| La rotation `θ = dv/dx`, positive dans le sens **anti-horaire** | Kharagpur, leçon 27, § 27.2 : les moments et les rotations sont positifs dans le sens anti-horaire | **lu à la source** (relu par le juge) |
+| Console : flèche `P L³/(3 EI)`, rotation `P L²/(2 EI)` ; charge répartie : `q L⁴/(8 EI)`, `q L³/(6 EI)` | MIT 1.050 (Bucciarelli), ch. 10, p. 268 ; Felippa, ex. 12.1 | **lu à la source** (par les lecteurs ; non relu par le juge) |
+| Poutre sur deux appuis, charge au milieu : `P L³/(48 EI)` | Roylance, MIT 3.11, éq. 7 | **lu à la source** (par les lecteurs ; non relu par le juge) |
+| Poutre encastrée aux deux bouts : moments `P a b²/L²` et `P a² b/L²`, donc `P L/8` pour une charge au milieu | Kharagpur, leçon 27, éq. 27.8 | **lu à la source** (relu par le juge) |
+| Poutre encastrée aux deux bouts : flèche `P L³/(192 EI)` | aucun texte ouvert | **dérivé** |
+| Nid d'abeille, flexion seule : `E₁* = E₂* = (4/√3) (t/l)³ Es = 2,31 (t/l)³ Es`, `ν* = 1` ; hypothèses : `t/l` petit, étirement et cisaillement des parois négligés | MIT 3.054 (Gibson), leçon 4, pages 8, 11, 12 et 15 | **lu à la source** (relu par le juge, sur le texte du PDF) |
+| Nid d'abeille, avec l'étirement des parois : `E* = (4/√3) (t/l)³ Es / (1 + 3 (t/l)²)`, `ν* = (1 − (t/l)²)/(1 + 3 (t/l)²)` | aucune source lue ne l'écrit ainsi (Pham et Hütter 2021 donnent le coefficient 3, de seconde main) | **dérivé** (trois calculs en fractions exactes dans ℚ(√3) : un vérificateur, le prototype, le juge) |
+| Portiques, toit en poutres, moment au bout | aucune source | **dérivé** |
+
+## Ce que fait le code
+
+- Trois degrés de liberté par nœud, `[u, v, θ]` : l'axe 2 d'un `Appui` est la rotation, celui d'une `Charge` un **moment**
+  (anti-horaire positif). `Poutre { a, b, ea, ei }` : `ea` et `ei` strictement positifs (sans flexion, c'est une barre).
+- La matrice de la poutre dans son repère, avec `a = EA/L` et `b = EI/L³` : `a` et `−a` pour l'étirement ; `12b`, `6bL`,
+  `4bL²`, `2bL²` pour la flexion (le tableau complet est dans `src/poutres.rs`). Dans le repère du réseau : `K = Tᵀ k T`,
+  `T = diag(R, R)`, `R = [[c, s, 0], [−s, c, 0], [0, 0, 1]]`, où `c = dx/L` et `s = dy/L` : aucune fonction trigonométrique.
+- `resoudre` rend les déplacements, les réactions (forces et moments), l'énergie, et pour chaque poutre ses six **efforts
+  d'extrémité** dans son repère, `[N_a, V_a, M_a, N_b, V_b, M_b]` : ce que les nœuds exercent sur elle ; `N_b` est l'effort
+  normal, positif en traction. Une console encastrée en `a` et chargée de `P` en travers au bout a `[0, −P, −P L, 0, P, 0]`.
+- **La solution est exacte aux nœuds** pour une rigidité constante par poutre et des charges aux nœuds (la flèche exacte est
+  un polynôme de degré trois) : une seule poutre suffit pour une console, mais il faut **un nœud à chaque charge** ; une
+  charge répartie se donne par ses charges nodales cohérentes (`q L/2` et `± q L²/12`).
+
+## Les cas d'école
+
+`cargo run --release --example cas_poutres` écrit les 61 valeurs. La plus grande erreur relative est de 3e-15, sauf le module
+du nid d'abeille (1,1e-13 à `t/l` = 0,02 : il sort d'une soustraction qui perd `1/(4 (t/l)²)`) ; les tests demandent 2e-12.
+Partout `EA = 5` et `EI = 3`, sauf mention.
+
+| Cas | Valeurs exactes | Statut |
+|---|---|---|
+| Console (`L = 2`, `P = 7` au bout) | flèche `P L³/(3 EI)` = 56/9, rotation `P L²/(2 EI)` = 14/3 | lu à la source |
+| | moment d'encastrement `P L` = 14, efforts `[0, −7, −14, 0, 7, 0]`, énergie 196/9 ; dressée vers le haut et poussée vers la gauche : la même, rotation **positive** | dérivé |
+| Console étirée de 7 | allongement `F L/EA` = 14/5, effort normal 7 | lu à la source |
+| Console, moment 7 au bout | flèche `M L²/(2 EI)` = 14/3, rotation `M L/EI` = 14/3 | dérivé |
+| Console, charge répartie `q = 7` | flèche `q L⁴/(8 EI)` = 14/3, rotation `q L³/(6 EI)` = 28/9 | lu à la source |
+| Poutre sur deux appuis (`L = 4`, `P = 7` au milieu) | flèche `P L³/(48 EI)` = 28/9 | lu à la source |
+| | rotation des appuis `P L²/(16 EI)` = 7/3, moment au milieu `P L/4` = 7 | dérivé |
+| Poutre encastrée aux deux bouts (`L = 4`, `P = 7` au milieu) | moments d'encastrement `P L/8` = 7/2 | lu à la source |
+| | flèche `P L³/(192 EI)` = 7/9, énergie 49/18 | dérivé |
+| La même, la charge au quart (`a = 1`, `b = 3`) | moments `P a b²/L²` = 63/16 et `P a² b/L²` = 21/16 | lu à la source |
+| | flèche `P a³ b³/(3 EI L³)` = 21/64, réaction 189/32 | dérivé |
+| Poutre sur deux appuis (`L = 3`, `EI = 1`), moment 2 à un bout | rotations `M L/(3 EI)` = 2 et −1 : **ce n'est pas un mécanisme** | dérivé |
+| Portique en L (montant de 3, traverse de 4, bout chargé de 7) | coin : 42, −21/5, rotation −28 ; bout : −7469/45, rotation −140/3 ; moment d'encastrement 28 ; énergie 52283/90 | dérivé |
+| Portique à deux montants (3, 4, 3 ; pieds encastrés ; poussé de 7) | nœud poussé : 298137/50635, 567/494, −371427/202540 ; moments aux pieds 821121/101270 et 530649/101270 ; énergie 2086959/101270 | dérivé |
+| Toit 3-4-5 de l'étape 13, en poutres (`EA = EI = 1`, pieds articulés) | flèche −3125/854, effort −250/427 | dérivé |
+| Nid d'abeille infini, `t/l` = 0,02 ; 0,1 ; 0,3 | `E*/Es = (4/√3) (t/l)³ / (1 + 3 (t/l)²)`, `ν* = (1 − (t/l)²)/(1 + 3 (t/l)²)` | dérivé |
+
+**Une poutre très souple en flexion rend les barres ; une poutre très raide ne les rend pas.** Le toit 3-4-5 a, en barres, une
+flèche de −125/32 et un effort de −5/8. En poutres, le nœud rigide du sommet y ajoute la flexion : la flèche et l'effort sont
+divisés par `1 + 27 EI/(400 EA)`. Quand `EI` tend vers zéro on retrouve les barres (à 7e-8 près pour `EI/EA` = 1e-6) ; quand
+`EI` grandit, le toit ne bouge plus : un réseau à nœuds rigides et à poutres très raides n'est pas un treillis articulé.
+
+## Le nid d'abeille
+
+Le réseau de la littérature est un **réseau infini** d'hexagones réguliers, de parois de longueur `l` et d'épaisseur `t`
+(`EA = Es t`, `EI = Es t³/12` par unité de profondeur). Sa cellule a deux nœuds et trois parois : on la calcule sur l'étoile
+d'un nœud libre et de ses trois voisins, déplacés de la déformation moyenne sans tourner. C'est exact pour le réseau infini
+(chaque paroi est un axe de symétrie : aucun nœud ne tourne ; les trois voisins sont les images les uns des autres), et le
+calcul du juge en fractions exactes sur la cellule périodique complète (rotations et décalage libres) donne les mêmes constantes.
+Le module vient de trois énergies : `E* = C₁₁ − C₁₂²/C₂₂`, `ν* = C₁₂/C₂₂`.
+
+| `t/l` | `E*/Es` calculé | écart à la formule avec étirement | écart à la formule publiée (flexion seule) | `ν*` |
+|---|---|---|---|---|
+| 0,02 | 1,845306e-5 | 1,1e-13 | 0,12 % | 0,998402 |
+| 0,1 | 2,242137e-3 | 2e-16 | 2,9 % | 0,961165 |
+| 0,3 | 4,909750e-2 | 9e-16 | 21 % | 0,716535 |
+
+- **La formule publiée est retrouvée dans ses hypothèses** : elle néglige l'étirement des parois, et le calcul s'en écarte de
+  `3 (t/l)²/(1 + 3 (t/l)²)`, ni plus ni moins ; avec des parois dix mille fois plus raides en étirement, le calcul la rend à
+  `3 (t/l)²/10⁴` près, et `ν* = 1` de même.
+- **La formule avec étirement est dérivée, pas lue** : elle est exacte pour des poutres d'Euler-Bernoulli à nœuds ponctuels.
+  Les corrections de **cisaillement** des parois (un terme de plus au dénominateur, sur lequel deux sources ne s'accordent
+  pas : 5,4 + 1,5 ν ou 5,4 + 2,4 ν) ne sont pas faites, et aucune n'entre dans un test.
+- La densité relative `(2/√3) (t/l)` du cours ne compte pas le recouvrement des parois aux nœuds (2,9 % d'écart à `t/l` = 0,1) :
+  elle ne sert à aucun test.
+- **Un panneau fini n'est pas le réseau infini** : le prototype de l'étape a mesuré un panneau de `k × k` cellules serré
+  entre deux plaques : +26 % (3 × 3), +8 % (6 × 6), +5 % (10 × 10) à `t/l` = 0,02. Cette mesure n'est pas rejouée par les tests.
+
+## Ce que les tests vérifient
+
+- **`etape_14_cas.rs`** : la matrice (la poutre horizontale à la main, à l'égalité ; l'inclinée 3-4-5 en fractions ; le montant
+  de l'exemple 30.1 de Kharagpur aux trois chiffres imprimés, avec son signe ; symétrique au bit près ; aucune force pour une
+  translation ou une rotation d'ensemble) ; les 61 valeurs à 2e-12, neuf redites en clair ; le nid d'abeille pour sept `t/l` de
+  0,001 à 0,3 (la formule avec étirement à 1e-9, l'écart à la formule publiée, les parois presque inextensibles, l'isotropie) ;
+  ni fonction interdite ni `HashMap` ; cette section.
+- **`etape_14_reseaux.rs`** (cent réseaux au hasard par test, tolérance 2e-11) : `K u = f + R`, l'oracle de Gauss, l'équilibre
+  des forces **et des moments**, du réseau et de chaque poutre, l'effort normal recalculé, l'énergie de trois façons (dont
+  `N² L/(2 EA) + L (m_a² + m_a m_b + m_b²)/(6 EI)`) ; la superposition, Maxwell entre forces et moments, le corps rigide
+  (translation et rotation), l'échelle, l'ordre et le sens des poutres, deux exécutions égales au bit près ; les mécanismes
+  (trop peu d'appuis, un nœud sans poutre, une console de 1 à 100 poutres sans encastrement, 200 réseaux de contraste 2 à 2e12
+  avec un appui en moins) et ce qui n'en est pas (le carré de poutres, la console de 300 poutres, à `2,2e-15 / mode` près) ;
+  le toit pour `EI/EA` de 1e-9 à 1e9 ; les données invalides.
+
+## Ce que les tests ne vérifient pas
+
+- Le cisaillement des parois, le flambement, une section qui varie le long d'une poutre, une charge entre deux nœuds.
+- Un réseau de plus de 903 inconnues ; un nid d'abeille fini ; le module de cisaillement du nid d'abeille.
+- Les formules « lues par les lecteurs » (MIT 1.050, Felippa, Roylance) n'ont pas été relues par le juge ; le calcul les retrouve.
+
+## Les limites
+
+- **Euler-Bernoulli** : pas de déformation de **cisaillement** ; elle dépasse 1 % de la flexion dès qu'une poutre est plus
+  épaisse que le dixième de sa longueur environ.
+- **Petits déplacements, comportement linéaire, nœuds ponctuels et parfaitement rigides.** Un vrai mycélium est humide, mou et
+  non linéaire.
+- **Le nid d'abeille de la littérature est un réseau infini**, et sa formule simple vaut pour `t/l` petit.
+- **Une longue file de poutres alignées est mal conditionnée** (le plus petit mode d'une console de `n` poutres décroît comme
+  `1/n⁴`) : au-delà de 800 environ, elle est refusée. La solution étant exacte aux nœuds, une poutre droite se maille d'un seul
+  élément.
+- **Une matrice pleine** : quelques milliers d'inconnues au plus.
