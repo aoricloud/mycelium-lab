@@ -1,7 +1,7 @@
 //! Étape 13 (M3) : le solveur linéaire `systeme` : Cholesky contre un oracle, la mise à l'échelle, le refus d'un
 //! système singulier, le plus petit mode et son seuil, les degrés de liberté imposés.
 //!
-//! Les tolérances viennent de la mesure (voir `MODELE.md`) : un système bien conditionné est résolu à 1e-14 près ;
+//! Les tolérances viennent de la mesure (voir `MODELE.md`) : un système bien conditionné est résolu à quelques 1e-14 près ;
 //! l'erreur d'un système mal conditionné vaut au plus `2,5e-16 / mode` sur tous les cas mesurés ; les tests permettent
 //! `2,2e-15 / mode`.
 
@@ -104,13 +104,14 @@ fn le_plus_petit_mode_mesure_la_singularite_et_le_seuil_tient_a_un_facteur_quatr
     // elle est petite devant l'autre.
     let mode = plus_petit_mode(&[1.0, 0.5, 0.5, 1.0], 2);
     assert!((0.5..=1.5).contains(&mode), "{mode}");
-    // (Un seul pas d'itération inverse laisserait une erreur de petit/2 : le second la ramène sous 1e-9.)
+    // (Un seul pas d'itération inverse laisserait une erreur de petit/2 : le second la ramène sous 1e-9 tant que l'arrondi ne
+    // domine pas, c'est-à-dire pour petit ≥ 1e-6 ; l'assertion permet 1e-6.)
     for petit in [1e-3, 1e-6, 1e-9, 1e-12] {
         let mode = plus_petit_mode(&[1.0, 1.0 - petit, 1.0 - petit, 1.0], 2);
         assert!((mode / petit - 1.0).abs() < 1e-6_f64.max(1e-15 / petit), "{petit:e} : {mode:e}");
     }
     // Deux ressorts en série de raideurs 1 et r : acceptés tant que le mode (1/(2r)) dépasse le seuil, avec une
-    // erreur d'au plus dix fois 2,2e-16 / mode (mesurée : au plus 2,2e-16 / mode) ; refusés au-delà.
+    // erreur d'au plus 2,2e-15 / mode (environ dix fois la plus grande mesurée, 2,5e-16 / mode) ; refusés au-delà.
     for r in [1.0, 1e3, 1e6, 1e9, 1e11, 2.5e11] {
         let mode = plus_petit_mode(&serie(r), 2);
         assert!((mode * 2.0 * r).max(1.0 / (mode * 2.0 * r)) < 1.8, "r = {r:e} : mode {mode:e}");
