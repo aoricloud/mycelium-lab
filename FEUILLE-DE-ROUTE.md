@@ -155,7 +155,7 @@ substrat sans flux à travers un obstacle) ; T1, le chimiotropisme ; T2, les obs
 la vitrine avec un choix de scénario. T3, un labyrinthe (le temps de sortie de la colonie, comparé à une recherche
 en profondeur et à A*), est repliée dans M1, le moule, de la direction décrite plus bas.
 
-**Où on en est** : T0 (le terrain), T1 (le chimiotropisme), T2 (les obstacles et le thigmotropisme), T4 (la vitrine avec un choix de scénario : six scénarios, les murs dessinés, une adresse `#scenario=…&graine=…` qui se partage), M0 (mesurer la pièce : une carte de densité, un seuil, le bilan de nourriture, le plus grand morceau connecté, la traversée d'un bord à l'autre) et M1 (le moule : cinq formes dont le labyrinthe de T3, une ligne `moule` développée en obstacles, la courbe de remplissage, le temps de sortie et trois recherches de chemin, sans changer le noyau) sont faits. Le chimiotropisme, le thigmotropisme, la pièce et le moule sont décrits, avec leurs limites, dans les quatre dernières parties de `MODELE.md`. La suite est la direction décrite ci-dessous, M2 d'abord.
+**Où on en est** : T0 (le terrain), T1 (le chimiotropisme), T2 (les obstacles et le thigmotropisme), T4 (la vitrine avec un choix de scénario : six scénarios, les murs dessinés, une adresse `#scenario=…&graine=…` qui se partage), M0 (mesurer la pièce : une carte de densité, un seuil, le bilan de nourriture, le plus grand morceau connecté, la traversée d'un bord à l'autre), M1 (le moule : cinq formes dont le labyrinthe de T3, une ligne `moule` développée en obstacles, la courbe de remplissage, le temps de sortie et trois recherches de chemin, sans changer le noyau) et l'étape 11 (la carte de densité de M0 sur la page, derrière une case « Densité », du violet au jaune) sont faits. Le chimiotropisme, le thigmotropisme, la pièce, le moule et la carte de densité sur la page sont décrits, avec leurs limites, dans les cinq dernières parties de `MODELE.md`. La suite est la direction décrite ci-dessous, M2 d'abord.
 
 ## La direction d'après T2 : du procédé à la structure (M0 à M5)
 
@@ -167,7 +167,8 @@ l'ordre du millimètre) ; la 3D viendra plus tard, en chantier à part. Les nouv
 de la paroi, ramification selon la place) vont dans un profil séparé : la V0 et sa figure 3 restent intactes.
 
 **L'ordre** : T4, la vitrine des scénarios (faite) ; M0, mesurer la pièce (faite : une carte de densité, un
-seuil, le bilan de nourriture, le plus grand morceau connecté, la traversée, sans changer l'état) ; M1, le
+seuil, le bilan de nourriture, le plus grand morceau connecté, la traversée, sans changer l'état ; sa carte se voit sur la
+page depuis l'étape 11, case « Densité ») ; M1, le
 moule (faite : brique, L, disque, anneau et le labyrinthe de T3, un préprocesseur de scénario, la courbe de remplissage,
 le temps de sortie vers un rectangle de cases, le plus court chemin, A* et la profondeur d'abord, sans changer le noyau)
 ; M2, une croissance calée sur des chiffres publiés ; M3, le calcul de raideur d'un réseau de barres, dans une couche
