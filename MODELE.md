@@ -819,3 +819,191 @@ L'aperçu `apercus/etape-9-densite.png` montre cette carte pour `scenarios/mur.t
 - L'image est à 4 pixels par case (2 pour une boîte de 161 × 161, pour rester sous 500 Ko) ; au-delà d'environ 404 × 404 cases,
   même à 1 pixel par case elle dépasse 500 Ko (aucun scénario n'y arrive ; ni testé, ni corrigé).
 - Rien n'a été vérifié sous Linux par le juge (le dépôt le fait par sa CI).
+
+# Le moule (étape 10, M1)
+
+Cette étape donne une **forme** à l'espace libre de la boîte et mesure comment la colonie la remplit. Elle ne change rien au
+noyau : les empreintes de la V0 et de T0 à T4 restent celles du dépôt, à l'octet, et les invariants de M0 (somme de la
+carte = biomasse, densité nulle dans les cases bloquées, bilan de nourriture) tiennent dans tout moule. Elle ne parle ni de
+raideur ni de résistance : le banc ne prédit pas la résistance d'un vrai matériau. Un moule est un modèle à nous, sans
+article de référence : aucune publication ne valide « la colonie remplit un moule de cette forme ». T3 (le labyrinthe, le
+temps de sortie, A* et la profondeur d'abord) est repliée ici : le labyrinthe est une forme de moule.
+
+## Ce que fait le code
+
+**Les formes** (`moule::Forme`, `moule::libres`). Une brique (un rectangle de cases), un L (la barre de gauche et la barre
+du bas d'un rectangle, d'une épaisseur donnée), un disque et un anneau (les cases dont le carré de la distance entière au
+centre est au plus `rayon²`, et pour l'anneau strictement plus que `rayon_interieur²`), et un labyrinthe. Tout se calcule en
+entiers ; une forme hors contrat est refusée (`FormeInvalide`), une cavité qui sort de la boîte aussi (`HorsDeLaBoite`), sans
+jamais paniquer, même pour des paramètres énormes.
+
+**La décomposition** (`moule::obstacles`). Le complément de la cavité est découpé en rectangles disjoints, d'une façon fixée
+pour que tous écrivent les mêmes lignes : ligne par ligne, les suites de cases bloquées, chacune prolongeant le rectangle de
+mêmes bornes de la ligne du dessus s'il existe ; le résultat est trié par `(y0, x0)`.
+
+**Le texte du scénario** (`moule::developper`). Une ligne `moule brique x0 y0 x1 y1`, `moule l …`, `moule disque …`,
+`moule anneau …` ou `moule labyrinthe colonnes rangees couloir graine` est remplacée, à sa place, par les lignes
+`obstacle x0 y0 x1 y1` de la décomposition ; tout le reste du texte est conservé octet pour octet. Le noyau, le binaire et la
+page lisent le texte développé : un scénario de moule est pour eux un scénario ordinaire. La ligne `boite` doit venir avant ;
+les erreurs sont lues dans un ordre fixe (syntaxe, doublon, boîte absente, puis la forme).
+
+**Le labyrinthe.** `colonnes × rangees` chambres carrées de `couloir` cases, séparées par des murs d'une case, dans un
+contour ; un passage ouvre les `couloir` cases du mur commun. La génération est une recherche en profondeur aléatoire
+(voisines dans l'ordre haut, droite, bas, gauche, un tirage de `Alea` à chaque choix, même quand il n'y a qu'une voisine) :
+un labyrinthe **parfait**, `colonnes × rangees − 1` passages, un seul chemin entre deux chambres au niveau des chambres,
+entièrement déterminé par sa graine. La spore est au centre de la chambre `(0, 0)` ; la sortie est la chambre
+`(colonnes − 1, rangees − 1)` entière (`moule::chambre`).
+
+**Les chemins.** Trois recherches sur la grille des cases libres, **à quatre voisins** (par les côtés) : le plus court
+chemin par un parcours en largeur, A* avec la distance de Manhattan (admissible et cohérente : même réponse), et la
+profondeur d'abord itérative (une pile explicite), qui rend le premier chemin simple qu'elle trouve. La profondeur égale le
+plus court chemin seulement quand un seul chemin simple existe : dans un labyrinthe de couloir 1, dont les cases libres
+forment un arbre ; avec un couloir plus large, elle tourne dans les chambres et rallonge (92 pas contre 52 sur le scénario).
+
+**La courbe de remplissage** (`moule::courbe_de_remplissage`, `moule::pas_pour_remplir`) : à chaque pas, la part des cases
+de la cavité où passe de l'hyphe (`piece::mesurer`, seuil nul) ; elle est croissante au sens large, une case occupée le
+reste. `pas_pour_remplir` donne le premier pas où une part est atteinte.
+
+**Le temps de sortie** (`moule::temps_de_sortie`) : le premier pas, au plus `pas_max`, où un segment finit dans un
+**rectangle de cases** cible (la case de la spore dans le rectangle vaut 0). La simulation n'avance que ce qu'il faut, et le
+résultat ne dépend pas du nombre de pas déjà joués. La cible est un rectangle, pas une case : avec la seule case centre de
+la dernière chambre, une colonie qui remplissait 91 % du labyrinthe pouvait être dite « pas sortie » parce qu'aucun segment
+ne finissait exactement dans cette case.
+
+**L'exemple** `cargo run --release --example mesure_moule -- <scénario> <graine> [<dossier>]` développe le scénario, joue
+sa durée, imprime la taille de la cavité, la courbe tous les 10 pas, les quatorze mesures de M0 et, pour un labyrinthe, le
+temps de sortie et le plus court chemin ; avec un dossier, il écrit `densite.png` (le dessin de `mesure_piece`).
+
+## Ce que les tests vérifient
+
+- **Les formes, exactement** : des dessins à la main, les aires par formule (le disque par les comptages de Gauss), les
+  contrats à chaque borne, la symétrie, des formes au hasard contre un prédicat écrit à part.
+- **La décomposition** : des cas à la main, les propriétés (disjoints, dans la boîte, union exacte, triés), des formes au
+  hasard contre une décomposition de référence écrite autrement.
+- **Le texte** : le texte rendu au caractère, l'identité octet pour octet sans ligne `moule`, chaque erreur et leur ordre,
+  les lignes `boite` mal formées, les blancs, les cinq scénarios contre une référence.
+- **Le labyrinthe** : deux labyrinthes dérivés à la main des sorties du générateur, une génération récursive de référence sur
+  des centaines de tailles, couloirs et graines, les propriétés d'un labyrinthe parfait, les plus petits labyrinthes.
+- **Les chemins** : des grilles à la main, A* contre des relaxations successives sur des milliers de grilles au hasard, la
+  profondeur contre une récursion de référence, pas de débordement de pile sur 200 × 200.
+- **Dans la simulation** : les invariants de M0 dans chaque moule, la courbe croissante et égale à `mesurer` à chaque pas,
+  le temps de sortie égal à un recalcul indépendant, indépendant du nombre de pas déjà joués, minoré par la distance au
+  rectangle, chaque bord du rectangle compté ; les six empreintes de référence inchangées ; la sortie de l'exemple au
+  caractère et son image au pixel.
+- Ils **ne vérifient pas** : que les réglages des scénarios sont les bons (ils figent des planchers de remplissage sous
+  le plus mauvais de 30 graines, pas une valeur) ; la biologie d'une pointe contre une paroi ; rien sous Linux (la CI du
+  dépôt le fait).
+- 106 tests ; un juge a joué 212 fautes volontaires dans `moule.rs` et l'exemple, 201 sont tuées ; les 11 autres sont
+  sans effet observable, chacune classée avec sa raison.
+
+## Ce qu'on voit
+
+Les réglages des cinq scénarios sont ceux des scénarios existants (`substrat 1.0 0.2`, `couplage 0.1 0.002`,
+`anastomose 0.5 10`) avec deux changements, mesurés sur 30 graines : l'**intervalle de ramification vaut 8** au lieu de 20
+(`croissance 1.0 8.0 30 20`) et le **thigmotropisme 35** de `mur.txt` est ajouté. Dans une cavité fermée, chaque pointe finit
+par s'anastomoser ou par s'arrêter contre la paroi : la colonie s'éteint toujours (plus aucune pointe), et la question est
+ce qu'elle a rempli avant. Avec les réglages existants à la lettre, elle s'éteint avec 20 à 45 % de la cavité ; sans
+thigmotropisme, une pointe contre la paroi reste immobile et la colonie ne sort jamais du labyrinthe. À l'intervalle 8, elle
+remplit en moyenne 87 % de la brique, 93 % du L, 87 % du disque, 96 % de l'anneau et 99 % du labyrinthe, et elle sort du
+labyrinthe pour chacune des 30 graines.
+
+Remplissage final (part des cases libres où passe de l'hyphe, seuil nul, à la fin de la durée), pas pour atteindre 50 % et 90 % (`pas_pour_remplir`
+sur la courbe pas à pas ; `—` : jamais atteint dans la durée), et pour le labyrinthe le temps de sortie (`temps_de_sortie` vers la chambre (5, 5), `pas_max` =
+la durée) et le plus court chemin (`plus_court_chemin`, 4 voisins, de centre à centre). Graines de simulation 1 à 10 ; l'exemple refait chaque ligne
+(`cargo run --release --example mesure_moule -- scenarios/moules/<nom>.txt <graine>`) : `remplissage`, les lignes `courbe`, `sortie` et `chemin`.
+
+| Scénario | Graine | Remplissage final | Pas pour 50 % | Pas pour 90 % | Temps de sortie | Plus court chemin |
+|---|---|---|---|---|---|---|
+| Brique (1 200 cases, durée 250) | 1 | 92,5 % | 48 | 66 | — | — |
+|  | 2 | 85,9 % | 49 | — | — | — |
+|  | 3 | 84,8 % | 77 | — | — | — |
+|  | 4 | 67,6 % | 66 | — | — | — |
+|  | 5 | 92,9 % | 62 | 76 | — | — |
+|  | 6 | 81,9 % | 57 | — | — | — |
+|  | 7 | 86,2 % | 51 | — | — | — |
+|  | 8 | 96,1 % | 47 | 59 | — | — |
+|  | 9 | 88,4 % | 59 | — | — | — |
+|  | 10 | 90,8 % | 56 | 75 | — | — |
+| L (1 575 cases, durée 250) | 1 | 97,2 % | 50 | 74 | — | — |
+|  | 2 | 86,9 % | 60 | — | — | — |
+|  | 3 | 88,1 % | 133 | — | — | — |
+|  | 4 | 92,3 % | 68 | 91 | — | — |
+|  | 5 | 93,7 % | 56 | 78 | — | — |
+|  | 6 | 97,0 % | 58 | 91 | — | — |
+|  | 7 | 86,9 % | 49 | — | — | — |
+|  | 8 | 97,5 % | 52 | 79 | — | — |
+|  | 9 | 94,6 % | 54 | 78 | — | — |
+|  | 10 | 91,7 % | 59 | 94 | — | — |
+| Disque (1 961 cases, durée 250) | 1 | 87,9 % | 52 | — | — | — |
+|  | 2 | 75,4 % | 65 | — | — | — |
+|  | 3 | 82,2 % | 87 | — | — | — |
+|  | 4 | 94,4 % | 70 | 88 | — | — |
+|  | 5 | 87,8 % | 66 | — | — | — |
+|  | 6 | 87,1 % | 56 | — | — | — |
+|  | 7 | 90,2 % | 63 | 85 | — | — |
+|  | 8 | 94,4 % | 61 | 80 | — | — |
+|  | 9 | 76,2 % | 76 | — | — | — |
+|  | 10 | 91,6 % | 67 | 89 | — | — |
+| Anneau (2 336 cases, durée 250) | 1 | 93,8 % | 77 | 115 | — | — |
+|  | 2 | 95,0 % | 70 | 108 | — | — |
+|  | 3 | 90,3 % | 85 | 122 | — | — |
+|  | 4 | 95,1 % | 71 | 108 | — | — |
+|  | 5 | 94,4 % | 81 | 118 | — | — |
+|  | 6 | 95,2 % | 77 | 113 | — | — |
+|  | 7 | 98,8 % | 69 | 104 | — | — |
+|  | 8 | 98,5 % | 68 | 106 | — | — |
+|  | 9 | 97,0 % | 98 | 133 | — | — |
+|  | 10 | 97,1 % | 69 | 105 | — | — |
+| Labyrinthe (429 cases, durée 300) | 1 | 99,3 % | 84 | 134 | 69 | 52 |
+|  | 2 | 99,8 % | 79 | 134 | 63 | 52 |
+|  | 3 | 100,0 % | 80 | 131 | 65 | 52 |
+|  | 4 | 98,1 % | 84 | 135 | 66 | 52 |
+|  | 5 | 98,1 % | 82 | 133 | 65 | 52 |
+|  | 6 | 100,0 % | 78 | 130 | 63 | 52 |
+|  | 7 | 100,0 % | 76 | 128 | 61 | 52 |
+|  | 8 | 100,0 % | 77 | 128 | 61 | 52 |
+|  | 9 | 97,9 % | 88 | 141 | 70 | 52 |
+|  | 10 | 99,8 % | 86 | 136 | 71 | 52 |
+
+Sur les dix graines :
+
+- Brique : moyenne 86,7 %, de 67,6 à 96,1 % ; 50 % atteint 10 fois sur 10, 90 % 4 fois sur 10.
+- L : moyenne 92,6 %, de 86,9 à 97,5 % ; 50 % atteint 10 fois sur 10, 90 % 7 fois sur 10.
+- Disque : moyenne 86,7 %, de 75,4 à 94,4 % ; 50 % atteint 10 fois sur 10, 90 % 4 fois sur 10.
+- Anneau : moyenne 95,5 %, de 90,3 à 98,8 % ; 50 % atteint 10 fois sur 10, 90 % 10 fois sur 10.
+- Labyrinthe : moyenne 99,3 %, de 97,9 à 100,0 % ; 50 % atteint 10 fois sur 10, 90 % 10 fois sur 10.
+
+Le labyrinthe du scénario (6 × 6 chambres de couloir 3, graine 5, 429 cases libres) a un plus court chemin de **52 pas**
+du centre de la chambre (0, 0) au centre de la chambre (5, 5) (A* : 52 ; profondeur d'abord : 92). Une pointe avance d'au
+plus 0,909 par pas (`pas × s / (affinite + s)` avec `s = 1`) : 57 pas au moins ; la colonie sort entre 61 et 71 pas pour les
+graines 1 à 10, et de 61 à 71 sur 30 graines. Les aperçus `apercus/etape-10-labyrinthe.png` (graine 1) et
+`apercus/etape-10-disque.png` (graine 2) montrent la carte de densité.
+
+## Les limites
+
+- **Un modèle à nous.** Aucune publication ne décrit une colonie qui remplit un moule de ces formes, ni ne donne un temps
+  de sortie de labyrinthe à comparer ; les nombres ci-dessus sont ceux du modèle, pas d'une expérience.
+- **La règle de T2 contre une paroi de moule.** L'angle critique de 35° (Held et al. 2019) a été mesuré dans des canaux de
+  quelques micromètres ; rien ne dit qu'il vaut contre la paroi d'un moule, et il décide pourtant du résultat de chaque
+  scénario (sans lui, la colonie reste collée aux parois).
+- **Les réglages sont choisis pour montrer quelque chose**, pas calibrés : l'intervalle 8 et le thigmotropisme 35 font
+  remplir la cavité ; aux réglages de la vitrine, la colonie s'éteint à moitié chemin.
+- **Ce qui reste mauvais.** La colonie n'entre jamais dans une **poche** qu'elle a refermée : une pointe qui touche une
+  hyphe s'anastomose et meurt, donc une région entourée d'hyphes sans pointe dedans reste vide pour toujours (les taches
+  sombres des aperçus) ; c'est la dynamique du noyau (anastomose, intervalle de ramification), pas un défaut des formes :
+  on l'observe aussi en boîte ouverte. Les hyphes **s'accumulent le long des parois** (T2 : une pointe qui longe la paroi y
+  reste, et celles qui la frappent de face s'y ramifient) : la densité est la plus forte au bord de la cavité. Le plus
+  mauvais remplissage sur 30 graines est de 68 % (brique), 84 % (L), 69 % (disque), 88 % (anneau), 96 % (labyrinthe).
+- **Une densité sans limite.** Le noyau ne borne pas la longueur d'hyphe par case : des milliers de pointes vivent un temps dans
+  des cases déjà pleines, et la densité moyenne atteint des dizaines à des centaines de longueurs par case (labyrinthe, graine 1 :
+  204, pour une biomasse de 87 500 sur 429 cases). Rien de physique là-dedans ; M2 devra mettre une règle de ramification selon la
+  place.
+- **Quatre voisins, des cases carrées, le 2D.** Les chemins vont de case en case par les côtés : ce n'est pas le plus court
+  chemin géométrique ; les formes courbes sont des escaliers de cases ; rien n'est calé sur un vrai moule, une case n'a pas
+  d'échelle physique (M2).
+- **Les traversées de M0** (`traversee_gauche_droite`, `traversee_haut_bas`) valent toujours `aucune` sur ces cinq
+  moules : elles vont d'un bord de la **boîte** à l'autre et aucune de ces cavités ne touche deux bords opposés ; c'est
+  normal, les deux dernières lignes de l'exemple n'apportent rien ici.
+- Le temps de sortie compte la **fin d'un segment** dans le rectangle : une hyphe qui traverse la chambre sans y finir un
+  pas n'est pas comptée ; avec une chambre de 9 cases et un pas de 0,909, le cas ne s'est pas présenté sur 30 graines.
+- Rien n'a été vérifié sous Linux par le juge (le dépôt le fait par sa CI).
