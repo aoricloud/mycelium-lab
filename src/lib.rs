@@ -24,6 +24,10 @@
 //!   noyau de la simulation ;
 //! - [`piece`] : mesurer la pièce que la colonie remplit (carte de densité, bilan de nourriture, plus grand morceau
 //!   connecté, traversée d'un bord à l'autre) — l'étape M0 : elle mesure, elle ne change rien à la simulation ;
+//! - [`systeme`] : le solveur linéaire du calcul de raideur (Cholesky d'une matrice pleine, mise à l'échelle par la
+//!   diagonale, détection d'un mécanisme) — l'étape 13 (M3) ;
+//! - [`raideur`] : le calcul de raideur d'un réseau de barres articulées, vérifié sur des cas d'école à réponse exacte —
+//!   l'étape 13 (M3) : une couche à part, elle ne change rien au noyau de la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
 
@@ -37,10 +41,12 @@ pub mod image;
 pub mod mesures;
 pub mod moule;
 pub mod piece;
+pub mod raideur;
 pub mod releves;
 pub mod scenario;
 pub mod simulation;
 pub mod substrat;
+pub mod systeme;
 pub mod tropisme;
 pub mod vitrine;
 pub mod voisinage;
