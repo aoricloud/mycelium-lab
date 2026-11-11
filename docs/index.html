@@ -152,6 +152,16 @@
     background: linear-gradient(90deg, rgb(54, 68, 44), rgb(84, 158, 104));
   }
 
+  /* La rampe de la carte de densité (voir dessinerDensite dans app.js) : du violet, peu d'hyphe, au jaune, beaucoup. */
+  .echantillon-densite {
+    width: 5rem;
+    height: 0.5rem;
+    flex: none;
+    border: 1px solid var(--trait);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgb(70, 20, 110), rgb(255, 240, 90));
+  }
+
   /* Les mêmes couleurs que le dessin des obstacles dans app.js : remplissage ardoise, liseré clair. */
   .echantillon-obstacle {
     width: 3.4rem;
@@ -231,6 +241,7 @@
 
   input[type="number"]:focus-visible,
   input[type="range"]:focus-visible,
+  input[type="checkbox"]:focus-visible,
   select:focus-visible,
   button:focus-visible {
     outline: 2px solid var(--accent);
@@ -278,6 +289,24 @@
   button[aria-pressed="true"] {
     border-color: rgba(207, 232, 168, 0.42);
     background: rgba(207, 232, 168, 0.16);
+  }
+
+  .case-a-cocher {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 44px;
+    font-size: 0.85rem;
+    color: var(--encre-douce);
+    cursor: pointer;
+  }
+
+  .case-a-cocher input {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
   }
 
   output {
@@ -409,7 +438,7 @@
       <canvas id="boite" width="900" height="900" role="img"
               aria-label="Boîte carrée sombre où poussent les hyphes clairs de la colonie."></canvas>
       <p id="etat" class="etat" role="status" aria-live="polite">Chargement du module…</p>
-      <p class="legende">
+      <p id="legende-substrat" class="legende">
         <span class="echantillon" aria-hidden="true"></span>
         Substrat : clair = intact, sombre = consommé — contraste amplifié ×60
       </p>
@@ -420,6 +449,11 @@
       <p id="legende-obstacle" class="legende" hidden>
         <span class="echantillon-obstacle" aria-hidden="true"></span>
         Obstacle : des cases que les hyphes ne franchissent pas
+      </p>
+      <p id="legende-densite" class="legende" hidden>
+        Densité d'hyphe : peu
+        <span class="echantillon-densite" aria-hidden="true"></span>
+        beaucoup
       </p>
     </figure>
 
@@ -460,6 +494,11 @@
         <label class="champ" for="vitesse">
           <span>Vitesse — <output id="vitesse-valeur" for="vitesse">1</output> pas par image</span>
           <input id="vitesse" type="range" min="1" max="16" step="1" value="1">
+        </label>
+
+        <label class="case-a-cocher" for="densite">
+          <input id="densite" type="checkbox">
+          <span>Densité</span>
         </label>
 
         <p id="message" class="message" role="status" aria-live="polite"></p>
