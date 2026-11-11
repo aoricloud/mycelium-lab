@@ -90,6 +90,17 @@ fn un_systeme_singulier_ne_rend_jamais_un_nombre() {
         assert!((0.0..=1e-14).contains(&mode), "essai {essai} : mode {mode:e}");
         assert_eq!(resoudre(&a, &vec![1.0; n]), Err(Mecanisme), "essai {essai}");
     }
+    // Un pivot minuscule (ici 2e-63, par quatre soustractions exactes en cascade) fait déborder l'itération inverse : le mode
+    // vaut `∞ / ∞`, pas un nombre. La matrice n'est pourtant pas définie positive (son déterminant est −1,2e-32) : refusée.
+    let petits = [0.9999999999999999, 1.4901161193847655e-8, 2.2204460492503128e-16, 3.3087224502121103e-24];
+    let mut a = vec![0.0; 25];
+    for i in 0..5 {
+        a[i * 5 + i] = 1.0;
+    }
+    for (i, x) in petits.iter().enumerate() {
+        (a[i * 5 + 4], a[4 * 5 + i]) = (*x, *x);
+    }
+    assert_eq!(resoudre(&a, &[1.0; 5]), Err(Mecanisme));
 }
 
 #[test]
