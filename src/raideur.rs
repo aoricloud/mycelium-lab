@@ -29,7 +29,7 @@
 //! viennent de `dx/L` et `dy/L`. Des boucles dans un ordre fixe, ni `HashMap` ni fil d'exécution : le même résultat, bit à
 //! bit, sur toutes les machines.
 
-use crate::systeme::Mecanisme;
+use crate::systeme::{self, Mecanisme};
 
 /// Un nœud : ses deux coordonnées.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -112,8 +112,32 @@ pub fn ranger_appuis_et_charges(
     appuis: &[Appui],
     charges: &[Charge],
 ) -> Result<(Vec<f64>, Imposes), ErreurRaideur> {
-    let _ = (appuis, charges);
-    Ok((vec![0.0; nombre_de_noeuds * ddl_par_noeud], Imposes::new())) // bouchon
+    let invalide = ErreurRaideur::DonneeInvalide;
+    let mut forces = vec![0.0; nombre_de_noeuds * ddl_par_noeud];
+    let mut imposes = Imposes::new();
+    for charge in charges {
+        if charge.noeud >= nombre_de_noeuds || charge.axe >= ddl_par_noeud {
+            return Err(invalide("charge : nœud ou axe hors limites"));
+        }
+        if !charge.valeur.is_finite() {
+            return Err(invalide("charge : valeur non finie"));
+        }
+        forces[charge.noeud * ddl_par_noeud + charge.axe] += charge.valeur;
+    }
+    for appui in appuis {
+        if appui.noeud >= nombre_de_noeuds || appui.axe >= ddl_par_noeud {
+            return Err(invalide("appui : nœud ou axe hors limites"));
+        }
+        if !appui.valeur.is_finite() {
+            return Err(invalide("appui : valeur non finie"));
+        }
+        let ddl = appui.noeud * ddl_par_noeud + appui.axe;
+        if imposes.iter().any(|&(deja, _)| deja == ddl) {
+            return Err(invalide("appui : le même degré de liberté imposé deux fois"));
+        }
+        imposes.push((ddl, appui.valeur));
+    }
+    Ok((forces, imposes))
 }
 
 /// La longueur d'un segment et sa direction `(c, s) = (dx/L, dy/L)`, depuis le nœud `a` vers le nœud `b`.
@@ -122,8 +146,26 @@ pub fn ranger_appuis_et_charges(
 ///
 /// [`ErreurRaideur::DonneeInvalide`] pour un indice hors limites, une coordonnée non finie ou une longueur nulle.
 pub fn longueur_et_direction(noeuds: &[Noeud], a: usize, b: usize) -> Result<(f64, f64, f64), ErreurRaideur> {
-    let _ = (noeuds, a, b);
-    Ok((1.0, 1.0, 0.0)) // bouchon
+    let (Some(na), Some(nb)) = (noeuds.get(a), noeuds.get(b)) else {
+        return Err(ErreurRaideur::DonneeInvalide("barre : indice de nœud hors limites"));
+    };
+    let (dx, dy) = (nb.x - na.x, nb.y - na.y);
+    let longueur = (dx * dx + dy * dy).sqrt();
+    if !(longueur.is_finite() && longueur > 0.0) {
+        return Err(ErreurRaideur::DonneeInvalide("barre : longueur nulle ou non finie"));
+    }
+    Ok((longueur, dx / longueur, dy / longueur))
+}
+
+/// La raideur `EA/L` d'une barre, les quatre degrés de liberté de ses extrémités `[2a, 2a+1, 2b, 2b+1]` et le vecteur
+/// `g = (−c, −s, c, s)` : sa matrice de raideur est `(EA/L) g gᵀ` et son effort `(EA/L) g·u`.
+fn barre_calculee(noeuds: &[Noeud], barre: &Barre) -> Result<(f64, [usize; 4], [f64; 4]), ErreurRaideur> {
+    if !(barre.ea.is_finite() && barre.ea > 0.0) {
+        return Err(ErreurRaideur::DonneeInvalide("barre : ea doit être fini et strictement positif"));
+    }
+    let (longueur, c, s) = longueur_et_direction(noeuds, barre.a, barre.b)?;
+    let ddl = [2 * barre.a, 2 * barre.a + 1, 2 * barre.b, 2 * barre.b + 1];
+    Ok((barre.ea / longueur, ddl, [-c, -s, c, s]))
 }
 
 /// La matrice de raideur du réseau avant tout appui : `2n × 2n` (`n` nœuds), pleine, symétrique, rangée ligne par ligne
@@ -134,8 +176,20 @@ pub fn longueur_et_direction(noeuds: &[Noeud], a: usize, b: usize) -> Result<(f6
 /// [`ErreurRaideur::DonneeInvalide`] : une coordonnée non finie ; une barre dont un indice sort de la liste, de longueur
 /// nulle, ou dont `ea` n'est pas fini et strictement positif.
 pub fn matrice_de_raideur(noeuds: &[Noeud], barres: &[Barre]) -> Result<Vec<f64>, ErreurRaideur> {
-    let _ = barres;
-    Ok(vec![0.0; 4 * noeuds.len() * noeuds.len()]) // bouchon
+    if noeuds.iter().any(|n| !(n.x.is_finite() && n.y.is_finite())) {
+        return Err(ErreurRaideur::DonneeInvalide("nœud : coordonnée non finie"));
+    }
+    let n = 2 * noeuds.len();
+    let mut k = vec![0.0; n * n];
+    for barre in barres {
+        let (raideur, ddl, g) = barre_calculee(noeuds, barre)?;
+        for (i, &di) in ddl.iter().enumerate() {
+            for (j, &dj) in ddl.iter().enumerate() {
+                k[di * n + dj] += raideur * (g[i] * g[j]); // `g[i] * g[j]` d'abord : la matrice est exactement symétrique
+            }
+        }
+    }
+    Ok(k)
 }
 
 /// Calcule le réseau : assemble la matrice de raideur ([`matrice_de_raideur`]), impose les appuis, résout, puis tire de
@@ -145,14 +199,29 @@ pub fn matrice_de_raideur(noeuds: &[Noeud], barres: &[Barre]) -> Result<Vec<f64>
 ///
 /// - [`ErreurRaideur::DonneeInvalide`] : celles de [`matrice_de_raideur`] ; un appui ou une charge hors limites ou de
 ///   valeur non finie ; un appui répété sur le même degré de liberté ;
-/// - [`ErreurRaideur::Mecanisme`] : la matrice libre est singulière (au seuil de [`crate::systeme::SEUIL_SINGULIER`]).
+/// - [`ErreurRaideur::Mecanisme`] : la matrice libre est singulière (au seuil de [`systeme::SEUIL_SINGULIER`]).
 pub fn resoudre(
     noeuds: &[Noeud],
     barres: &[Barre],
     appuis: &[Appui],
     charges: &[Charge],
 ) -> Result<Solution, ErreurRaideur> {
-    let _ = (appuis, charges);
-    let zeros = vec![0.0; 2 * noeuds.len()];
-    Ok(Solution { deplacements: zeros.clone(), reactions: zeros, efforts: vec![0.0; barres.len()], energie: -1.0 }) // bouchon
+    let k = matrice_de_raideur(noeuds, barres)?;
+    let (forces, imposes) = ranger_appuis_et_charges(noeuds.len(), 2, appuis, charges)?;
+    let resolution = systeme::resoudre_avec_imposes(&k, &forces, &imposes)?;
+    let mut efforts = Vec::with_capacity(barres.len());
+    for barre in barres {
+        let (raideur, ddl, g) = barre_calculee(noeuds, barre)?;
+        let mut allongement = 0.0;
+        for (&d, &gi) in ddl.iter().zip(&g) {
+            allongement += gi * resolution.deplacements[d];
+        }
+        efforts.push(raideur * allongement);
+    }
+    Ok(Solution {
+        deplacements: resolution.deplacements,
+        reactions: resolution.reactions,
+        efforts,
+        energie: resolution.energie,
+    })
 }
