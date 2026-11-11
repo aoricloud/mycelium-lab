@@ -1,6 +1,6 @@
 # Profil « lent et dense » (étape 12, M2) : une hyphe qui ramifie souvent. Ancre : Penicillium chrysogenum, 47 à 48 µm
 # d'hyphe par pointe (de seconde main : la page de David Moore, et Thykaer et coll. 2009), soit 6,8 cases. Il ne diffère
-# de couplage.txt que par l'intervalle de ramification, la boîte, la spore et la durée.
+# de couplage.txt que par l'intervalle de ramification et la durée.
 boite 161 161
 spore 80 80
 substrat 1.0 0.2
