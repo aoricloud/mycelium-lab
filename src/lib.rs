@@ -28,6 +28,8 @@
 //!   diagonale, détection d'un mécanisme) — l'étape 13 (M3) ;
 //! - [`raideur`] : le calcul de raideur d'un réseau de barres articulées, vérifié sur des cas d'école à réponse exacte —
 //!   l'étape 13 (M3) : une couche à part, elle ne change rien au noyau de la simulation ;
+//! - [`poutres`] : le calcul de raideur d'un réseau de poutres à nœuds rigides (étirement et flexion, trois degrés de
+//!   liberté par nœud) — l'étape 14 (M3) : une couche à part aussi ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
 
@@ -41,6 +43,7 @@ pub mod image;
 pub mod mesures;
 pub mod moule;
 pub mod piece;
+pub mod poutres;
 pub mod raideur;
 pub mod releves;
 pub mod scenario;
