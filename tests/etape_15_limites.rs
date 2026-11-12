@@ -38,6 +38,9 @@ fn les_donnees_invalides_et_les_limites_sont_refusees_sans_rendre_de_nombre() {
             assert!(invalide(extraire(&s, &[], HYPHE)), "coordonnée {mauvais:e} à la place {place}");
         }
     }
+    // La borne est incluse, des deux côtés : 1e50 et -1e50 passent (une borne mal recopiée refuserait des colonies valides).
+    let au_bord: [Ligne; 2] = [&[(1e50, 0.0), (1e50, 1.0)], &[(-1e50, 0.0), (-1e50, 1.0)]];
+    assert!(extraire(&segments(&au_bord), &[], HYPHE).is_ok(), "une coordonnée de 1e50 est acceptée");
     let (court, nul): ([Ligne; 1], [Ligne; 1]) = ([&[(0.0, 0.0), (0.0, 1e-160)]], [&[(0.5, 0.5), (0.5, 0.5)]]);
     assert!(invalide(extraire(&segments(&court), &[], HYPHE)) && invalide(extraire(&segments(&nul), &[], HYPHE)));
     assert!(extraire(&segments(&[&[(0.0, 0.0), (0.0, 1e-150)]]), &[], HYPHE).is_ok(), "1e-150 : son carré est normal");
@@ -159,9 +162,12 @@ fn ni_fonction_interdite_ni_hashmap_le_noyau_ne_connait_pas_le_reseau_et_etape_1
     assert!(
         lire("src/lib.rs").contains("\npub mod reseau;\n") && !lire("src/simulation.rs").contains("etat_des_pointes")
     );
-    // Aucune dépendance, d'aucune sorte ; la fonctionnalité est déclarée.
+    // Aucune dépendance, d'aucune sorte, quelle que soit son écriture (une table pointée `[dev-dependencies.x]` comprise :
+    // le verrou ne compte alors plus un seul paquet) ; la fonctionnalité est déclarée.
     let cargo = lire("Cargo.toml");
     assert!(cargo.contains("\n[dependencies]\n\n[features]\n") && cargo.matches("dependencies]").count() == 1);
+    assert!(!cargo.contains("dependencies."), "Cargo.toml : une dépendance en table pointée");
+    assert_eq!(lire("Cargo.lock").matches("[[package]]").count(), 1, "Cargo.lock : un seul paquet, le nôtre");
     assert!(cargo.contains("\netape-14 = []\netape-15 = []\n"), "etape-15 se déclare après etape-14");
 }
 
