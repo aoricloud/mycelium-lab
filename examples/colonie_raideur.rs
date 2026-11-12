@@ -2,11 +2,12 @@
 //! bord gauche et on pousse son bord droit.
 //!
 //! `cargo run --release --example colonie_raideur [-- <scénario> <graine> <pas> [<dossier>]]` joue le scénario (le chemin d'un
-//! fichier de `scenarios/`) `<pas>` pas avec la graine donnée, puis imprime les nombres avec leur statut et, si un dossier
-//! est donné, y écrit `etape-15-raideur.png`. Sans argument : la colonie de démonstration (une boîte de 30 × 20 cases, la
-//! graine 42, 60 pas), qui traverse la boîte. Une erreur d'argument ou de calcul va sur la sortie d'erreur, le code de sortie
-//! est 2 et rien n'est écrit. Les tests de l'étape 15 incluent ce fichier (`#[path]`) et appellent [`calculer`], [`rapport`],
-//! [`pixels`] et [`image`] ; jamais le binaire.
+//! fichier de `scenarios/`, y compris un moule de `scenarios/moules/`, que l'exemple développe d'abord) `<pas>` pas avec la
+//! graine donnée, puis imprime les nombres avec leur statut et, si un dossier est donné, y écrit `etape-15-raideur.png`. Sans
+//! argument : la colonie de démonstration (une boîte de 30 × 20 cases, la graine 42, 60 pas), qui traverse la boîte. Une
+//! erreur d'argument ou de calcul va sur la sortie d'erreur, le code de sortie est 2 et rien n'est écrit. Les tests de
+//! l'étape 15 incluent ce fichier (`#[path]`) et appellent [`calculer`], [`rapport`], [`pixels`] et [`image`] ; jamais le
+//! binaire.
 //!
 //! # Les nombres et leur statut
 //!
@@ -27,6 +28,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use mycelium_lab::image::ecrire_png;
+use mycelium_lab::moule::developper;
 use mycelium_lab::piece::Bord;
 use mycelium_lab::reseau::{Contact, ErreurReseau, Hyphe, Origine, Poussee, Reseau, contacts, extraire, pousser};
 use mycelium_lab::simulation::{Simulation, lire_scenario_tropismes};
@@ -173,6 +175,7 @@ fn lancer(args: &[String]) -> Result<(), String> {
         [] => (DEMONSTRATION.to_string(), GRAINE_DEMONSTRATION, PAS_DEMONSTRATION, None),
         [scenario, graine, pas] | [scenario, graine, pas, _] => {
             let texte = std::fs::read_to_string(scenario).map_err(|e| format!("{scenario} : {e}"))?;
+            let texte = developper(&texte).map_err(|e| format!("{scenario} : {e:?}"))?;
             let graine = graine.parse().map_err(|_| format!("graine illisible : {graine}"))?;
             let pas = pas.parse().map_err(|_| format!("pas illisible : {pas}"))?;
             (texte, graine, pas, args.get(3).map(|d| Path::new(d.as_str())))
