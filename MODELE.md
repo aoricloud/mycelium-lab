@@ -1485,3 +1485,181 @@ Le module vient de trois énergies : `E* = C₁₁ − C₁₂²/C₂₂`, `ν* 
   rendre une flexion fausse sans refus (8 % à 3e-108) ; plus longue, elle est classée `Mecanisme`. Rien de réaliste n'approche ces
   bornes, mais elles ne sont pas contrôlées (mesuré par un relecteur, avec un portage Python).
 - **Une matrice pleine** : quelques milliers d'inconnues au plus.
+
+# La raideur d'une colonie (étape 15, M3)
+
+**Ce nombre dépend du choix des mors.** L'étape tire d'une colonie simulée un **réseau de poutres** (`src/reseau.rs`), tient
+les nœuds d'un bord, pousse ceux du bord d'en face et lit la **raideur** `K` : la force qu'il faut pour un déplacement donné. Un
+mors est ici **une colonne de cases** ; une bande de deux à cinq colonnes donne un `K` de 1 à 15 fois plus grand (mesuré, voir
+plus bas), et rien ne dit qu'une largeur est plus juste qu'une autre. D'une graine à l'autre, le même scénario donne des `K` de
+0,005 à 0,2 µN par case. Le banc **ne prédit pas la résistance d'un vrai matériau** : il calcule la raideur du réseau qu'il a
+simulé, avec des raideurs d'hyphe que l'appelant donne. **Aucune raideur de colonie n'est publiée** : il n'y a rien à
+reproduire, et aucun nombre de cette étape n'est « lu à la source » en tant que raideur de colonie. Le solveur est celui des
+étapes 13 et 14 ; **le noyau ne change pas** (aucun champ, aucun accesseur : les empreintes sont celles du dépôt).
+
+## Les nombres, et leur statut
+
+**Lu à la source** : le nombre est dans un texte relu. **Calculé** : tiré d'un nombre lu par un calcul écrit, sans mesure
+publiée. **Choix** : décidé par ce banc. **Dérivé** : calculé à la main ou en fractions exactes, sans source publiée.
+
+| Quoi | D'où | Statut |
+|---|---|---|
+| `EI` = 18,3 µN·µm² : la raideur en flexion d'une hyphe d'*A. niger* (22 hyphes, une culture, paroi seule) | Brinkmann et coll. 2024, *Frontiers in Bioengineering and Biotechnology*, §3.3, fig. 9E | **lu à la source** (par un lecteur et un vérificateur du pilote ; ni le prototype ni le juge ne l'ont relu ; le supplément n'est lu par personne) |
+| `EA` ≈ 22,9 µN : la raideur axiale | le module de la flexion (10,1 MPa, §4 de l'article) **pris isotrope**, fois l'aire de la paroi `π(1,4² − 1,113²)` µm² ; l'article ne donne **aucune** raideur axiale | **calculé** : une extrapolation, pas une mesure de l'article |
+| Une case = 7 µm (donc `EI` = 18,3/49 = 0,3735 µN·case²) | M2 | **choix** |
+| La règle de contact : une pointe anastomosée est reliée au point le plus proche du segment visé, par une poutre de mêmes `EA` et `EI` | aucune : le noyau ne crée aucun segment pour une anastomose | **choix** |
+| Les mors : une colonne de cases par bord, les trois degrés de liberté de chaque nœud imposés | aucune | **choix** (le nombre en dépend) |
+| `COURT` = 0,01 case (0,07 µm) : la longueur sous laquelle une poutre est fondue | la mesure ci-dessous | **choix** (il change `K` de quelques millièmes) |
+| `K` de la colonie de démonstration : 0,0752 µN par case, soit 0,0107 N/m | ce banc | **calculé** ; aucune raideur de colonie n'est publiée |
+| Les raideurs exactes des neuf colonies faites à la main (voir plus bas) | fractions exactes, calculées à part du dépôt par deux solveurs écrits séparément (le prototype, le juge) ; le Z et le pont qui porte aussi par une autre méthode (les forces, sans matrice de raideur) | **dérivé** |
+
+## Ce que fait le code
+
+- **Le réseau** (`extraire`). Une colonie est un **arbre** : les nœuds sont les extrémités de segments **égales bit à bit**
+  (une ramification naît au bout du segment de sa mère), une poutre par segment, `EA` et `EI` **uniformes** (`Hyphe`). Il
+  prend des segments, pas une simulation : les tests le nourrissent de colonies faites à la main.
+- **Les contacts** (`contacts`). Une anastomose ne crée aucun segment : le noyau arrête l'apex près d'un segment étranger et
+  ne dit pas lequel. On **rejoue sa recherche** : le même `Index`, rempli dans le même ordre, interrogé juste après chaque
+  segment avec les mêmes réglages et la même règle de l'obstacle (`segment_libre`). Ce sont les mêmes appels sur les mêmes
+  données : le rejeu est égal au noyau par construction, et les tests le recomptent. « Inactif » n'est pas « anastomosé » (un
+  mur arrête aussi des pointes) : c'est la recherche qui les sépare. **Aucun accesseur du noyau n'est nécessaire.**
+- **La coupe et le pont.** Le segment visé est **coupé** au point le plus proche de la pointe (un nœud de plus, deux poutres
+  alignées : exact pour un segment droit) et un **pont** relie ce point à la pointe. Une pointe qui se projette au-delà d'un
+  bout du segment est reliée à ce bout, sans coupe ; plusieurs coupes d'un segment sont rangées le long du segment.
+- **La fonte** (`COURT`). Une poutre plus courte que 0,01 case est fondue : ses deux nœuds n'en font plus qu'un. Pour un
+  pont, **la pointe rejoint son point d'arrivée** (l'hyphe visée reste droite) ; ailleurs le nœud le plus récent rejoint le
+  plus ancien (un point de coupe rejoint le bout du segment). On recommence tant qu'une poutre est trop courte : le réseau
+  rendu n'en a aucune. Une pointe **sur** le segment visé ne laisse pas de pont : c'est le cas limite.
+- **L'essai** (`pousser`). Deux **mors** rigides : les nœuds de la colonne (ou de la ligne) de cases du bord `de` sont
+  encastrés (un nœud `(x, y)` est dans la case `(⌊x⌋, ⌊y⌋)`, la règle du plancher de M0) ; ceux du bord `vers` sont déplacés
+  de `delta` selon l'axe qui joint les deux bords, l'autre translation et la rotation à zéro. `K = F/δ`, où `F` est la somme
+  des réactions du mors déplacé selon cet axe ; l'énergie est `½ K δ²` ; chaque poutre a ses efforts et son énergie. **Une
+  colonie qui ne traverse pas a `K = 0`**, sans calcul et sans erreur.
+- **Les refus** (`ErreurReseau`), jamais un nombre à la place : `DonneeInvalide` (`ea`, `ei` ou `delta` qui n'est pas un
+  nombre normal ; une coordonnée de plus de 1e50 ; un segment nul ; un contact hors liste ; deux bords qui ne sont pas
+  opposés ; une poutre dont le cube de la longueur sort de la plage normale ; un résultat qui déborde ou s'efface),
+  `TropGrand` (plus de `INCONNUES_MAX` = 3 000 degrés de liberté, soit 1 000 nœuds, pour une colonie qui traverse),
+  `Mecanisme` (celui de `poutres::resoudre`).
+- Seulement `+ − × ÷`, `sqrt`, `floor`, `clamp` : le même résultat, bit à bit, sur toutes les machines.
+
+## Les mesures
+
+Mesuré par le prototype, puis refait par le juge sur d'autres graines (les nombres sont ceux du juge, sauf mention).
+
+**Le rejeu de la recherche du noyau.** Autant de contacts que le compteur `anastomoses()` : 330 colonies sur 330 pour le
+prototype (onze scénarios, graines 1 à 30) ; pour le juge, 240 sur 240 (sept scénarios aux graines 31 à 60, cinq moules aux
+graines 31 à 36 : 320 000 anastomoses) et 1 080 sur 1 080 sur des boîtes à nous (un mur d'une case ou des piliers, des rayons
+de 0,5 à 3,5, des délais de 0, 1 et 10, avec et sans thigmotropisme). **La règle de l'obstacle ne change rien aux réglages de
+M2** (un mur d'au moins une case est plus épais que le rayon de 0,5) ; elle compte dès que le rayon dépasse l'épaisseur d'un
+mur : sans elle, le compte est faux pour 15 de ces 1 080 colonies, toutes à un rayon d'au moins 1 et un délai de 10.
+
+**La fonte.** 93 colonies de la petite boîte (30 × 20, graines 1 à 120, de 40 à 100 pas) qui traversent avec au plus 1 000
+nœuds. Sans fonte, **22 sont refusées** comme mécanismes (une pointe à 1e-16 d'une hyphe : la plus courte poutre) ; avec
+`COURT` = 0,001, une ; avec 0,003, aucune ; avec **0,01, aucune, et un plus petit mode d'au moins 1,8e-9** (le seuil
+du refus est 1e-12). Le choix compte : `K` change d'au plus 3e-3 entre `COURT` = 0,01 et 0,03, et de 1e-2 à 0,1. La règle
+« le plus ancien nœud reste » du prototype pliait l'hyphe visée de moins de 0,01 case sous une pointe trop proche : `K` en
+changeait jusqu'à 4e-4 (4,5e-6 plus bas pour la graine 8 à 50 pas) ; la règle retenue garde l'hyphe droite.
+
+**La largeur des mors** (`K` en µN par case pour des mors de 1, 2, 3, 4 et 5 colonnes) : graine 42 à 60 pas, 0,0752 ; 0,1057 ;
+0,1328 ; 0,1510 ; 0,1613. Graine 8 à 100 pas : 0,00569 ; 0,00570 ; 0,0512 ; 0,0566 ; 0,0703. Graine 38 à 100 pas : 0,0205 ;
+0,144 ; 0,262 ; 0,281 ; 0,310. Graine 59 à 100 pas : 0,00782 ; 0,0143 ; 0,0234 ; 0,0515 ; 0,0775. Une bande plus large tient
+des nœuds du corps de la colonie (la spore est à 2,5 cases du bord). **Une colonne** est celle de `piece::traversee` :
+`K > 0` exactement quand la colonie traverse.
+
+**« Traverse » et `piece::traversee`.** Au moins un nœud dans chaque mors, contre un chemin de cases occupées d'un bord à
+l'autre : aucun désaccord sur 9 960 comparaisons du prototype (les six scénarios de la page, la petite boîte pas à pas) ni sur
+les 300 des tests. C'est attendu (la colonie est d'un seul morceau, et un segment qui touche une colonne y a un bout), mais ce
+n'est pas un théorème : un nœud posé exactement sur une ligne de la grille, ou déplacé par la fonte, peut faire exception.
+
+**Le solveur plein** (prototype ; une chaîne de poutres, ordre de grandeur) : 100 nœuds, 6 ms et 4 Mo ; 300 nœuds, 0,12 s et
+18 Mo ; 1 000 nœuds, 4,2 s et 154 Mo ; 1 500, 14 s et 335 Mo. D'où le plafond de 1 000 nœuds. Une colonie de la petite
+boîte le dépasse souvent avant 100 pas (37 états sur 130), et celles de la boîte de la page bien avant de traverser.
+
+**La précision.** Les colonies à la main sont exactes à 4e-15 près. Une colonie simulée est mal conditionnée : son plus petit
+mode (voir `systeme`) va de 1,8e-9 à 1e-5 environ (93 colonies) ; la même colonie calculée dans un autre ordre (les bords échangés,
+les nœuds à rebours) rend `K` à 2e-7 près au pire (120 graines). **Six à sept chiffres**, pas quinze.
+
+**La raideur d'une colonie qui pousse** (petite boîte, graine 8, `EA` = 22,9 et `EI` = 18,3/49) :
+
+| Pas | 10 à 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|
+| Nœuds, contacts, ponts | 33 à 141 | 174, 2, 2 | 178, 4, 3 | 188, 8, 7 | 195, 10, 9 | 196, 10, 9 | 203, 13, 12 | 213, 14, 13 |
+| `K` (µN par case) | 0 | 4,812532e-3 | 4,970316e-3 | 5,034065e-3 | 5,049704e-3 | 5,049704e-3 | 5,542710e-3 | 5,685604e-3 |
+
+Zéro tant que la colonie ne touche pas le bord droit (vers le pas 34), puis **croissante** ; sans les ponts elle reste à
+3,389775e-3 (+68 % avec eux à 100 pas). Retirer une poutre n'élève jamais `K` : c'est un théorème. Ajouter un contact, ou
+dix pas de croissance, ne l'abaisse pas non plus tant que la fonte ne déplace que des pointes : sur 68 états de 120 graines,
+la plus forte baisse est de 6e-9, la précision du calcul.
+
+## Les cas exacts
+
+`cargo run --release --example colonie_raideur` écrit les nombres de la colonie de démonstration (graine 42, 60 pas : 79
+segments, 85 nœuds, 90 poutres dont 6 ponts, `K` = 0,0752 µN par case) avec le statut de chacun et, avec un dossier,
+`etape-15-raideur.png`. Les neuf colonies à la main des tests (`EA` = 5, `EI` = 3, des coordonnées exactes en `f64`) :
+
+| Colonie | `K` exact |
+|---|---|
+| Une hyphe droite en quatre segments inégaux, de longueur 4 | `EA/L` = 5/4 |
+| Deux hyphes droites en parallèle | `2 EA/L` = 5/2 |
+| La chaîne et une branche libre (une console de deux poutres) | 5/4 : la branche ne porte rien |
+| Une poutre inclinée 3-4-5 d'un mors à l'autre | `EA c²/L + 12 EI s²/L³` = 1701/3125 |
+| Une hyphe en Z (traverses de 1, montant de 2 qui fléchit) | 1260/1399 |
+| Une boucle fermée par un pont de 0,25 | 5/2, contre 5/4 sans le contact |
+| Une échelle : un segment coupé aux 2/5, un pont vertical qui ne porte rien | 5/2 |
+| Un pont qui porte (vertical, de 2, en flexion) | 8459601460/5420380133 ≈ 1,5607, contre 5/4 sans le contact |
+| La même échelle, la tige finissant sur la première hyphe | 5/2, sans pont |
+
+Et un cadre de 40 × 25 nœuds (le plafond) : 25 rangées de `EA/39`, soit 125/39, les montants ne portant rien.
+
+## Ce que les tests vérifient
+
+- **`etape_15_cas.rs`** : les neuf colonies (nœuds, poutres, ponts comptés sur le dessin ; `K` exact avec et sans contacts ;
+  six valeurs redites ; pour la poutre inclinée, les déplacements, les réactions des deux mors, les six efforts et l'énergie) ;
+  la coupe au point le plus proche, le pont (de ce point à la pointe, ou du bout visé), deux contacts dans le désordre, les
+  nœuds partagés bit à bit ; la fonte (une pointe à 1/256 et à 1/32, une coupe à 1/256 d'un bout, un segment de 1/256, une
+  fonte en cascade, la longueur `COURT` tout juste) ; les mors (colonne ou ligne, les deux sens, le dernier nombre avant la
+  colonne suivante, les nœuds hors de la boîte) ; une colonie qui ne traverse pas.
+- **`etape_15_limites.rs`** : les refus (chaque donnée, à chaque place), les grandeurs hors de la plage normale, le plafond
+  (un cadre de 1 000 nœuds passe, 4 s ; 1 001 sont refusés ; il ne compte que si la colonie traverse), ni fonction interdite
+  ni `HashMap`, le noyau ne connaît pas le réseau, cette section.
+- **`etape_15_invariants.rs`** (les neuf colonies et deux simulées) : la poussée linéaire en `delta` (de −2,5 à 1e6) ;
+  `½ K δ²` et la somme des énergies des poutres ; l'équilibre des réactions des mors ; `EA` et `EI` fois 3 donnent `K` fois 3
+  et les mêmes déplacements ; `K` ne change ni quand on tient l'autre bord, ni par le miroir, la transposée, l'ordre des
+  segments ou leur sens ; **retirer un pont n'élève jamais `K`**, ajouter un contact ne l'abaisse pas ; deux exécutions
+  égales au bit près.
+- **`etape_15_colonie.rs`** : les contacts rejoués sont les anastomoses du noyau (65 colonies, 39 780 contacts) et, pour les
+  six scénarios de la page et un mur d'une case à un rayon de 1,5, exactement ceux d'une recherche refaite sans index (le plus
+  proche, le plus ancien à distance égale, aucun obstacle entre les deux) ; « traverse » s'accorde avec `piece::traversee`
+  (300 comparaisons) ; la courbe de `K` ne baisse pas ; l'exemple (chaque ligne du rapport avec son statut, l'image).
+
+## Ce que les tests ne vérifient pas
+
+- Que la raideur d'une colonie ressemble à celle d'un vrai mycélium : rien ne la compare à une mesure.
+- Une colonie de plus de 1 000 nœuds ; le temps de calcul ; Windows (rien n'y a tourné avant la CI).
+- Les **valeurs exactes** ne viennent que de ce banc : aucune n'est comparée à une publication.
+- Le rejeu après un changement du noyau : il **copie** la règle du noyau (`Index`, rayon, délai, obstacle) ; il ne lit pas un
+  état, il le refait. Les tests le comparent au noyau sur les scénarios cités seulement.
+- Les nombres d'une colonie simulée (`K` de la démonstration, de la courbe) sont ceux que ce code rend : ils figent le
+  calcul, ils ne le prouvent pas.
+- Le binaire de l'exemple (ses arguments, son code de sortie) : les tests appellent ses fonctions.
+- Le cisaillement, une section ou des raideurs qui varient d'une hyphe à l'autre.
+
+## Les limites
+
+- **Un modèle à nous, pas une raideur de matériau.** `K` dépend de `EA` et `EI` donnés (**uniformes**, alors que la paroi
+  vieillit : Brinkmann et coll., fig. S4), de la règle de contact (un pont de même raideur, alors qu'une vraie anastomose
+  fond les parois), des mors et de la fonte.
+- **Euler-Bernoulli pour des poutres trapues** : un segment fait 0,76 à 0,91 case, soit 5 à 6 µm, pour une hyphe de 2,8 µm
+  de diamètre (un élancement de 2). Le cisaillement n'est pas compté ; son ordre de grandeur (3 (h/L)² de la flexion pour une
+  section rectangulaire tenue aux deux bouts, d'après la relecture de l'étape 14, non refait ici ni calculé pour une paroi
+  annulaire) est de plusieurs dizaines de pour cent. **Un arbre plus des ponts** : les boucles ne viennent que de la règle de
+  contact.
+- **De petites colonies** : au plus 1 000 nœuds (`INCONNUES_MAX`) ; au-delà `TropGrand`. Un gradient conjugué est une suite
+  possible, pas cette étape. En deux dimensions, petits déplacements, comportement linéaire.
+- **Des grandeurs dans la plage normale de `f64`** : `ea`, `ei` et `delta` normaux, des coordonnées de moins de 1e50, des
+  longueurs dont le carré (pour `extraire`) et le cube (pour `pousser`) sont normaux. Un résultat qui déborde ou s'efface est
+  **refusé** : `delta` = 1e300 avec `EA` = 1e10 rendrait `NaN`, `delta` = 1e-300 avec `EA` = 1e-100 rendrait zéro. C'est aussi
+  le sort d'un réseau fait à la main en deux morceaux, un par mors : sa force est nulle. Avec `delta` = 1, de `EA` = 1e-250
+  à 1e300, le calcul est juste à 2e-15 près (mesuré par le prototype ; les tests rejouent les deux bouts de la plage).
+- **Six à sept chiffres** pour une colonie simulée (voir « La précision ») ; un réseau dont le plus petit mode tombe sous
+  1e-12 est refusé comme mécanisme, même valide.
