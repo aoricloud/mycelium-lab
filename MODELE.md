@@ -1492,7 +1492,9 @@ Le module vient de trois énergies : `E* = C₁₁ − C₁₂²/C₂₂`, `ν* 
 les nœuds d'un bord, pousse ceux du bord d'en face et lit la **raideur** `K` : la force qu'il faut pour un déplacement donné. Un
 mors est ici **une colonne de cases** ; une bande de deux à cinq colonnes donne un `K` de 1 à 15 fois plus grand (mesuré, voir
 plus bas), et rien ne dit qu'une largeur est plus juste qu'une autre. D'une graine à l'autre, le même scénario donne des `K` de
-0,005 à 0,2 µN par case. Le banc **ne prédit pas la résistance d'un vrai matériau** : il calcule la raideur du réseau qu'il a
+0,0022 à 0,53 µN par case (mesuré sur la colonie de démonstration : graines 1 à 120, de 40 à 100 pas de 10 en 10, soit 840 essais, dont
+169 traversent la boîte avec au plus 1 000 nœuds ; 606 ne la traversent pas encore et 65 dépassent le plafond ; d'autres graines ou
+d'autres pas peuvent sortir de cette fourchette). Le banc **ne prédit pas la résistance d'un vrai matériau** : il calcule la raideur du réseau qu'il a
 simulé, avec des raideurs d'hyphe que l'appelant donne. **Aucune raideur de colonie n'est publiée** : il n'y a rien à
 reproduire, et aucun nombre de cette étape n'est « lu à la source » en tant que raideur de colonie. Le solveur est celui des
 étapes 13 et 14 ; **le noyau ne change pas** (aucun champ, aucun accesseur : les empreintes sont celles du dépôt).

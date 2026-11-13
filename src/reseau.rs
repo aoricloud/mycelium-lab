@@ -2,7 +2,7 @@
 //!
 //! **Une raideur de colonie n'est publiée nulle part** : ce module calcule la raideur du réseau de poutres que le banc a
 //! simulé, avec des raideurs d'hyphe données par l'appelant, pas celle d'un matériau. **Le nombre dépend du choix des mors**
-//! (ici une colonne de cases par bord) : une bande plus large le change du simple au décuple (voir `MODELE.md`).
+//! (ici une colonne de cases par bord) : une bande plus large le change de 1 à 15 fois (voir `MODELE.md`).
 //!
 //! # De la colonie au réseau
 //!
