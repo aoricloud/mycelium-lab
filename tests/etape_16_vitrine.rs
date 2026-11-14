@@ -20,8 +20,9 @@ use std::sync::{Mutex, MutexGuard};
 
 use mycelium_lab::simulation::{EtatPointe, Simulation, lire_scenario_tropismes};
 use mycelium_lab::vitrine::{
-    mycelium_avancer, mycelium_choisir_scenario, mycelium_demarrer, mycelium_empreinte_mot, mycelium_nb_segments,
-    mycelium_pointe, mycelium_pointes, mycelium_segment_apex, mycelium_segment_temps, mycelium_temps,
+    mycelium_avancer, mycelium_choisir_scenario, mycelium_demarrer, mycelium_duree, mycelium_empreinte_mot,
+    mycelium_nb_segments, mycelium_pointe, mycelium_pointes, mycelium_segment_apex, mycelium_segment_temps,
+    mycelium_temps,
 };
 
 /// Un des six scénarios de la vitrine, tel que la spécification de l'étape 8 le fixe.
@@ -50,9 +51,11 @@ const SCENARIOS: [Scenario; 6] = [
 const GRAINES: [u32; 2] = [1, 0xDEAD_BEEF];
 
 /// Les moments de la comparaison, en nombre de pas depuis le démarrage : le départ, un pas, un pas moyen,
-/// le pas de référence et 40 pas de plus (la page ne s'arrête pas à `duree`).
-fn moments(scenario: &Scenario) -> [u32; 5] {
-    [0, 1, 37, scenario.duree, scenario.duree + 40]
+/// le pas de référence, 40 pas de plus (la page ne s'arrête pas à `duree`) et le pas 1100 : la page va jusqu'à 3000,
+/// des segments y naissent au-delà du pas 255, et toutes les pointes y sont mortes (mesuré à l'étape 16 : la dernière
+/// meurt au plus tard au pas 1090 sur les six scénarios et 22 graines).
+fn moments(scenario: &Scenario) -> [u32; 6] {
+    [0, 1, 37, scenario.duree, scenario.duree + 40, 1100]
 }
 
 /// Sérialise les tests de ce fichier : l'état de la vitrine est unique.
@@ -130,11 +133,10 @@ fn verifier_les_valeurs(native: &Simulation, contexte: &str) {
 
 /// Vérifie les bords : `NaN` pour un segment ou une pointe hors de portée (le premier indice trop grand, un très grand,
 /// `u32::MAX`), pour `k` trop grand (2, un très grand, `u32::MAX`) et pour les deux à la fois ; mais pas pour le dernier
-/// indice valide.
+/// indice valide. Sans pointe vivante, même la pointe 0 rend `NaN`.
 fn verifier_les_bords(contexte: &str) {
     let n = mycelium_nb_segments();
     let m = mycelium_pointes();
-    assert!(m >= 1, "{contexte} : une colonie a toujours une pointe");
     for hors in [n, n + 1, 1 << 31, u32::MAX] {
         assert!(mycelium_segment_temps(hors).is_nan(), "{contexte} : segment_temps({hors}) avec {n} segments");
         assert!(mycelium_segment_apex(hors).is_nan(), "{contexte} : segment_apex({hors}) avec {n} segments");
@@ -148,26 +150,30 @@ fn verifier_les_bords(contexte: &str) {
             assert!(mycelium_pointe(hors, k).is_nan(), "{contexte} : pointe({hors}, {k}) avec {m} pointes");
         }
     }
-    for i in [0, m - 1] {
-        for k in [2, 3, 1 << 31, u32::MAX] {
-            assert!(mycelium_pointe(i, k).is_nan(), "{contexte} : pointe({i}, {k})");
-        }
-        for k in [0, 1] {
-            assert!(!mycelium_pointe(i, k).is_nan(), "{contexte} : pointe({i}, {k}) est valide");
+    if m > 0 {
+        for i in [0, m - 1] {
+            for k in [2, 3, 1 << 31, u32::MAX] {
+                assert!(mycelium_pointe(i, k).is_nan(), "{contexte} : pointe({i}, {k})");
+            }
+            for k in [0, 1] {
+                assert!(!mycelium_pointe(i, k).is_nan(), "{contexte} : pointe({i}, {k}) est valide");
+            }
         }
     }
     assert!(mycelium_pointe(u32::MAX, u32::MAX).is_nan(), "{contexte} : pointe(u32::MAX, u32::MAX)");
 }
 
-/// 1. Pour chacun des **six scénarios**, deux graines et cinq moments (0, 1, un pas moyen, le pas de référence, 40 de plus),
-///    les trois lectures sont celles de `Simulation` : le pas de naissance et l'hyphe de **chaque** segment, et `x` puis `y` de
-///    **chaque** pointe vivante, dans l'ordre des identifiants. Une pointe arrêtée (anastomosée ou contre un mur) n'est pas
-///    comptée et ne décale pas les suivantes : le test en a vu, avant une pointe vivante, dans ces parcours.
+/// 1. Pour chacun des **six scénarios**, deux graines et six moments (0, 1, un pas moyen, le pas de référence, 40 de plus,
+///    1100), les trois lectures sont celles de `Simulation` : le pas de naissance et l'hyphe de **chaque** segment, et `x` puis
+///    `y` de **chaque** pointe vivante, dans l'ordre des identifiants. Une pointe arrêtée (anastomosée ou contre un mur) n'est
+///    pas comptée et ne décale pas les suivantes : le test en a vu, avant une pointe vivante, dans ces parcours. Il a lu aussi
+///    des pas de naissance au-delà de 255 (un pas lu sur 8 bits ne passe pas).
 #[test]
 #[cfg_attr(not(feature = "etape-16"), ignore)]
 fn les_trois_lectures_sont_celles_de_la_simulation_pour_les_six_scenarios() {
     let _garde = verrou();
     let mut arretees_avant_une_vivante = 0usize;
+    let mut plus_tardif = 0;
     for scenario in &SCENARIOS {
         for graine in GRAINES {
             let mut native = demarrer(scenario, graine);
@@ -179,21 +185,26 @@ fn les_trois_lectures_sont_celles_de_la_simulation_pour_les_six_scenarios() {
                 assert_eq!(mycelium_temps(), moment, "{contexte}");
                 verifier_les_valeurs(&native, &contexte);
                 let etats: Vec<EtatPointe> = native.etat_des_pointes().collect();
-                let derniere_vivante = etats.iter().rposition(|etat| etat.actif).expect("une pointe vivante");
-                arretees_avant_une_vivante += etats[..derniere_vivante].iter().filter(|etat| !etat.actif).count();
+                if let Some(derniere_vivante) = etats.iter().rposition(|etat| etat.actif) {
+                    arretees_avant_une_vivante += etats[..derniere_vivante].iter().filter(|etat| !etat.actif).count();
+                }
+                plus_tardif = native.segments().iter().map(|segment| segment.temps).fold(plus_tardif, u32::max);
             }
         }
     }
     assert!(arretees_avant_une_vivante > 0, "aucune pointe arrêtée avant une vivante : le test serait creux");
+    assert!(plus_tardif > 255, "aucun pas de naissance au-delà de 255 (au plus {plus_tardif}) : le test serait creux");
 }
 
 /// 2. Les bords, à chaque moment de chaque scénario : `NaN` hors de portée sur chaque indice et sur `k` (au premier indice
 ///    hors de portée, bien au-delà, `u32::MAX`), jamais pour le dernier indice valide. Au temps 0 il n'y a aucun segment : même
-///    `i = 0` rend `NaN` pour les deux premières, alors que la pointe 0 existe (sur la spore).
+///    `i = 0` rend `NaN` pour les deux premières, alors que la pointe 0 existe (sur la spore). Au pas 1100 il n'y a plus de
+///    pointe vivante : même la pointe 0 rend `NaN`, et le test exige d'avoir vu cet état.
 #[test]
 #[cfg_attr(not(feature = "etape-16"), ignore)]
 fn hors_de_portee_et_aux_bords_les_lectures_rendent_nan() {
     let _garde = verrou();
+    let mut sans_pointe_vivante = 0usize;
     for scenario in &SCENARIOS {
         let mut native = demarrer(scenario, 1);
         let mut fait = 0;
@@ -201,8 +212,10 @@ fn hors_de_portee_et_aux_bords_les_lectures_rendent_nan() {
             avancer(&mut native, moment - fait);
             fait = moment;
             verifier_les_bords(&format!("{} pas {moment}", scenario.nom));
+            sans_pointe_vivante += usize::from(mycelium_pointes() == 0);
         }
     }
+    assert!(sans_pointe_vivante > 0, "aucun état sans pointe vivante : le test serait creux");
     let _ = demarrer(&SCENARIOS[0], 1);
     assert_eq!(mycelium_nb_segments(), 0);
     assert!(mycelium_segment_temps(0).is_nan() && mycelium_segment_apex(0).is_nan());
@@ -211,7 +224,9 @@ fn hors_de_portee_et_aux_bords_les_lectures_rendent_nan() {
 }
 
 /// 3. Lire ne change rien : la vitrine lue à chaque pas (les trois lectures, tous les indices, les bords) a, tous les
-///    10 pas, l'empreinte de sa jumelle native et, à la fin, celle d'une simulation native jamais lue.
+///    10 pas, l'empreinte de sa jumelle native et, à la fin, celle d'une simulation native jamais lue. Le reste de l'état
+///    de la vitrine non plus : après les lectures, sa durée est celle du scénario, et un nouveau démarrage, sans nouveau
+///    choix, reprend le même scénario.
 #[test]
 #[cfg_attr(not(feature = "etape-16"), ignore)]
 fn lire_les_pointes_et_les_segments_ne_change_pas_l_empreinte() {
@@ -235,5 +250,9 @@ fn lire_les_pointes_et_les_segments_ne_change_pas_l_empreinte() {
         let mut jamais_lue = simulation_native(scenario, 0xDEAD_BEEF);
         jamais_lue.avancer_n(scenario.duree);
         assert_eq!(empreinte_de_la_vitrine(), jamais_lue.empreinte(), "{} : l'empreinte finale", scenario.nom);
+        assert_eq!(mycelium_duree(), scenario.duree, "{} : une lecture a changé la durée", scenario.nom);
+        mycelium_demarrer(7);
+        let redemarree = simulation_native(scenario, 7).empreinte();
+        assert_eq!(empreinte_de_la_vitrine(), redemarree, "{} : une lecture a changé le scénario choisi", scenario.nom);
     }
 }
