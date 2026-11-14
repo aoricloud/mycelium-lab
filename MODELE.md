@@ -1665,3 +1665,72 @@ Et un cadre de 40 × 25 nœuds (le plafond) : 25 rangées de `EA/39`, soit 125/3
   à 1e300, le calcul est juste à 2e-15 près (mesuré par le prototype ; les tests rejouent les deux bouts de la plage).
 - **Six à sept chiffres** pour une colonie simulée (voir « La précision ») ; un réseau dont le plus petit mode tombe sous
   1e-12 est refusé comme mécanisme, même valide.
+
+# Les lectures de la page (étape 16)
+
+**Rien de la simulation ne change.** L'étape donne à la page trois lectures de plus, en lecture seule : le pas de
+naissance de chaque segment, l'hyphe qui l'a laissé et la position de chaque pointe vivante. La page pourra en tirer
+l'âge d'un segment, son flux (le nombre de segments de son sous-arbre, qu'elle refera depuis l'hyphe de chacun) et ses
+pointes ; elle ne les emploie pas encore. L'état, l'écriture canonique, les empreintes et le résultat des 18
+exportations d'avant sont ceux de l'étape 15.
+
+## Ce qui est exposé
+
+- **Le noyau** : `Simulation::etat_des_pointes(&self)` rend un itérateur (rien n'est copié) d'`EtatPointe { id, x, y,
+  actif }`, un par apex, dans l'ordre des identifiants (0, 1, 2…, sans trou : aucun apex n'est retiré). Un apex
+  anastomosé ou arrêté par un obstacle reste, avec `actif` à faux : il y a `1 + ramifications()` états, et les vivants
+  sont les `pointes()`. Ni la direction ni la mémoire de glissement d'un apex ne sortent.
+- **La vitrine** : `mycelium_segment_temps(i)` (le pas de naissance, à partir de 1), `mycelium_segment_apex(i)`
+  (l'identifiant de l'apex, à partir de 0) et `mycelium_pointe(i, k)` (`k` = 0 pour `x`, 1 pour `y` de la `i`-ième
+  pointe **vivante**, dans l'ordre des identifiants ; `mycelium_pointes()` en donne le nombre). Hors de portée (`i` trop
+  grand, `k` plus grand que 1) et avant tout démarrage : `NaN`, comme `mycelium_segment`.
+- **Les deux entiers sont rendus en `f64`** : 0 est un identifiant d'apex valide, aucun entier ne reste libre pour dire
+  « hors de portée », et la règle du module est déjà « hors de portée : `NaN` » (`mycelium_obstacle` rend ses entiers de
+  même) ; un entier de moins de 2^53 est exact en `f64`.
+
+## La position d'une pointe
+
+Un apex ne bouge qu'en laissant un segment, qui part de là où il était et au bout duquel il arrive. Sa position est donc
+le bout `(x1, y1)` de **son dernier segment** ou, s'il n'en a laissé aucun, **le point où il est né** : la spore (au
+centre de sa case) pour l'apex 0 ; pour un autre, le bout du segment que sa mère vient de laisser (ramification), ou la
+position de sa mère si elle vient de s'arrêter contre un obstacle (naissance de contact, deux branches au plus). Un apex
+bloqué (par le bord, par un mur sous `thigmotropisme 0`, ou faute de substrat) garde sa place ; un apex anastomosé reste
+au bout de son dernier segment. Les tests le vérifient à chaque pas, en comparant l'état d'après à celui d'avant, contre
+les segments et les compteurs du noyau ; sur leurs parcours, chacun des six cas se présente (sur 6 scénarios et 8
+graines, le juge en a compté 92 382 pas avancés, 2 001 anastomoses, 42 190 pas bloqués, 69 arrêts, 4 643 naissances par
+ramification et 138 de contact).
+
+## Ce que ça coûte
+
+`mycelium_pointe` parcourt les apex à chaque appel : lire toutes les pointes d'une image coûte le produit du nombre de
+pointes par celui des apex. Mesuré sous Node 20 (VM partagée, médiane de 200 lectures de toutes les pointes, `x` et `y`) :
+4 µs pour `mur` (graine 1, 350 pas : 15 pointes), 50 à 60 µs pour `libre` (graine 1, 130 pas : 227 pointes sur 342
+apex), et 0,3 ms au pire trouvé (`libre`, graine 12, 264 pas : 384 pointes sur 1 020 apex, le plus grand produit des six
+scénarios pour les graines 1 à 20 et les pas 1 à 400). Lire les coordonnées de tous les segments, ce que la page fait
+déjà, coûte davantage. **Aucun cache** : sans mesure qui le demande, le plus simple.
+
+## Ce que les tests vérifient
+
+- **`etape_16_noyau.rs`** : un seul état au départ, sur la spore ; à chaque pas (6 scénarios, 5 graines, jusqu'à 40 pas
+  après le pas de référence) le nombre, l'ordre et les vivants, et la règle de position ci-dessus ; la lecture ne change
+  ni l'écriture canonique ni l'empreinte (comparées à une simulation jumelle jamais lue).
+- **`etape_16_vitrine.rs`** : les trois lectures contre `Simulation`, au bit près (6 scénarios, 2 graines, 5 moments) ;
+  `NaN` au premier indice de trop, bien au-delà et pour `k` de 2, jamais au dernier indice valide ; une lecture complète à
+  chaque pas ne change pas l'empreinte.
+- **`etape_16_artefact.rs`** et `tests/etape_16/pointes-wasm.mjs` : le module (les 21 exportations, leurs signatures, `NaN`
+  avant tout démarrage), puis, sous Node, les trois lectures égales au bit près à celles du code natif ; et, jamais
+  ignoré, que le module a les trois lectures si et seulement si `etape-16` est active.
+- Trois tests des étapes d'avant changent, et eux seuls : le compte des 18 exportations (`etape_11_artefact.rs`, non
+  compilé avec `etape-16`), les exportations que `app.js` doit employer (`etape_4_artefact.rs` : trois noms réservés à la
+  page suivante) et l'accesseur du noyau (`etape_15_limites.rs` : il ne refuse plus que celui qui écrirait).
+
+## Ce que les tests ne vérifient pas
+
+- Que la page emploie ces lectures : elle ne le fait pas encore.
+- Les octets du module : ils changent avec toute ligne de `src/*.rs` (les numéros de ligne des messages de panique y sont)
+  et avec les fonctionnalités de `default`. Ce qui est figé, c'est le nom, la signature et le résultat de chaque
+  exportation ; le module se reconstruit après la dernière modification de `src/` et de `Cargo.toml`.
+- Les lectures avant tout démarrage en natif (l'état global est déjà posé par les autres tests) : seul le module neuf le
+  montre.
+- Windows, un navigateur, et des colonies plus grandes que celles mesurées (le coût de `mycelium_pointe` y croît comme le
+  carré du nombre de pointes).
