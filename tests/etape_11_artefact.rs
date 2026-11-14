@@ -224,6 +224,11 @@ fn analyser(octets: &[u8]) -> Module {
 ///     et `mycelium_densite` et `mycelium_densite_max` ; la mémoire `memory` est tolérée, rien d'autre (aucune autre
 ///     exportation, de quelque genre que ce soit). Un nom n'est exporté qu'une fois. Un module construit avant l'étape 11
 ///     (16 exportations) ne passe pas.
+///
+///     L'étape 16 ajoute trois exportations : avec `etape-16`, ce test n'est pas compilé et c'est
+///     `le_module_exporte_exactement_les_vingt_et_une_fonctions` (`etape_16_artefact.rs`) qui fixe la liste exacte, ces
+///     dix-huit et les trois nouvelles.
+#[cfg(not(feature = "etape-16"))]
 #[test]
 #[cfg_attr(not(feature = "etape-11"), ignore)]
 fn le_module_exporte_exactement_les_dix_huit_fonctions() {
