@@ -3,7 +3,8 @@
 //! L'accesseur rend, pour **tous** les apex dans l'ordre de leur identifiant, `(id, x, y, actif)` : un apex anastomosé ou
 //! arrêté par un obstacle reste dans la liste, inactif. Il ne fait que lire. Ces tests le comparent à ce que le noyau dit
 //! déjà par d'autres chemins (`pointes`, `ramifications`, `anastomoses`, `segments`, l'écriture canonique), sur les six
-//! scénarios de la page, cinq graines et chaque pas de 0 à la durée du scénario plus 40.
+//! scénarios de la page : au temps 0 (test 1), puis à chaque pas jusqu'à la durée du scénario plus 40, avec cinq graines
+//! pour la règle de position (test 2) et deux pour la lecture seule (test 3).
 //!
 //! La règle de position (test 2) : un apex ne bouge qu'en laissant un segment, qui part de là où il était et au bout
 //! duquel il arrive. Sa position est donc le bout `(x1, y1)` de son dernier segment ou, s'il n'en a laissé aucun, le point
