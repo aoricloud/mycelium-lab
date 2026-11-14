@@ -341,7 +341,8 @@ fn lignes_attendues(nom: &str, simulation: &Simulation) -> String {
 /// neuf, même après le choix du scénario, puis les lignes du départ et de chaque morceau.
 fn sortie_attendue(scenario: &Scenario, graine: u32, morceaux: &[u32]) -> String {
     let mut simulation = simulation_native(scenario, graine);
-    let mut texte = String::from("avant=NaN,NaN,NaN,NaN\napres_choix=NaN,NaN,NaN,NaN\n");
+    let douze_nan = ["NaN"; 12].join(",");
+    let mut texte = format!("avant={douze_nan}\napres_choix={douze_nan}\n");
     texte.push_str(&lignes_attendues("depart", &simulation));
     for (i, pas) in morceaux.iter().enumerate() {
         simulation.avancer_n(*pas);
@@ -353,12 +354,13 @@ fn sortie_attendue(scenario: &Scenario, graine: u32, morceaux: &[u32]) -> String
 /// 2. Le module, chargé par Node (`WebAssembly.instantiate`, importations vides), donne pour **chacun des six scénarios** les
 ///    trois lectures du code natif : pour trois graines (la plus simple, une grande qui ne tient pas sur 31 bits, le maximum)
 ///    et des morceaux de pas différents (cinq moments de 0 au-delà du pas de référence ; un avancement haché en 1, 0, 6, 13,
-///    0 et 60 pas ; un seul morceau de 5 pas), le pas de naissance et l'hyphe de **chaque** segment et la position de
-///    **chaque** pointe vivante sont ceux de `Simulation` (par leur SHA-256, au bit près), le nombre de segments et de
-///    pointes aussi, et l'empreinte lue après les lectures est celle d'une simulation jamais lue. Lectures dans les deux
-///    ordres (pointes d'abord aux morceaux impairs). Le module neuf rend `NaN` avant tout démarrage, et même une fois le
-///    scénario choisi ; `NaN` hors de portée aux bords de chaque état. Si le code change sans que le module soit
-///    reconstruit, ce test échoue.
+///    0 et 60 pas ; 5 pas puis 1095, jusqu'au pas 1100 où il n'y a plus de pointe vivante et où des segments sont nés
+///    au-delà du pas 255), le pas de naissance et l'hyphe de **chaque** segment et la position de **chaque** pointe
+///    vivante sont ceux de `Simulation` (par leur SHA-256, au bit près), le nombre de segments et de pointes aussi, et
+///    l'empreinte lue après les lectures est celle d'une simulation jamais lue. Lectures dans les deux ordres (pointes
+///    d'abord aux morceaux impairs). Le module neuf rend `NaN` avant tout démarrage (aux indices 0, 1 et `u32::MAX`), et
+///    même une fois le scénario choisi ; `NaN` hors de portée aux bords de chaque état. Si le code change sans que le
+///    module soit reconstruit, ce test échoue.
 #[test]
 #[cfg_attr(not(feature = "etape-16"), ignore)]
 fn node_donne_les_trois_lectures_du_code_natif_pour_chaque_scenario() {
@@ -371,9 +373,11 @@ fn node_donne_les_trois_lectures_du_code_natif_pour_chaque_scenario() {
     for scenario in &SCENARIOS {
         let numero = scenario.numero.to_string();
         let jusqu_au_pas_de_reference = [0, 1, 36, scenario.duree - 37, 40];
-        for (graine, morceaux) in
-            [(1, jusqu_au_pas_de_reference.to_vec()), (0xDEAD_BEEF, vec![1, 0, 6, 13, 0, 60]), (u32::MAX, vec![5])]
-        {
+        for (graine, morceaux) in [
+            (1, jusqu_au_pas_de_reference.to_vec()),
+            (0xDEAD_BEEF, vec![1, 0, 6, 13, 0, 60]),
+            (u32::MAX, vec![5, 1095]),
+        ] {
             let liste: Vec<String> = morceaux.iter().map(u32::to_string).collect();
             let sortie =
                 lancer_le_script("pointes-wasm.mjs", &[module, &numero, &graine.to_string(), &liste.join(",")]);
