@@ -9,9 +9,10 @@
 // des virgules (par exemple `1,0,6,13,0,60`), chacun un entier de 32 bits non signé. Il écrit sur la sortie standard, une
 // par ligne, `clé=valeur`, dans cet ordre :
 //
-//   avant          : `mycelium_segment_temps(0)`, `mycelium_segment_apex(0)`, `mycelium_pointe(0, 0)` et
-//                    `mycelium_pointe(0, 1)` sur le module neuf, séparés par des virgules (`NaN` attendu) ;
-//   apres_choix    : les mêmes quatre valeurs, relues après le choix du scénario, qui ne démarre rien ;
+//   avant          : `mycelium_segment_temps(i)`, `mycelium_segment_apex(i)`, `mycelium_pointe(i, 0)` et
+//                    `mycelium_pointe(i, 1)` pour i = 0, 1 et `u32::MAX`, sur le module neuf, séparés par des virgules
+//                    (douze `NaN` attendus) ;
+//   apres_choix    : les mêmes douze valeurs, relues après le choix du scénario, qui ne démarre rien ;
 //   lecture_<i>    : pour chaque état, d'abord le départ (`lecture_depart`, avant tout pas), puis chaque morceau `i` (de 0)
 //                    après l'avoir avancé : `temps,segments,pointes,hache_temps,hache_apex,hache_pointes,empreinte` où
 //                    `temps` est `mycelium_temps()`, `segments` `mycelium_nb_segments()`, `pointes` `mycelium_pointes()`, les
@@ -23,7 +24,7 @@
 //                    résultat ne doit pas dépendre de l'ordre ;
 //   bords_<i>      : 1 si, dans cet état, les trois lectures rendent `NaN` hors de portée (chacune au premier indice de
 //                    trop, à 65536, 2^31 et `u32::MAX` ; `k` de 2, 2^31 et `u32::MAX`) et si le dernier segment et la
-//                    dernière pointe ne rendent pas `NaN` ; sinon 0.
+//                    dernière pointe, quand il y en a, ne rendent pas `NaN` ; sinon 0.
 //
 // Si le fichier ou les arguments sont faux, ou si une exportation manque, écrit un message sur la sortie d'erreur et sort
 // avec le code 1. Aucune dépendance : les modules intégrés de Node seulement.
@@ -79,9 +80,11 @@ async function principal() {
   }
 
   const lignes = [];
-  /** Les quatre premières lectures, tant que rien n'est démarré. */
+  /** Les lectures aux indices 0, 1 et u32::MAX, tant que rien n'est démarré. */
   const nanAttendu = () =>
-    [m.mycelium_segment_temps(0), m.mycelium_segment_apex(0), m.mycelium_pointe(0, 0), m.mycelium_pointe(0, 1)].join(",");
+    [0, 1, MAX_U32]
+      .flatMap((i) => [m.mycelium_segment_temps(i), m.mycelium_segment_apex(i), m.mycelium_pointe(i, 0), m.mycelium_pointe(i, 1)])
+      .join(",");
   lignes.push(`avant=${nanAttendu()}`);
 
   // Les fonctions qui rendent un entier rendent des i32 : `>>> 0` les relit comme des entiers non signés.
@@ -143,7 +146,7 @@ async function principal() {
     const dedans = [
       segments === 0 || !Number.isNaN(m.mycelium_segment_temps(segments - 1)),
       segments === 0 || !Number.isNaN(m.mycelium_segment_apex(segments - 1)),
-      pointes > 0 && !Number.isNaN(m.mycelium_pointe(pointes - 1, 0)) && !Number.isNaN(m.mycelium_pointe(pointes - 1, 1)),
+      pointes === 0 || (!Number.isNaN(m.mycelium_pointe(pointes - 1, 0)) && !Number.isNaN(m.mycelium_pointe(pointes - 1, 1))),
     ].every(Boolean);
     lignes.push(`bords_${nom}=${horsDePortee && dedans ? 1 : 0}`);
   };
