@@ -585,7 +585,15 @@ fn app_js_emploie_exactement_les_exportations_du_module() {
 
     let inconnus: Vec<&String> = employes.difference(&exportees).collect();
     assert!(inconnus.is_empty(), "app.js emploie des noms que le module n'exporte pas : {inconnus:?}");
-    let oublies: Vec<&String> = exportees.difference(&employes).collect();
+    // Chaque exportation est employée, sauf ces trois lectures de l'étape 16, que la page n'emploie pas encore : dès
+    // qu'elle en emploie une, ce test échoue, et le nom se retire de la liste.
+    const RESERVEES_A_LA_PAGE_SUIVANTE: [&str; 3] =
+        ["mycelium_segment_temps", "mycelium_segment_apex", "mycelium_pointe"];
+    for nom in RESERVEES_A_LA_PAGE_SUIVANTE {
+        assert!(!employes.contains(nom), "app.js emploie {nom} : le retirer de RESERVEES_A_LA_PAGE_SUIVANTE");
+    }
+    let oublies: Vec<&String> =
+        exportees.difference(&employes).filter(|nom| !RESERVEES_A_LA_PAGE_SUIVANTE.contains(&nom.as_str())).collect();
     assert!(oublies.is_empty(), "app.js n'emploie pas ces exportations du module : {oublies:?}");
     for nom in ["mycelium_demarrer", "mycelium_avancer", "mycelium_nb_segments", "mycelium_segment"] {
         assert!(employes.contains(nom), "app.js n'emploie pas {nom}");
