@@ -60,6 +60,21 @@
 //! partout et son maximum vaut `0.0` : ce n'est pas `NaN`, qui est réservé à « pas de simulation » et à « hors de la
 //! boîte ».
 //!
+//! # Les lectures de la page
+//!
+//! Trois exportations donnent à la page de quoi dessiner l'âge, le flux et les pointes : [`mycelium_segment_temps`] (le
+//! pas de naissance d'un segment), [`mycelium_segment_apex`] (l'hyphe qui l'a laissé) et [`mycelium_pointe`] (la position
+//! d'une pointe vivante). Elles ne font que lire : aucune ne change la simulation ni l'écriture canonique.
+//!
+//! Les deux premières rendent des entiers (le pas à partir de 1, l'identifiant d'apex à partir de 0) **en `f64`** : 0 est
+//! un identifiant valide, aucun entier ne reste libre pour « hors de portée », et la règle du module est déjà « hors de
+//! portée : `NaN` » ; un entier de moins de 2^53 est exact en `f64`. Hors de portée (un segment ou une pointe qui
+//! n'existe pas, `k` trop grand) et avant tout démarrage, les trois rendent `NaN`, comme [`mycelium_segment`].
+//!
+//! [`mycelium_pointe`] parcourt les apex à chaque appel et ne garde rien en mémoire : lire toutes les pointes d'une image
+//! coûte le produit du nombre de pointes par celui des apex. Mesuré à l'étape 16 sur les scénarios de la page, c'est au
+//! plus de l'ordre de 0,3 ms par image sous Node, moins que la lecture des segments : pas de cache (voir `MODELE.md`).
+//!
 //! # Avant tout démarrage
 //!
 //! Tant que [`mycelium_demarrer`] n'a pas été appelé, les fonctions qui rendent un entier rendent 0 et celles qui
@@ -224,6 +239,28 @@ pub extern "C" fn mycelium_segment(i: u32, k: u32) -> f64 {
     [segment.x0, segment.y0, segment.x1, segment.y1][k as usize]
 }
 
+/// Le pas de naissance du segment `i` : le numéro (à partir de 1) du pas de temps pendant lequel il a été laissé.
+///
+/// Rend `NaN` si `i >= mycelium_nb_segments()` et avant tout démarrage. Un entier, rendu en `f64` : voir « Les lectures de
+/// la page » dans la doc du module.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_segment_temps(i: u32) -> f64 {
+    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
+    let _ = i;
+    -1.0
+}
+
+/// L'identifiant de l'apex, c'est-à-dire de l'hyphe, qui a laissé le segment `i` (0 pour la première).
+///
+/// Rend `NaN` si `i >= mycelium_nb_segments()` et avant tout démarrage. Un entier, rendu en `f64` : voir « Les lectures de
+/// la page » dans la doc du module.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_segment_apex(i: u32) -> f64 {
+    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
+    let _ = i;
+    -1.0
+}
+
 /// La quantité de substrat dans la case `(x, y)`.
 ///
 /// Rend `NaN` si la case est hors de la boîte, et avant tout démarrage.
@@ -321,6 +358,18 @@ pub extern "C" fn mycelium_biomasse() -> f64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_pointes() -> u32 {
     verrou().simulation.as_ref().map_or(0, |simulation| simulation.pointes() as u32)
+}
+
+/// Une coordonnée de la `i`-ième pointe **vivante**, dans l'ordre des identifiants d'apex : `k` vaut 0 pour `x`, 1 pour `y`.
+///
+/// `i` va de 0 à `mycelium_pointes() - 1` ; un apex anastomosé ou arrêté par un obstacle n'est pas compté. Rend `NaN` si
+/// `i >= mycelium_pointes()` ou si `k > 1`, et avant tout démarrage. Chaque appel parcourt les apex : voir « Les lectures de
+/// la page » dans la doc du module.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_pointe(i: u32, k: u32) -> f64 {
+    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
+    let _ = (i, k);
+    -1.0
 }
 
 /// Le nombre cumulé d'anastomoses ; 0 avant tout démarrage.

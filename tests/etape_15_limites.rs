@@ -152,16 +152,17 @@ fn ni_fonction_interdite_ni_hashmap_le_noyau_ne_connait_pas_le_reseau_et_etape_1
         assert!(!texte.contains(concat!("Hash", "Map")) && !texte.contains(concat!("Hash", "Set")), "{fichier}");
         assert!(!texte.contains(concat!("thr", "ead")) && !texte.contains(concat!("Inst", "ant")), "{fichier}");
     }
-    // Le noyau, et les étapes 13 et 14, ne connaissent pas le réseau ; le noyau n'a aucun accesseur de plus.
+    // Le noyau, et les étapes 13 et 14, ne connaissent pas le réseau ; le noyau n'a aucun accesseur de plus qui écrive :
+    // toute `fn etat_des_pointes` (étape 16) y est `fn etat_des_pointes(&self)`.
     for fichier in std::fs::read_dir(format!("{}/src", env!("CARGO_MANIFEST_DIR"))).unwrap() {
         let nom = fichier.unwrap().file_name().into_string().unwrap();
         if nom != "reseau.rs" && nom != "lib.rs" {
             assert!(!lire(&format!("src/{nom}")).contains("reseau"), "src/{nom} parle du réseau");
         }
     }
-    assert!(
-        lire("src/lib.rs").contains("\npub mod reseau;\n") && !lire("src/simulation.rs").contains("etat_des_pointes")
-    );
+    let noyau = lire("src/simulation.rs");
+    assert!(lire("src/lib.rs").contains("\npub mod reseau;\n"));
+    assert_eq!(noyau.matches("fn etat_des_pointes").count(), noyau.matches("fn etat_des_pointes(&self)").count());
     // Aucune dépendance, d'aucune sorte, quelle que soit son écriture (une table pointée `[dev-dependencies.x]` comprise :
     // le verrou ne compte alors plus un seul paquet) ; la fonctionnalité est déclarée.
     let cargo = lire("Cargo.toml");

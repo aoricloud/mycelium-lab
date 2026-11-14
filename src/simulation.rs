@@ -186,6 +186,23 @@ struct Apex {
     memoire: Option<(usize, usize)>,
 }
 
+/// L'état d'une pointe tel que [`Simulation::etat_des_pointes`] le montre : son identifiant, sa position, et si elle est
+/// encore vivante.
+///
+/// Rien d'autre d'un apex ne sort : ni sa direction ni sa mémoire de glissement. La position est celle de l'apex, c'est-à-dire
+/// le bout `(x1, y1)` du dernier segment qu'il a laissé, ou, s'il n'en a laissé aucun, le point où il est né.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EtatPointe {
+    /// L'identifiant de l'apex : 0 pour le premier, puis dans l'ordre de leur naissance.
+    pub id: u32,
+    /// Abscisse de la pointe.
+    pub x: f64,
+    /// Ordonnée de la pointe.
+    pub y: f64,
+    /// Vrai si la pointe est vivante ; faux pour un apex anastomosé ou arrêté par un obstacle, qui reste dans la liste.
+    pub actif: bool,
+}
+
 /// L'état simulé complet : les apex, le substrat et les nombres cumulés.
 ///
 /// Tous les champs sont privés ; l'état ne s'observe que par les accesseurs de [`Simulation`], dans un ordre fixe,
@@ -577,6 +594,16 @@ impl Simulation {
     /// Nombre d'apex vivants, c'est-à-dire de pointes de la colonie.
     pub fn pointes(&self) -> usize {
         self.apex.iter().filter(|apex| apex.actif).count()
+    }
+
+    /// L'état de **tous** les apex, vivants ou non, dans l'ordre de leur identifiant (0, 1, 2…, sans trou).
+    ///
+    /// Un apex anastomosé ou arrêté par un obstacle n'est jamais retiré : il reste, avec `actif` à faux. Les pointes
+    /// vivantes sont donc celles de [`Simulation::pointes`], et il y a en tout `1 + ramifications()` états. Lecture seule :
+    /// elle ne change rien à l'état ni à l'aléa, et ne copie rien (un itérateur, pas un `Vec`).
+    pub fn etat_des_pointes(&self) -> impl Iterator<Item = EtatPointe> + '_ {
+        // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
+        std::iter::empty()
     }
 
     /// Nombre cumulé de ramifications depuis la création.
