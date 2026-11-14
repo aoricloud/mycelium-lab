@@ -602,8 +602,7 @@ impl Simulation {
     /// vivantes sont donc celles de [`Simulation::pointes`], et il y a en tout `1 + ramifications()` états. Lecture seule :
     /// elle ne change rien à l'état ni à l'aléa, et ne copie rien (un itérateur, pas un `Vec`).
     pub fn etat_des_pointes(&self) -> impl Iterator<Item = EtatPointe> + '_ {
-        // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
-        std::iter::empty()
+        self.apex.iter().map(|apex| EtatPointe { id: apex.id, x: apex.x, y: apex.y, actif: apex.actif })
     }
 
     /// Nombre cumulé de ramifications depuis la création.

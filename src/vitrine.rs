@@ -245,9 +245,11 @@ pub extern "C" fn mycelium_segment(i: u32, k: u32) -> f64 {
 /// la page » dans la doc du module.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_segment_temps(i: u32) -> f64 {
-    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
-    let _ = i;
-    -1.0
+    let verrou = verrou();
+    let Some(segment) = verrou.simulation.as_ref().and_then(|simulation| simulation.segments().get(i as usize)) else {
+        return f64::NAN;
+    };
+    f64::from(segment.temps)
 }
 
 /// L'identifiant de l'apex, c'est-à-dire de l'hyphe, qui a laissé le segment `i` (0 pour la première).
@@ -256,9 +258,11 @@ pub extern "C" fn mycelium_segment_temps(i: u32) -> f64 {
 /// la page » dans la doc du module.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_segment_apex(i: u32) -> f64 {
-    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
-    let _ = i;
-    -1.0
+    let verrou = verrou();
+    let Some(segment) = verrou.simulation.as_ref().and_then(|simulation| simulation.segments().get(i as usize)) else {
+        return f64::NAN;
+    };
+    f64::from(segment.apex)
 }
 
 /// La quantité de substrat dans la case `(x, y)`.
@@ -367,9 +371,18 @@ pub extern "C" fn mycelium_pointes() -> u32 {
 /// la page » dans la doc du module.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_pointe(i: u32, k: u32) -> f64 {
-    // Bouchon de la vague des tests (étape 16) : une valeur fausse, sans paniquer ni rien changer.
-    let _ = (i, k);
-    -1.0
+    if k > 1 {
+        return f64::NAN;
+    }
+    let verrou = verrou();
+    let Some(pointe) = verrou
+        .simulation
+        .as_ref()
+        .and_then(|simulation| simulation.etat_des_pointes().filter(|pointe| pointe.actif).nth(i as usize))
+    else {
+        return f64::NAN;
+    };
+    [pointe.x, pointe.y][k as usize]
 }
 
 /// Le nombre cumulé d'anastomoses ; 0 avant tout démarrage.
