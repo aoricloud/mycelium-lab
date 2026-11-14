@@ -1676,7 +1676,7 @@ exportations d'avant sont ceux de l'étape 15.
 
 ## Ce qui est exposé
 
-- **Le noyau** : `Simulation::etat_des_pointes(&self)` rend un itérateur (rien n'est copié) d'`EtatPointe { id, x, y,
+- **Le noyau** : `Simulation::etat_des_pointes(&self)` rend un itérateur (sans allocation) d'`EtatPointe { id, x, y,
   actif }`, un par apex, dans l'ordre des identifiants (0, 1, 2…, sans trou : aucun apex n'est retiré). Un apex
   anastomosé ou arrêté par un obstacle reste, avec `actif` à faux : il y a `1 + ramifications()` états, et les vivants
   sont les `pointes()`. Ni la direction ni la mémoire de glissement d'un apex ne sortent.
@@ -1714,9 +1714,13 @@ déjà, coûte davantage. **Aucun cache** : sans mesure qui le demande, le plus 
 - **`etape_16_noyau.rs`** : un seul état au départ, sur la spore ; à chaque pas (6 scénarios, 5 graines, jusqu'à 40 pas
   après le pas de référence) le nombre, l'ordre et les vivants, et la règle de position ci-dessus ; la lecture ne change
   ni l'écriture canonique ni l'empreinte (comparées à une simulation jumelle jamais lue).
-- **`etape_16_vitrine.rs`** : les trois lectures contre `Simulation`, au bit près (6 scénarios, 2 graines, 5 moments) ;
-  `NaN` au premier indice de trop, bien au-delà et pour `k` de 2, jamais au dernier indice valide ; une lecture complète à
-  chaque pas ne change pas l'empreinte.
+- **`etape_16_vitrine.rs`** : les trois lectures contre `Simulation`, au bit près (6 scénarios, 2 graines, 6 moments,
+  dont le pas 1100, où plus aucune pointe ne vit) ; `NaN` au premier indice de trop, bien au-delà et pour `k` de 2, jamais
+  au dernier indice valide ; une lecture complète à chaque pas ne change pas l'empreinte.
+- **`etape_16_bornes.rs`** : les bornes que la page atteint (les pas 200 et 3000 en plus, et `terrain`, graine 6, au pas
+  1100 : des pointes vivantes d'identifiant au-delà de 1000, des segments nés après le pas 1023) ; après les lectures de
+  chaque moment, l'empreinte et la durée inchangées, même sans pointe vivante ; l'accesseur contre le noyau jusqu'au pas
+  3000 (`1 + ramifications()` états, chaque apex au bout de son dernier segment).
 - **`etape_16_artefact.rs`** et `tests/etape_16/pointes-wasm.mjs` : le module (les 21 exportations, leurs signatures, `NaN`
   avant tout démarrage), puis, sous Node, les trois lectures égales au bit près à celles du code natif ; et, jamais
   ignoré, que le module a les trois lectures si et seulement si `etape-16` est active.
@@ -1727,10 +1731,10 @@ déjà, coûte davantage. **Aucun cache** : sans mesure qui le demande, le plus 
 ## Ce que les tests ne vérifient pas
 
 - Que la page emploie ces lectures : elle ne le fait pas encore.
-- Les octets du module : ils changent avec toute ligne de `src/*.rs` (les numéros de ligne des messages de panique y sont)
-  et avec les fonctionnalités de `default`. Ce qui est figé, c'est le nom, la signature et le résultat de chaque
+- Les octets du module : ils peuvent changer avec une ligne de `src/*.rs` qui déplace un message de panique compilé dans le
+  module (son numéro de ligne y est), et changent avec les fonctionnalités de `default`. Ce qui est figé, c'est le nom, la signature et le résultat de chaque
   exportation ; le module se reconstruit après la dernière modification de `src/` et de `Cargo.toml`.
 - Les lectures avant tout démarrage en natif (l'état global est déjà posé par les autres tests) : seul le module neuf le
   montre.
-- Windows, un navigateur, et des colonies plus grandes que celles mesurées (le coût de `mycelium_pointe` y croît comme le
-  carré du nombre de pointes).
+- Windows, un navigateur, et des colonies plus grandes que celles mesurées (lire toutes les pointes y coûte le produit du
+  nombre de pointes par celui des apex).

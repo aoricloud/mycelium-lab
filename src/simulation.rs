@@ -600,7 +600,7 @@ impl Simulation {
     ///
     /// Un apex anastomosé ou arrêté par un obstacle n'est jamais retiré : il reste, avec `actif` à faux. Les pointes
     /// vivantes sont donc celles de [`Simulation::pointes`], et il y a en tout `1 + ramifications()` états. Lecture seule :
-    /// elle ne change rien à l'état ni à l'aléa, et ne copie rien (un itérateur, pas un `Vec`).
+    /// elle ne change rien à l'état ni à l'aléa, et n'alloue rien (un itérateur, pas un `Vec`).
     pub fn etat_des_pointes(&self) -> impl Iterator<Item = EtatPointe> + '_ {
         self.apex.iter().map(|apex| EtatPointe { id: apex.id, x: apex.x, y: apex.y, actif: apex.actif })
     }
