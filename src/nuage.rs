@@ -217,13 +217,14 @@ pub fn ajuster(paires: &[(f64, f64)]) -> Result<Droite, ErreurAjustement> {
         sxy += dx * dy;
         syy += dy * dy;
     }
-    // On décide sur les valeurs elles-mêmes, pas seulement sur les sommes : la moyenne de logarithmes égaux peut tomber
-    // à un bit d'eux, et `sxx` (ou `syy`) valoir 1e-32 au lieu de 0. Sans paire, `first` et `last` sont `None` tous deux.
-    if triees.first().map(|p| p.0) == triees.last().map(|p| p.0) || sxx <= 0.0 {
+    // On décide sur les logarithmes eux-mêmes, pas seulement sur les sommes : la moyenne de logarithmes égaux peut
+    // tomber à un bit d'eux, et `sxx` (ou `syy`) valoir 1e-32 au lieu de 0. Deux valeurs voisines d'un bit peuvent avoir
+    // le même logarithme : c'est lui qui compte. Sans paire, `all` est vrai.
+    if logs.iter().all(|p| p.0 == logs[0].0) || sxx <= 0.0 {
         return Err(ErreurAjustement::DensitesIdentiques);
     }
     let pente = sxy / sxx;
-    let raideurs_egales = triees.iter().all(|p| p.1 == triees[0].1);
+    let raideurs_egales = logs.iter().all(|p| p.1 == logs[0].1);
     let r2 = if raideurs_egales || syy <= 0.0 { 1.0 } else { (sxy * sxy / (sxx * syy)).min(1.0) };
     Ok(Droite { pente, ordonnee: moyenne_y - pente * moyenne_x, r2, points: logs.len() })
 }
