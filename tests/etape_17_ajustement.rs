@@ -60,6 +60,8 @@ fn un_nuage_qui_n_est_pas_sur_une_droite_a_la_pente_l_ordonnee_et_le_r2_calcules
     // Des raideurs toutes égales : la droite est plate, elle passe par tous les points et `R²` vaut 1, exactement.
     let plate = ajuster(&[(0.5, 2.0), (1.0, 2.0), (3.0, 2.0)]).unwrap();
     assert!(est(plate, 0.0, logarithme(2.0), 1.0) && plate.r2 == 1.0, "{plate:?}");
+    // Des raideurs égales dont la moyenne des logarithmes ne tombe pas juste (`Syy` vaudrait 1e-32) : `R²` vaut 1.
+    assert_eq!(ajuster(&[(0.1, 0.2), (0.2, 0.2), (0.1 * 3.0, 0.2)]).unwrap().r2, 1.0);
 }
 
 #[test]
@@ -107,6 +109,10 @@ fn ce_qui_ne_s_ajuste_pas_est_une_erreur() {
     assert_eq!(ajuster(&[]), Err(ErreurAjustement::DensitesIdentiques));
     assert_eq!(ajuster(&[bonne]), Err(ErreurAjustement::DensitesIdentiques));
     assert_eq!(ajuster(&[(0.5, 1.0), (0.5, 2.0), (0.5, 3.0)]), Err(ErreurAjustement::DensitesIdentiques));
+    // Des densités identiques dont la moyenne des logarithmes ne tombe pas juste (0,4 ; 0,2) : toujours un refus. Le
+    // même point répété, c'est une colonie qui a cessé de croître.
+    assert_eq!(ajuster(&[(0.4, 1.0), (0.4, 2.0), (0.4, 3.0)]), Err(ErreurAjustement::DensitesIdentiques));
+    assert_eq!(ajuster(&[(0.2, 0.003); 7]), Err(ErreurAjustement::DensitesIdentiques));
     // Les plus petits et les plus grands nombres de `f64` s'ajustent : ils ont un logarithme.
     let extremes = ajuster(&[(f64::MIN_POSITIVE, f64::MAX), (1.0, 1.0)]).unwrap();
     assert!(extremes.pente < -1.0 && extremes.pente > -1.01 && extremes.ordonnee.abs() < 1e-9, "{extremes:?}");
