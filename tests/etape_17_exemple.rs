@@ -162,6 +162,8 @@ fn l_image_place_les_points_extremes_sur_le_cadre_avec_la_couleur_de_leur_moule(
     // grand en haut à droite (la raideur monte vers le haut), dans la couleur de la brique, et la droite entre les deux.
     let calculs = a_la_main();
     assert_eq!(de(pixels(&calculs), 40, 440), COULEURS[0]);
+    // Le carré est centré sur son point : son coin (39, 439) déborde du cadre.
+    assert_eq!(de(pixels(&calculs), 39, 439), COULEURS[0]);
     assert_eq!(de(pixels(&calculs), 600, 40), COULEURS[0]);
     assert_eq!(de(pixels(&calculs), 600, 440), CADRE);
     let brique = pixels(&calculs).2.chunks(3).filter(|p| *p == COULEURS[0]).count();
@@ -176,7 +178,7 @@ fn l_image_place_les_points_extremes_sur_le_cadre_avec_la_couleur_de_leur_moule(
     });
     assert_eq!(de(pixels(&avec_anneau), 600, 440), COULEURS[1]);
     assert_eq!(de(pixels(&avec_anneau), 600, 40), CADRE, "la brique n'est plus à l'extrême droite");
-    // La droite de la brique s'arrête à ses propres densités extrêmes : elle garde tous ses pixels.
+    // La droite de la brique s'arrête à ses propres densités extrêmes : elle n'est pas coupée.
     let brique = pixels(&avec_anneau).2.chunks(3).filter(|p| *p == COULEURS[0]).count();
     assert!((3 * 9 + 150..=3 * 9 + 201).contains(&brique), "{brique} pixels");
     // Un seul point : pas d'étendue, il se pose au coin en bas à gauche du cadre, sans droite.
@@ -193,6 +195,8 @@ fn l_image_place_les_points_extremes_sur_le_cadre_avec_la_couleur_de_leur_moule(
 fn ecrire_pose_le_fichier_et_l_image_dans_le_dossier_et_le_binaire_refuse_deux_arguments() {
     let dossier = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("etape-17-nuage");
     let calculs = a_la_main();
+    // Un passage précédent a pu laisser ces fichiers : on part d'un dossier vide.
+    let _ = std::fs::remove_dir_all(&dossier);
     assert_eq!(exemple::ecrire(&dossier, &calculs), Ok(()));
     assert_eq!(std::fs::read(dossier.join("nuage.txt")).unwrap(), fichier(&calculs).into_bytes());
     assert_eq!(std::fs::read(dossier.join("nuage.png")).unwrap(), image(&calculs));
