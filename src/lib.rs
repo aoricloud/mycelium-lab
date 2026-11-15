@@ -33,6 +33,8 @@
 //! - [`reseau`] : le réseau de poutres d'une colonie (ses segments, plus un pont par anastomose) et l'essai de poussée qui
 //!   en donne la raideur entre deux bords — l'étape 15 (M3) : une couche à part, elle ne change rien au noyau de la
 //!   simulation ;
+//! - [`nuage`] : la raideur selon la densité : la densité d'une colonie, le nuage de beaucoup de colonies et l'ajustement
+//!   en échelle logarithmique — l'étape 17 (M4) : une couche à part, elle ne change rien au noyau de la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
 
@@ -45,6 +47,7 @@ pub mod grille;
 pub mod image;
 pub mod mesures;
 pub mod moule;
+pub mod nuage;
 pub mod piece;
 pub mod poutres;
 pub mod raideur;
