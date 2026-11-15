@@ -1899,11 +1899,11 @@ densifie par plus d'hyphes. Un accord avec le repère dans ses hypothèses, pas 
 - **2D**, à l'échelle de l'hyphe ; la 3D (les mousses de Roberts et Garboczi) n'est pas là.
 - **Densifié par plus d'hyphes**, pas par des parois plus épaisses : la puissance 3 du nid d'abeille n'est pas la même
   expérience.
-- **Le plafond de 1 000 nœuds** du solveur plein borne la densité par le haut : la plage de densité est d'un facteur 15 à 20,
+- **Le plafond de 1 000 nœuds** du solveur plein borne la densité par le haut : la plage de densité est d'un facteur 15,7 à 20,6,
   et des colonies denses sont écartées (`TropGrande` : 90, 932 et 206 des 1 400 colonies lues en profil dense). Les colonies
   retenues ne sont donc pas un échantillon neutre : les plus denses manquent.
-- **Les mors d'une colonne** : `K` dépend de leur choix (étape 15) ; l'anneau n'a qu'une case par mors, et la plupart de ses
-  colonies ne traversent pas.
+- **Les mors d'une colonne** : `K` dépend de leur choix (étape 15) ; l'anneau n'a qu'une case par mors, et près de la moitié de ses
+  colonies ne traversent pas (1 652 sur 3 400, 48,6 %).
 - **Les fenêtres de pas** coupent des colonies qui croissent encore.
 - **Les points d'une même graine sont corrélés**, et un quart répètent un point déjà compté.
 - **Six à sept chiffres par colonie** : la précision d'un point est celle du solveur de l'étape 15.
