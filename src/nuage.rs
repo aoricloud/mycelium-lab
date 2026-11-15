@@ -35,6 +35,8 @@
 //! Des `Vec`, des boucles dans un ordre fixe, `+ - * /` : le même résultat, bit à bit, sur toutes les machines.
 
 use crate::croissance::Segment;
+use crate::mesures::logarithme;
+use crate::piece::carte_de_densite;
 use crate::simulation::Simulation;
 
 /// La cavité : la boîte et, case par case (ligne par ligne), celles qu'aucun obstacle ne bloque.
@@ -51,15 +53,15 @@ pub struct Cavite {
 impl Cavite {
     /// La cavité d'une simulation : les cases que son substrat ne bloque pas.
     pub fn de(simulation: &Simulation) -> Cavite {
-        // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-        let _ = simulation;
-        Cavite { largeur: 0, hauteur: 0, libres: Vec::new() }
+        let (largeur, hauteur) = (simulation.reglages().largeur, simulation.reglages().hauteur);
+        let libres =
+            (0..largeur * hauteur).map(|i| !simulation.substrat().est_bloquee(i % largeur, i / largeur)).collect();
+        Cavite { largeur, hauteur, libres }
     }
 
     /// Le nombre de cases libres.
     pub fn cases_libres(&self) -> usize {
-        // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-        0
+        self.libres.iter().filter(|&&libre| libre).count()
     }
 
     /// La densité `ρ` de ces segments : la somme de la carte de densité sur les cases libres, divisée par leur nombre
@@ -69,9 +71,22 @@ impl Cavite {
     /// qui n'a pas `largeur × hauteur` cases, ou un segment qui sort de la boîte (une coordonnée hors de `[0, largeur]`
     /// ou de `[0, hauteur]`, ou qui n'est pas un nombre).
     pub fn densite(&self, segments: &[Segment]) -> Option<f64> {
-        // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-        let _ = segments;
-        None
+        let (largeur, hauteur) = (self.largeur as f64, self.hauteur as f64);
+        let dans_la_boite = |s: &Segment| {
+            [s.x0, s.x1].iter().all(|x| (0.0..=largeur).contains(x))
+                && [s.y0, s.y1].iter().all(|y| (0.0..=hauteur).contains(y))
+        };
+        let libres = self.cases_libres();
+        let bien_formee = libres > 0 && self.largeur.checked_mul(self.hauteur) == Some(self.libres.len());
+        if !(bien_formee && segments.iter().all(dans_la_boite)) {
+            return None;
+        }
+        let carte = carte_de_densite(self.largeur, self.hauteur, segments);
+        let mut somme = 0.0;
+        for i in (0..self.libres.len()).filter(|&i| self.libres[i]) {
+            somme += carte.valeur(i % self.largeur, i / self.largeur);
+        }
+        Some(somme / libres as f64)
     }
 }
 
@@ -137,14 +152,18 @@ pub struct Comptes {
 impl Nuage {
     /// Les comptes : les points, et les colonies écartées par raison.
     pub fn comptes(&self) -> Comptes {
-        // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-        Comptes { retenus: 0, ne_traversent_pas: 0, trop_grandes: 0, refus: 0 }
+        let compte = |f: fn(&Raison) -> bool| self.ecartes.iter().filter(|e| f(&e.raison)).count();
+        Comptes {
+            retenus: self.points.len(),
+            ne_traversent_pas: compte(|r| matches!(r, Raison::NeTraversePas)),
+            trop_grandes: compte(|r| matches!(r, Raison::TropGrande)),
+            refus: compte(|r| matches!(r, Raison::Refus(_))),
+        }
     }
 
     /// Les paires `(ρ, K)` des points, dans leur ordre.
     pub fn paires(&self) -> Vec<(f64, f64)> {
-        // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-        Vec::new()
+        self.points.iter().map(|p| (p.densite, p.raideur)).collect()
     }
 }
 
@@ -181,7 +200,30 @@ pub enum ErreurAjustement {
 /// [`ErreurAjustement::ValeurInvalide`] si une valeur est nulle, négative ou non finie (ce refus passe avant l'autre) ;
 /// [`ErreurAjustement::DensitesIdentiques`] si tous les `log ρ` sont égaux, ou s'il y a moins de deux paires.
 pub fn ajuster(paires: &[(f64, f64)]) -> Result<Droite, ErreurAjustement> {
-    // Bouchon de la vague des tests : la vague du code écrit le vrai corps.
-    let _ = paires;
-    Err(ErreurAjustement::DensitesIdentiques)
+    let valide = |v: f64| v.is_finite() && v > 0.0;
+    if !paires.iter().all(|&(rho, k)| valide(rho) && valide(k)) {
+        return Err(ErreurAjustement::ValeurInvalide);
+    }
+    let mut triees = paires.to_vec();
+    triees.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let logs: Vec<(f64, f64)> = triees.iter().map(|&(rho, k)| (logarithme(rho), logarithme(k))).collect();
+    let n = logs.len() as f64;
+    let moyenne_x = logs.iter().map(|p| p.0).sum::<f64>() / n;
+    let moyenne_y = logs.iter().map(|p| p.1).sum::<f64>() / n;
+    let (mut sxx, mut sxy, mut syy) = (0.0, 0.0, 0.0);
+    for &(x, y) in &logs {
+        let (dx, dy) = (x - moyenne_x, y - moyenne_y);
+        sxx += dx * dx;
+        sxy += dx * dy;
+        syy += dy * dy;
+    }
+    // On décide sur les valeurs elles-mêmes, pas seulement sur les sommes : la moyenne de logarithmes égaux peut tomber
+    // à un bit d'eux, et `sxx` (ou `syy`) valoir 1e-32 au lieu de 0. Sans paire, `first` et `last` sont `None` tous deux.
+    if triees.first().map(|p| p.0) == triees.last().map(|p| p.0) || sxx <= 0.0 {
+        return Err(ErreurAjustement::DensitesIdentiques);
+    }
+    let pente = sxy / sxx;
+    let raideurs_egales = triees.iter().all(|p| p.1 == triees[0].1);
+    let r2 = if raideurs_egales || syy <= 0.0 { 1.0 } else { (sxy * sxy / (sxx * syy)).min(1.0) };
+    Ok(Droite { pente, ordonnee: moyenne_y - pente * moyenne_x, r2, points: logs.len() })
 }
