@@ -1738,3 +1738,173 @@ déjà, coûte davantage. **Aucun cache** : sans mesure qui le demande, le plus 
   montre.
 - Windows, un navigateur, et des colonies plus grandes que celles mesurées (lire toutes les pointes y coûte le produit du
   nombre de pointes par celui des apex).
+
+# La raideur selon la densité (étape 17, M4)
+
+L'étape 17 lit, pour beaucoup de colonies simulées (des graines, des durées), **deux nombres** : la **densité** des hyphes dans
+la cavité et la **raideur** de la colonie (l'essai de poussée de l'étape 15, inchangé). Chaque colonie qui traverse donne un
+point ; on trace `log K` contre `log ρ` et on ajuste une droite aux moindres carrés : sa pente dit comment la raideur monte
+avec la densité. **C'est un modèle à nous, pas une reproduction** : aucune pente de colonie n'est publiée, et le banc **ne
+prédit pas** la raideur d'un vrai matériau. Les puissances de la littérature (1, 2, 3) sont des **repères**, jamais des cibles :
+le banc densifie sa colonie par **plus d'hyphes**, pas par des parois plus épaisses, et rien n'est réglé pour les approcher. Le
+noyau et les empreintes ne changent pas ; `src/nuage.rs` (la densité, les points, les comptes, l'ajustement) ne calcule aucune
+raideur : jouer la colonie, la pousser et classer le résultat est la composition de `examples/nuage_raideur.rs`, comme à
+l'étape 15.
+
+## Les nombres, et leur statut
+
+| Quoi | D'où | Statut |
+|---|---|---|
+| La densité `ρ` : la longueur d'hyphe dans la cavité (la carte de densité de M0, sommée sur les cases libres) divisée par le nombre de cases libres, en cases⁻¹ | cette étape | **choix** (une longueur par surface ; le diamètre d'hyphe la multiplierait par un nombre, sans changer la pente) |
+| `K` : l'essai de poussée de l'étape 15 (mors d'une colonne, `EA` = 22,9 µN, `EI` = 18,3/49 µN·case²) | étape 15 | **calculé** ; `EI` **lu à la source** (Brinkmann et coll. 2024), `EA` **calculé** |
+| Les trois moules, leurs boîtes, les fenêtres de pas, les graines 1 à 200 | cette étape | **choix** |
+| La pente des colonies (voir plus bas) | ce banc | **calculée, à nous** : aucune pente de colonie n'est publiée |
+| La puissance 1 de `N` hyphes droites en parallèle d'un mors à l'autre (`K = N EA/L`, `ρ = N L/surface`) | un calcul à la main | **calculée, exacte** : la seule puissance exacte de l'étape |
+| La raideur d'un Z fait à la main, `K = 155920/601511` (`EA` = 5, `EI` = 3) | un calcul à part, en fractions exactes | **calculée, exacte** |
+| La puissance 3 du nid d'abeille 2D aux parois minces | Gibson et Ashby ; MIT 3.054 (déjà cité à l'étape 14) | **lu à la source**, **repère** : un réseau infini, la flexion seule |
+| La pente 3,04 de trois panneaux de nid d'abeille faits à la main | ce banc | **calculée, à nous** : mesurée, figée comme une non-régression |
+| La puissance 2 des mousses 3D ouvertes | Roberts et Garboczi 2000, citant Gibson et Ashby | **de seconde main**, **repère** (le banc est en 2D) |
+
+## Ce que fait le code
+
+- **La densité** (`Cavite::densite`) : la carte de densité sommée sur les cases libres, divisée par leur nombre. Ce qui
+  passerait dans un mur ne compte pas ; une colonie simulée ne sort pas de sa cavité (sur 7 650 colonies, aucune longueur dans
+  une case bloquée, et la densité égale la somme des longueurs des segments sur le nombre de cases libres à 9e-15 près). Sans
+  case libre, ou avec un segment hors de la boîte, il n'y a pas de densité : `None`, jamais un nombre ni une panique.
+- **Un point, un nuage** (`lire` et `nuage`, dans `examples/nuage_raideur.rs`) : une simulation par graine, avancée pas à
+  pas, une colonie lue à chaque pas demandé. Une colonie qui traverse donne un point `(graine, pas, ρ, K, nœuds)`, avec
+  `ρ > 0` et `K > 0`. Une colonie écartée est comptée, jamais perdue : elle **ne traverse pas** (pas un nœud dans la colonne
+  de chaque mors : `K = 0`, pas de logarithme), elle est **trop grande** (`TropGrande` : elle traverse, avec plus de 1 000
+  nœuds, le plafond du solveur plein), ou un autre refus, avec son nom. Ce que donne une graine ne dépend pas des autres
+  graines.
+- **L'ajustement** (`ajuster`) : les moindres carrés de `logarithme(K)` sur `logarithme(ρ)`, sur des paires triées d'abord
+  (l'ordre n'a aucun effet, au bit près) : la pente, l'ordonnée, `R²` (le carré de la corrélation ; 1 par convention si tous
+  les `K` sont égaux) et le nombre de points. Une valeur nulle, négative ou non finie, ou moins de deux densités distinctes,
+  est une erreur.
+- **Le fichier et l'image** : `cargo run --release --example nuage_raideur -- <dossier>` écrit `nuage.txt` (trois lignes
+  d'en-tête, une ligne par point, `moule profil graine pas densite raideur noeuds`, puis en commentaire les comptes des
+  colonies écartées et les droites ; les nombres se relisent au bit près) et `nuage.png` (le nuage en échelle logarithmique
+  et la droite de chaque moule). Le nuage complet (six scénarios, 200 graines) demande de dix à quinze minutes de calcul sur
+  un cœur et de 200 à 250 Mo ; les tests ne le calculent pas.
+
+## Les scénarios
+
+Trois moules de M1, une petite boîte chacun, dont la cavité touche les colonnes des deux mors, et les deux profils de M2
+(l'intervalle de ramification 7,5 pour le dense, 32 pour le rapide ; les autres lignes sont celles des moules de M1) :
+
+- la **brique** de 30 × 20 : la cavité couvre toute la boîte (aucun mur, la référence), la spore en (2, 10) ;
+- l'**anneau** de 29 × 29 (rayons 14 et 8, 416 cases) : un anneau touche le bord de sa boîte en un point, il n'a donc
+  qu'**une case** dans la colonne de chaque mors. La spore est dans la première, (0, 14) ; une colonie ne traverse que si
+  elle a un nœud dans la seconde, (28, 14), et toute la force passe par ces deux cases ;
+- le **L** de 30 × 30 (une barre de 10 colonnes à gauche, une barre de 10 lignes en bas, 500 cases), la spore en (2, 24).
+
+Graines 1 à 200 ; pas 40 à 100 de 10 en 10 pour le profil dense, 60 à 150 pour le rapide. **Ces fenêtres sont un choix de
+coût, pas des bornes naturelles.** Sur 40 autres graines (201 à 240) suivies jusqu'au pas 200 : aucune colonie dense ne
+traverse avant le pas 40 ; les premières colonies rapides traversent au pas 40 dans le L, 50 dans l'anneau, 70 dans la
+brique ; et après la fin de la fenêtre, des colonies croissent et traversent encore (brique dense : 16 colonies sur 40
+traversent au pas 100, 22 au pas 160 ; brique rapide : 13 au pas 150, 17 au pas 200).
+
+## Les nombres mesurés (graines 1 à 200)
+
+La plage de densité des points retenus, les deux profils réunis : brique 0,0712 à 1,465 (rapport 20,6), anneau 0,131 à 2,057
+(15,7), L 0,0891 à 1,766 (19,8) ; rapport des 95e et 5e centiles : 12,6, 6,28 et 11,6. Le seuil d'arrêt décidé avant la mesure
+(un moule dont la densité couvre moins d'un facteur 2) n'a pas joué.
+
+| Moule, profil | colonies lues | retenues | ne traversent pas | trop grandes | autres refus | `ρ` min à max | pente | `R²` |
+|---|---|---|---|---|---|---|---|---|
+| brique, dense | 1 400 | 313 | 997 | 90 | 0 | 0,0894 à 1,465 | 0,825 | 0,183 |
+| brique, rapide | 2 000 | 182 | 1 818 | 0 | 0 | 0,0712 à 0,306 | 0,331 | 0,005 |
+| anneau, dense | 1 400 | 48 | 420 | 932 | 0 | 0,413 à 2,057 | 1,06 | 0,240 |
+| anneau, rapide | 2 000 | 763 | 1 232 | 5 | 0 | 0,131 à 1,986 | 1,46 | 0,559 |
+| L, dense | 1 400 | 302 | 892 | 206 | 0 | 0,104 à 1,766 | 0,640 | 0,026 |
+| L, rapide | 2 000 | 377 | 1 623 | 0 | 0 | 0,0891 à 0,562 | 0,444 | 0,006 |
+| brique, les deux profils | 3 400 | 495 | | | | 0,0712 à 1,465 | 1,17 | 0,328 |
+| anneau, les deux profils | 3 400 | 811 | | | | 0,131 à 2,057 | 1,38 | 0,537 |
+| L, les deux profils | 3 400 | 679 | | | | 0,0891 à 1,766 | 1,15 | 0,135 |
+
+**Ce que ces nombres disent.** Par moule, les deux profils réunis, la pente est de 1,15 à 1,38, avec un `R²` de 0,13 à 0,54 :
+la raideur monte avec la densité, à peu près en proportion, et une droite n'explique qu'une part de la dispersion (d'un
+huitième à la moitié). À densité égale, deux colonies ont des raideurs très différentes : l'une traverse par une seule hyphe,
+l'autre par plusieurs.
+
+**Ce qu'ils ne disent pas.**
+
+- **La pente d'un seul profil ne se lit pas** : elle change du tout au tout avec les graines. Sur 150 autres graines (201 à
+  350, recalculées à part) : brique rapide −0,31 au lieu de 0,33 ; L rapide 1,75 au lieu de 0,44 ; anneau dense 1,50 au lieu
+  de 1,06 ; L dense 0,97 au lieu de 0,64. Les pentes par moule, elles, tiennent mieux : 1,21 (brique), 1,20 (anneau) et 1,24
+  (L) sur ces autres graines, avec des `R²` de 0,39, 0,49 et 0,18, et des plages de densité de 22,9, 13,5 et 19,5.
+- **Les points d'une même graine sont corrélés** : ils décrivent la même colonie à des âges différents. Les 1 985 points
+  viennent de 362 colonies, et 477 répètent exactement un point de la même colonie (elle a cessé de croître : même `ρ`, même
+  `K` à un pas suivant). Sans ces répétitions, les pentes par moule sont 1,16 (brique), 1,26 (anneau) et 1,10 (L) ; avec un
+  seul point par colonie (son dernier pas), 1,16, 0,92 et 1,30. Le `R²` ne dit donc pas la précision d'une pente.
+- **Ces pentes ne sont pas une reproduction** des puissances publiées, et rien ne dit qu'un vrai mycélium les suivrait.
+
+## Le repère du nid d'abeille (puissance 3)
+
+Un nid d'abeille régulier fait à la main (`tests/etape_17/outils.rs` : des hexagones de côté `a`, toutes les parois de
+mêmes `EA` et `EI`, sur 40 cases d'un mors à l'autre, des cellules de plus en plus petites) densifie comme le dit le repère :
+par des parois plus épaisses **relativement à la cellule**. Le repère parle d'un matériau, son module contre sa densité : on
+divise donc la raideur et la densité par la hauteur du panneau, qui change d'un panneau à l'autre.
+
+| Parois | Pente entre deux tailles voisines (8, 16, 24, 32, 40 demi-périodes d'un mors à l'autre) |
+|---|---|
+| minces, `EA` = 1 000, `EI` = 1 (épaisseur 0,11 case) | 3,05 ; 3,02 ; 2,99 ; 2,96 |
+| plus minces, `EI` = 0,1 (0,035 case) | 3,06 ; 3,04 ; 3,03 ; 3,02 |
+| plus minces encore, `EI` = 0,01 (0,011 case) | 3,06 ; 3,04 ; 3,03 ; 3,03 |
+| épaisses, celles des cas d'école, `EA` = 5, `EI` = 3 (2,7 cases) | 1,77 ; 1,43 ; 1,26 ; 1,17 |
+
+Avec des parois minces, la pente s'approche du **repère** 3 par le haut quand le panneau compte plus de cellules (l'effet des
+deux mors s'efface), puis passe dessous quand les cellules deviennent petites devant l'épaisseur des parois ; avec des parois
+épaisses elle tombe vers 1 : les parois s'étirent au lieu de fléchir. Le test (`tests/etape_17_exact.rs`) fige la pente
+**mesurée** des trois premiers panneaux aux parois minces, **3,042** (`R²` = 0,99999), comme une non-régression : il n'exige
+pas 3, et rien n'est réglé pour l'approcher. Les mêmes panneaux construits nœud par nœud, sans l'extraction de l'étape 15,
+rendent cette pente à 1e-13 près.
+
+Sans la division par la hauteur du panneau, les mêmes panneaux donnent 2,79 ; 2,88 ; 2,89 ; 2,88 : un panneau plus haut, c'est
+plus d'hyphes en parallèle, la puissance 1, qui tire la pente vers le bas. C'est, en petit, ce que fait une colonie : elle
+densifie par plus d'hyphes. Un accord avec le repère dans ses hypothèses, pas une reproduction.
+
+## Ce que les tests vérifient
+
+- **Exact, à la main** : `N` hyphes droites parallèles d'un mors à l'autre (`N` = 1 à 5, deux boîtes) : `K = N EA/L` et
+  `ρ = N L/surface` à 1e-12 près (la plus grande erreur mesurée est 4e-16), pente 1, ordonnée et `R²` à 1e-12 près ; un Z, son
+  miroir gauche-droite, et les mêmes avec une branche libre : `K = 155920/601511` (2e-14 d'erreur au plus) et la densité de
+  leur longueur ; le nid d'abeille ci-dessus.
+- **L'ajustement** : des points posés sur `K = c ρⁿ` (`n` = 1, 2, 3, 2,5 et −1) rendent `n` et `c` à 1e-12 près ; un nuage
+  hors d'une droite dont la pente, l'ordonnée et `R²` (1/4) se calculent à la main ; ni l'échelle, ni l'ordre (au bit près),
+  ni le doublement des points ne changent la droite ; les refus sont des erreurs.
+- **La lecture et la densité** : un point ou une raison, jamais un nombre à la place (ne traverse pas, trop grande, un autre
+  refus avec son nom, une densité qui n'existe pas) ; la densité compte la longueur dans la cavité et divise par les cases
+  libres ; la cavité de chaque moule.
+- **Un petit nuage simulé** (l'anneau, profil rapide, graines 3 à 11, pas 70 et 110 : 11 points, 7 colonies qui ne traversent
+  pas) : ses comptes exacts ; ses points (`ρ` à 1e-12 près, `K` à 1e-6 près : une colonie simulée n'a que six à sept
+  chiffres), sa pente 1,0776 et son `R²` 0,4200 à 1e-6 près, figés comme une non-régression, jamais comme une cible ; ses
+  points sont exactement ses colonies qui touchent les deux mors (aucune n'y est trop grande) ; chaque graine calculée
+  seule rend ce qu'elle rend dans le nuage, au bit près. Les trois raisons se comptent sur un nuage de la brique.
+- **L'exemple et l'hygiène** : les six scénarios, les comptes de deux graines dans les six, le fichier (son texte exact sur
+  un nuage fait à la main), l'image (les points extrêmes sur le cadre), aucune fonction de `f64` interdite, aucune
+  `HashMap`, le noyau ne connaît pas le nuage, et cette section.
+
+## Ce que les tests ne vérifient pas
+
+- Le nuage complet et ses nombres (le tableau ci-dessus) : seul l'exemple le calcule.
+- Une pente de colonie « bonne » : aucune n'est publiée. La pente du petit nuage (onze points de six graines) est une
+  non-régression ; d'autres graines en donnent une autre.
+- Que le nid d'abeille atteigne la puissance 3 : le repère est dit, la valeur mesurée est figée dans ses hypothèses.
+- Les fenêtres de pas et les boîtes : ce sont des choix, mesurés une fois.
+- Windows : la CI le dira ; rien ici ne dépend de la machine.
+
+## Les limites
+
+- **2D**, à l'échelle de l'hyphe ; la 3D (les mousses de Roberts et Garboczi) n'est pas là.
+- **Densifié par plus d'hyphes**, pas par des parois plus épaisses : la puissance 3 du nid d'abeille n'est pas la même
+  expérience.
+- **Le plafond de 1 000 nœuds** du solveur plein borne la densité par le haut : la plage de densité est d'un facteur 15 à 20,
+  et des colonies denses sont écartées (`TropGrande` : 90, 932 et 206 des 1 400 colonies lues en profil dense). Les colonies
+  retenues ne sont donc pas un échantillon neutre : les plus denses manquent.
+- **Les mors d'une colonne** : `K` dépend de leur choix (étape 15) ; l'anneau n'a qu'une case par mors, et la plupart de ses
+  colonies ne traversent pas.
+- **Les fenêtres de pas** coupent des colonies qui croissent encore.
+- **Les points d'une même graine sont corrélés**, et un quart répètent un point déjà compté.
+- **Six à sept chiffres par colonie** : la précision d'un point est celle du solveur de l'étape 15.
+- Pas une raideur de matériau : le banc **ne prédit pas** la résistance d'un vrai matériau.
