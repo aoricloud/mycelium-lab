@@ -19,7 +19,9 @@
 //! qui sort du cube donne [`ErreurCube::HorsDuCube`] (nourritures d'abord, puis blocs), et une nourriture dans un
 //! bloc donne [`ErreurCube::DepotBloque`].
 
-use crate::empreinte::sha256_hex;
+// Les corps à écrire dans la vague du code emploieront leurs paramètres ; la vague du code retire cet attribut.
+#![allow(unused_variables)]
+
 use crate::substrat3d::{ErreurSubstrat3d, Substrat3d};
 
 /// Une nourriture déposée dans une case du cube.
@@ -91,118 +93,28 @@ pub enum ErreurCube {
 }
 
 /// Lit un entier décimal non signé (chiffres seulement).
+#[allow(dead_code)] // Appelé par les corps à écrire dans la vague du code ; la vague du code retire cet attribut.
 fn entier(mot: &str) -> Option<u32> {
-    if mot.is_empty() || !mot.bytes().all(|c| c.is_ascii_digit()) {
-        return None;
-    }
-    mot.parse().ok()
+    todo!()
 }
 
 /// Lit un nombre fini et positif ou nul.
+#[allow(dead_code)] // Appelé par les corps à écrire dans la vague du code ; la vague du code retire cet attribut.
 fn nombre(mot: &str) -> Option<f64> {
-    let valeur: f64 = mot.parse().ok()?;
-    if valeur.is_finite() && valeur >= 0.0 { Some(valeur) } else { None }
+    todo!()
 }
 
 /// Lit un scénario de cube depuis son texte (format décrit dans la doc du module).
 pub fn lire_scenario_cube(texte: &str) -> Result<ScenarioCube, ErreurCube> {
-    let mut cube: Option<(u32, u32, u32)> = None;
-    let mut substrat: Option<(f64, f64)> = None;
-    let mut duree: Option<u32> = None;
-    let mut depots = Vec::new();
-    let mut blocs = Vec::new();
-    let mut lignes_depots = Vec::new();
-    let mut lignes_blocs = Vec::new();
-    for (i, ligne) in texte.lines().enumerate() {
-        let numero = i + 1;
-        if ligne.is_empty() || ligne.starts_with('#') {
-            continue;
-        }
-        let mots: Vec<&str> = ligne.split(' ').collect();
-        match mots.as_slice() {
-            ["cube", l, h, p] => {
-                let (l, h, p) = match (entier(l), entier(h), entier(p)) {
-                    (Some(l), Some(h), Some(p)) if l > 0 && h > 0 && p > 0 => (l, h, p),
-                    _ => return Err(ErreurCube::LigneInvalide(numero)),
-                };
-                if cube.is_some() {
-                    return Err(ErreurCube::EnDouble("cube"));
-                }
-                cube = Some((l, h, p));
-            }
-            ["substrat", initial, diffusion] => {
-                let (initial, diffusion) = match (nombre(initial), nombre(diffusion)) {
-                    (Some(initial), Some(diffusion)) => (initial, diffusion),
-                    _ => return Err(ErreurCube::LigneInvalide(numero)),
-                };
-                if substrat.is_some() {
-                    return Err(ErreurCube::EnDouble("substrat"));
-                }
-                substrat = Some((initial, diffusion));
-            }
-            ["duree", n] => {
-                let n = entier(n).ok_or(ErreurCube::LigneInvalide(numero))?;
-                if duree.is_some() {
-                    return Err(ErreurCube::EnDouble("duree"));
-                }
-                duree = Some(n);
-            }
-            ["nourriture", x, y, z, q] => {
-                let (x, y, z, quantite) = match (entier(x), entier(y), entier(z), nombre(q)) {
-                    (Some(x), Some(y), Some(z), Some(quantite)) => (x, y, z, quantite),
-                    _ => return Err(ErreurCube::LigneInvalide(numero)),
-                };
-                depots.push(Depot { x, y, z, quantite });
-                lignes_depots.push(numero);
-            }
-            ["bloc", x0, y0, z0, x1, y1, z1] => {
-                let bloc = match (entier(x0), entier(y0), entier(z0), entier(x1), entier(y1), entier(z1)) {
-                    (Some(x0), Some(y0), Some(z0), Some(x1), Some(y1), Some(z1))
-                        if x0 <= x1 && y0 <= y1 && z0 <= z1 =>
-                    {
-                        Bloc { x0, y0, z0, x1, y1, z1 }
-                    }
-                    _ => return Err(ErreurCube::LigneInvalide(numero)),
-                };
-                blocs.push(bloc);
-                lignes_blocs.push(numero);
-            }
-            _ => return Err(ErreurCube::LigneInvalide(numero)),
-        }
-    }
-    let (largeur, hauteur, profondeur) = cube.ok_or(ErreurCube::Manquante("cube"))?;
-    let (substrat_initial, diffusion) = substrat.ok_or(ErreurCube::Manquante("substrat"))?;
-    let duree = duree.ok_or(ErreurCube::Manquante("duree"))?;
-    for (depot, &ligne) in depots.iter().zip(&lignes_depots) {
-        if depot.x >= largeur || depot.y >= hauteur || depot.z >= profondeur {
-            return Err(ErreurCube::HorsDuCube(ligne));
-        }
-    }
-    for (bloc, &ligne) in blocs.iter().zip(&lignes_blocs) {
-        if bloc.x1 >= largeur || bloc.y1 >= hauteur || bloc.z1 >= profondeur {
-            return Err(ErreurCube::HorsDuCube(ligne));
-        }
-    }
-    for (depot, &ligne) in depots.iter().zip(&lignes_depots) {
-        let dans_un_bloc = blocs.iter().any(|bloc| {
-            depot.x >= bloc.x0
-                && depot.x <= bloc.x1
-                && depot.y >= bloc.y0
-                && depot.y <= bloc.y1
-                && depot.z >= bloc.z0
-                && depot.z <= bloc.z1
-        });
-        if dans_un_bloc {
-            return Err(ErreurCube::DepotBloque(ligne));
-        }
-    }
-    Ok(ScenarioCube { largeur, hauteur, profondeur, substrat_initial, diffusion, depots, blocs, duree })
+    todo!()
 }
 
 /// Un cube simulé : son horloge, sa durée et son substrat en volume.
 ///
 /// Contrat : le temps est le nombre de pas déjà faits ; le substrat est la seule chose qui évolue. Tout est
 /// déterministe : mêmes paramètres, mêmes dépôts, même nombre de pas, mêmes octets.
+// Les champs ne sont lus que par les corps à écrire dans la vague du code ; la vague du code retire cet attribut.
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cube {
     temps: u32,
@@ -217,67 +129,36 @@ impl Cube {
     ///
     /// Contrat : un refus de [`Substrat3d::nouveau`] est rendu en [`ErreurCube::Substrat`].
     pub fn nouveau(scenario: &ScenarioCube) -> Result<Cube, ErreurCube> {
-        let (largeur, hauteur, profondeur) =
-            (scenario.largeur as usize, scenario.hauteur as usize, scenario.profondeur as usize);
-        let mut substrat = Substrat3d::nouveau(largeur, hauteur, profondeur, scenario.diffusion, 1.0, 1.0)
-            .map_err(ErreurCube::Substrat)?;
-        if scenario.substrat_initial > 0.0 {
-            for z in 0..profondeur {
-                for y in 0..hauteur {
-                    for x in 0..largeur {
-                        substrat.deposer(x, y, z, scenario.substrat_initial);
-                    }
-                }
-            }
-        }
-        for bloc in &scenario.blocs {
-            substrat.bloquer(
-                bloc.x0 as usize,
-                bloc.y0 as usize,
-                bloc.z0 as usize,
-                bloc.x1 as usize,
-                bloc.y1 as usize,
-                bloc.z1 as usize,
-            );
-        }
-        for depot in &scenario.depots {
-            substrat.deposer(depot.x as usize, depot.y as usize, depot.z as usize, depot.quantite);
-        }
-        Ok(Cube { temps: 0, duree: scenario.duree, substrat })
+        todo!()
     }
 
     /// Avance la simulation de `n` pas et ajoute `n` au temps.
     pub fn avancer(&mut self, n: u32) {
-        self.substrat.pas_n(n as usize);
-        self.temps += n;
+        todo!()
     }
 
     /// Le nombre de pas déjà faits.
     pub fn temps(&self) -> u32 {
-        self.temps
+        todo!()
     }
 
     /// La durée du scénario, en pas.
     pub fn duree(&self) -> u32 {
-        self.duree
+        todo!()
     }
 
     /// Le substrat en volume.
     pub fn substrat(&self) -> &Substrat3d {
-        &self.substrat
+        todo!()
     }
 
     /// L'écriture canonique du cube : le temps en `u32` petit-boutiste, puis l'écriture canonique du substrat.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
-        let substrat = self.substrat.ecrire_canonique();
-        let mut octets = Vec::with_capacity(4 + substrat.len());
-        octets.extend_from_slice(&self.temps.to_le_bytes());
-        octets.extend_from_slice(&substrat);
-        octets
+        todo!()
     }
 
     /// Empreinte du cube : le SHA-256 de [`Cube::ecrire_canonique`], en hexadécimal minuscule de 64 caractères.
     pub fn empreinte(&self) -> String {
-        sha256_hex(&self.ecrire_canonique())
+        todo!()
     }
 }
