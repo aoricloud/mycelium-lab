@@ -1908,3 +1908,47 @@ densifie par plus d'hyphes. Un accord avec le repère dans ses hypothèses, pas 
 - **Les points d'une même graine sont corrélés**, et un quart répètent un point déjà compté.
 - **Six à sept chiffres par colonie** : la précision d'un point est celle du solveur de l'étape 15.
 - Pas une raideur de matériau : le banc **ne prédit pas** la résistance d'un vrai matériau.
+
+# Le cube de nourriture (étape 18, marche 1 de la 3D)
+
+## Ce que fait le code
+
+Le substrat en volume (`src/substrat3d.rs`) est le substrat du plan (`src/substrat.rs`) avec une troisième coordonnée :
+un champ de nutriments sur un pavé de cases, qui diffuse par le schéma explicite à sept points, avec des bords et
+des cases bloquées sans flux. Un pas se lit :
+
+`c + r · (gauche + droite + haut + bas - 4.0 · c + (devant - c) + (derriere - c))`
+
+avec `r = D dt / dx²`. Le cube (`src/cube.rs`) lit un scénario (`cube`, `substrat`, `nourriture`, `bloc`, `duree`),
+le construit avec `dt = dx = 1` et l'avance pas à pas. Il n'y a pas encore de mycélium dans le cube : il vient à la
+marche 2. Le plan 2D, son noyau et ses empreintes ne changent pas.
+
+## La référence
+
+Dérivé : le schéma à sept points est celui à cinq points du plan, avec un axe de plus ; sa borne de stabilité,
+`r ≤ 1/6`, est celle du plan (`r ≤ 1/4`) étendue à trois axes (`1 / (2 × nombre d'axes)`). Le code refuse un `r`
+plus grand. Aucune mesure publiée n'est refaite ici.
+
+## Ce que les tests vérifient
+
+- un pas fait à la main, exact ;
+- une tranche du cube redonne le plan 2D au bit près, parce que l'ordre des opérations est choisi pour cela (quand
+  `devant` et `derriere` valent `c`, les deux termes ajoutés valent exactement 0) ;
+- la variance d'une goutte croît de `2 D dt` par pas et par axe, à 1e-9 près en relatif ;
+- les symétries du cube ;
+- la masse conservée à 1e-9 près sur 1 000 pas ;
+- un mur ne laisse rien passer ;
+- les deux scènes ont leur empreinte dans `references/` (`cube-goutte.empreinte`, `cube-mur.empreinte`).
+
+## Ce qu'on voit
+
+Les trois coupes de `apercus/` (`etape-18-mur-dessus.png`, `-face.png`, `-cote.png`) : la scène `cube-mur` à 400
+pas, une goutte de 100 déposée en (16, 16, 8), un mur en `z = 20` et 21 percé d'une fenêtre de 4 × 4 cases ; la
+nourriture passe le mur par la fenêtre. La page du cube viendra à la vague suivante.
+
+## Les limites
+
+- les valeurs de la scène (un cube de 32 cases, `D = 0.15`, une goutte de 100) sont un choix pour voir, pas une
+  mesure ;
+- la diffusion seule, sans colonie ni consommation ;
+- le banc ne prédit pas la résistance d'un vrai matériau.
