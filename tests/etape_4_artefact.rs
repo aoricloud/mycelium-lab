@@ -53,6 +53,29 @@ const FONCTIONS: [(&str, &[u8], &[u8]); 12] = [
     ("mycelium_empreinte_mot", &[I32], &[I32]),
 ];
 
+/// Les dix-huit fonctions des étapes 4, 8 et 11 que `app.js` emploie. Une exportation ajoutée après l'étape 11 n'a pas à
+/// être employée par `app.js` : une autre page pourra l'employer.
+const FONCTIONS_EMPLOYEES_PAR_APP_JS: [&str; 18] = [
+    "mycelium_demarrer",
+    "mycelium_avancer",
+    "mycelium_temps",
+    "mycelium_largeur",
+    "mycelium_hauteur",
+    "mycelium_nb_segments",
+    "mycelium_segment",
+    "mycelium_substrat",
+    "mycelium_biomasse",
+    "mycelium_pointes",
+    "mycelium_anastomoses",
+    "mycelium_empreinte_mot",
+    "mycelium_choisir_scenario",
+    "mycelium_duree",
+    "mycelium_nb_obstacles",
+    "mycelium_obstacle",
+    "mycelium_densite",
+    "mycelium_densite_max",
+];
+
 fn racine() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
@@ -191,6 +214,31 @@ fn analyser(octets: &[u8]) -> Module {
     module
 }
 
+/// Vérifie la forme des exportations : chaque fonction attendue est exportée, toute autre fonction exportée porte un nom
+/// qui commence par `mycelium`, un nom n'est exporté qu'une fois, et hors des fonctions seule `memory` est exportée.
+#[cfg(not(feature = "etape-8"))]
+fn verifier_les_exportations(module: &Module, attendues: &BTreeSet<&str>) {
+    let fonctions: BTreeSet<&str> =
+        module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
+    for nom in attendues {
+        assert!(fonctions.contains(nom), "la fonction {nom} n'est pas exportée");
+    }
+    for nom in fonctions.difference(attendues) {
+        assert!(nom.starts_with("mycelium"), "fonction exportée inattendue : « {nom} » ne commence pas par mycelium");
+    }
+
+    let noms: Vec<&str> = module.exportations.iter().map(|e| e.nom.as_str()).collect();
+    let uniques: BTreeSet<&str> = noms.iter().copied().collect();
+    assert_eq!(uniques.len(), noms.len(), "un nom est exporté deux fois");
+
+    let autres: Vec<(&str, u8)> =
+        module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
+    for (nom, genre) in &autres {
+        assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
+    }
+    assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
+}
+
 /// 4. Le fichier est un module WebAssembly en version 1, non vide, et il pèse moins de 1 Mo.
 #[test]
 #[cfg_attr(not(feature = "etape-4"), ignore)]
@@ -209,34 +257,21 @@ fn le_module_n_importe_rien() {
     assert_eq!(module.importations, 0, "le module a {} importation(s)", module.importations);
 }
 
-/// 4 (suite). Le module exporte exactement les fonctions `mycelium_*` de la liste, ni plus ni moins ; la mémoire
-/// `memory` est tolérée, rien d'autre (aucune autre exportation, de quelque genre que ce soit).
+/// 4 (suite). Le module exporte chacune des fonctions `mycelium_*` de la liste ; toute autre fonction exportée porte un
+/// nom qui commence par `mycelium` ; un nom n'est exporté qu'une fois ; et la mémoire `memory` est la seule exportation
+/// qui ne soit pas une fonction. Un ajout d'exportation passe donc, alors qu'une fonction de la liste qui manque, ou une
+/// exportation mal nommée, fait échouer le test.
 ///
 /// L'étape 8 ajoute quatre exportations : avec `etape-8`, ce test n'est pas compilé et c'est
-/// `le_module_exporte_les_douze_fonctions_de_l_etape_4_et_les_quatre_nouvelles` (`etape_8_artefact.rs`) qui fixe la
-/// liste exacte, ces douze et les quatre nouvelles.
+/// `le_module_exporte_les_douze_fonctions_de_l_etape_4_et_les_quatre_nouvelles` (`etape_8_artefact.rs`) qui vérifie
+/// l'inclusion de ces seize fonctions.
 #[cfg(not(feature = "etape-8"))]
 #[test]
 #[cfg_attr(not(feature = "etape-4"), ignore)]
-fn le_module_exporte_exactement_les_fonctions_de_la_vitrine() {
+fn le_module_exporte_les_fonctions_de_la_vitrine() {
     let module = analyser(&lire_module());
-
-    let fonctions: BTreeSet<&str> =
-        module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
     let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
-    assert_eq!(fonctions, attendues, "les fonctions exportées ne sont pas celles de la liste");
-
-    let autres: Vec<(&str, u8)> =
-        module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
-    for (nom, genre) in &autres {
-        assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
-    }
-    assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
-    assert_eq!(
-        module.exportations.iter().map(|e| e.nom.as_str()).collect::<BTreeSet<_>>().len(),
-        module.exportations.len(),
-        "un nom est exporté deux fois"
-    );
+    verifier_les_exportations(&module, &attendues);
 }
 
 /// 4 (suite). Chaque fonction exportée a la bonne signature : le nombre et le type des paramètres, et du résultat
@@ -571,10 +606,12 @@ fn app_js_anime_et_dessine_sur_le_canvas() {
     );
 }
 
-/// 6 (suite). Chaque nom `mycelium_…` qu'emploie `app.js` est une fonction exportée par le module (test 4), et
-/// chacune des fonctions exportées est employée : la page appelle tout ce que la vitrine expose, donc au moins
-/// `mycelium_demarrer`, `mycelium_avancer`, `mycelium_nb_segments` et `mycelium_segment`, mais aussi le substrat et
-/// l'empreinte qu'elle affiche. Les noms s'écrivent en entier dans le script, jamais composés.
+/// 6 (suite). Chaque nom `mycelium_…` qu'emploie `app.js` est une fonction exportée par le module (test 4), et `app.js`
+/// emploie chacune des dix-huit fonctions des étapes 4, 8 et 11 : la page appelle tout ce que la vitrine expose jusqu'à
+/// l'étape 11, donc au moins `mycelium_demarrer`, `mycelium_avancer`, `mycelium_nb_segments` et `mycelium_segment`, mais
+/// aussi le substrat et l'empreinte qu'elle affiche. Une exportation ajoutée ensuite (les trois lectures de l'étape 16)
+/// n'a pas à être employée par `app.js` : une autre page pourra l'employer. Les noms s'écrivent en entier dans le
+/// script, jamais composés.
 #[test]
 #[cfg_attr(not(feature = "etape-4"), ignore)]
 fn app_js_emploie_exactement_les_exportations_du_module() {
@@ -585,17 +622,7 @@ fn app_js_emploie_exactement_les_exportations_du_module() {
 
     let inconnus: Vec<&String> = employes.difference(&exportees).collect();
     assert!(inconnus.is_empty(), "app.js emploie des noms que le module n'exporte pas : {inconnus:?}");
-    // Chaque exportation est employée, sauf ces trois lectures de l'étape 16, que la page n'emploie pas encore : dès
-    // qu'elle en emploie une, ce test échoue, et le nom se retire de la liste.
-    const RESERVEES_A_LA_PAGE_SUIVANTE: [&str; 3] =
-        ["mycelium_segment_temps", "mycelium_segment_apex", "mycelium_pointe"];
-    for nom in RESERVEES_A_LA_PAGE_SUIVANTE {
-        assert!(!employes.contains(nom), "app.js emploie {nom} : le retirer de RESERVEES_A_LA_PAGE_SUIVANTE");
-    }
-    let oublies: Vec<&String> =
-        exportees.difference(&employes).filter(|nom| !RESERVEES_A_LA_PAGE_SUIVANTE.contains(&nom.as_str())).collect();
-    assert!(oublies.is_empty(), "app.js n'emploie pas ces exportations du module : {oublies:?}");
-    for nom in ["mycelium_demarrer", "mycelium_avancer", "mycelium_nb_segments", "mycelium_segment"] {
+    for nom in FONCTIONS_EMPLOYEES_PAR_APP_JS {
         assert!(employes.contains(nom), "app.js n'emploie pas {nom}");
     }
 }

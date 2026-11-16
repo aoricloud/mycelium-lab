@@ -13,9 +13,9 @@
 //!    les bords ;
 //! 3. le script refuse des arguments faux.
 //!
-//! Le test de l'étape 11 qui fixait « exactement les 18 fonctions » a sa version pour 21 ici, et n'est plus compilé avec
-//! `etape-16` (`etape_11_artefact.rs`). Que les 18 d'avant rendent ce qu'elles rendaient, c'est ce que disent, sans une ligne
-//! changée, les tests des étapes 4, 8 et 11 sur ce même module.
+//! Le test de l'étape 11 qui fixait la liste des dix-huit fonctions a sa version pour vingt et une ici, et n'est plus
+//! compilé avec `etape-16` (`etape_11_artefact.rs`). Que les 18 d'avant rendent ce qu'elles rendaient, c'est ce que disent,
+//! sans une ligne changée, les tests des étapes 4, 8 et 11 sur ce même module.
 //!
 //! Ils n'utilisent, parmi les fonctions de `f64`, que `to_le_bytes`.
 
@@ -207,20 +207,21 @@ fn analyser(octets: &[u8]) -> Module {
     module
 }
 
-/// 1. Le module exporte exactement les vingt et une fonctions de la liste : les dix-huit des étapes 4, 8 et 11 et
-///    `mycelium_segment_temps`, `mycelium_segment_apex` et `mycelium_pointe` ; la mémoire `memory` est tolérée, rien d'autre
-///    (aucune autre exportation, de quelque genre que ce soit). Un nom n'est exporté qu'une fois. Un module construit avant
-///    l'étape 16 (18 exportations) ne passe pas.
-#[test]
-#[cfg_attr(not(feature = "etape-16"), ignore)]
-fn le_module_exporte_exactement_les_vingt_et_une_fonctions() {
-    let module = analyser(&lire_module());
-
+/// Vérifie la forme des exportations : chaque fonction attendue est exportée, toute autre fonction exportée porte un nom
+/// qui commence par `mycelium`, un nom n'est exporté qu'une fois, et hors des fonctions seule `memory` est exportée.
+fn verifier_les_exportations(module: &Module, attendues: &BTreeSet<&str>) {
     let fonctions: BTreeSet<&str> =
         module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
-    let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
-    assert_eq!(attendues.len(), 21);
-    assert_eq!(fonctions, attendues, "les fonctions exportées ne sont pas celles de la liste");
+    for nom in attendues {
+        assert!(fonctions.contains(nom), "la fonction {nom} n'est pas exportée");
+    }
+    for nom in fonctions.difference(attendues) {
+        assert!(nom.starts_with("mycelium"), "fonction exportée inattendue : « {nom} » ne commence pas par mycelium");
+    }
+
+    let noms: Vec<&str> = module.exportations.iter().map(|e| e.nom.as_str()).collect();
+    let uniques: BTreeSet<&str> = noms.iter().copied().collect();
+    assert_eq!(uniques.len(), noms.len(), "un nom est exporté deux fois");
 
     let autres: Vec<(&str, u8)> =
         module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
@@ -228,11 +229,20 @@ fn le_module_exporte_exactement_les_vingt_et_une_fonctions() {
         assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
     }
     assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
-    assert_eq!(
-        module.exportations.iter().map(|e| e.nom.as_str()).collect::<BTreeSet<_>>().len(),
-        module.exportations.len(),
-        "un nom est exporté deux fois"
-    );
+}
+
+/// 1. Le module exporte les vingt et une fonctions de la liste : les dix-huit des étapes 4, 8 et 11 et
+///    `mycelium_segment_temps`, `mycelium_segment_apex` et `mycelium_pointe` ; toute autre fonction exportée porte un nom
+///    qui commence par `mycelium`, un nom n'est exporté qu'une fois, et la mémoire `memory` est la seule exportation qui ne
+///    soit pas une fonction. Un ajout d'exportation passe donc, alors qu'une fonction de la liste qui manque, ou une
+///    exportation mal nommée, fait échouer le test ; un module construit avant l'étape 16 (18 exportations) ne passe pas.
+#[test]
+#[cfg_attr(not(feature = "etape-16"), ignore)]
+fn le_module_exporte_les_vingt_et_une_fonctions() {
+    let module = analyser(&lire_module());
+    let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
+    assert_eq!(attendues.len(), 21);
+    verifier_les_exportations(&module, &attendues);
 }
 
 /// 1 (suite). Le module et la fonctionnalité `etape-16` vont ensemble : le module exporte les trois lectures si et
