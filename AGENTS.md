@@ -1,33 +1,41 @@
 # Mycelium Lab : les règles du dépôt
 
-Ce dépôt est mené par Lydite : des mains (des agents de toute sorte) y travaillent sur des issues, chacune sur une
-branche `lydite/…`, et GitHub fusionne une PR quand sa CI est verte sous Linux et sous Windows. Ces règles valent pour
-toute main. Le plan est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations et ses limites, dans `MODELE.md`.
+Ce dépôt est mené par Lydite : des mains de Lydite et des sessions de l'humain y travaillent, et aujourd'hui GitHub
+fusionne seul une PR verte d'une branche `lydite/` dont le corps dit que Lydite a rejoué sa preuve sur sa tête. Le plan
+est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations et ses limites, dans `MODELE.md`.
 
 ## La preuve
 
-`cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`, verte sous Linux et sous Windows.
+`cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`, verts sous Linux et sous Windows.
 
 ## Les règles
 
-1. **Sans dépendance** : rien dans `[dependencies]`, `[dev-dependencies]` ni `[build-dependencies]`. Le générateur
-   pseudo-aléatoire, l'écrivain PNG et l'empreinte s'écrivent dans le dépôt.
-2. **Déterministe sur toutes les machines** : même scénario et même graine, même état, sous Linux comme sous Windows.
-   - ni `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `log2`, `log10`, `powf`, `powi`, `hypot`, `mul_add`, ni aucune autre
-     fonction de `f64` qui passe par la bibliothèque mathématique du système : des tables, ou des versions écrites
-     dans le dépôt ; sont permis, parce qu'ils sont exacts et donnent le même résultat partout : `+`, `-`, `*`, `/`,
-     `sqrt`, `abs`, `floor`, `min`, `max`, `clamp` et les conversions `as` ;
-   - aucune `HashMap` ni aucun `HashSet` parcourus : des `Vec` ou des `BTreeMap` ;
-   - un ordre de mise à jour fixe, sans horloge ni fil d'exécution dans la simulation.
-3. **La preuve, c'est l'état et les nombres** : l'empreinte de l'état simulé, par scénario et par graine
-   (`references/<scénario>.empreinte`), et des mesures avec une tolérance. Les aperçus de `apercus/` sont pour l'œil :
-   les embellir ne change aucune référence.
-4. **Un changement voulu de l'état** met à jour son empreinte de référence dans la même PR, et la PR le dit.
-5. **Les tests d'acceptation d'une étape** s'écrivent avant son code, par une vague à eux ; la vague du code ne touche
-   pas à leurs fichiers (`FEUILLE-DE-ROUTE.md`, « Les tests avant les mains »).
-6. **Chaque mécanisme arrive avec sa référence publiée** (un article, une figure ou une équation), nommée dans
-   `MODELE.md`.
-7. **Rien sous `.github/`** : la CI et la fusion restent à l'humain. **Aucun `.cargo/`** : la CI le refuse, car sa
-   configuration peut changer ce que `cargo test` joue.
+1. **Même graine, même colonie** : au bit près sous Linux, sous Windows et dans la page.
 
-Rien n'est critique dans ce dépôt.
+2. **Le moteur n'emploie que des calculs exacts partout** : `+`, `-`, `*`, `/`, `sqrt`, `abs`, `floor`, `round`,
+   `min`, `max`, `clamp` et `as`. Toute autre fonction passe par un seul fichier, copié d'une source publiée et comparé
+   sur les trois cibles (le module de la page se reconstruit à la main : la CI n'a pas la cible wasm).
+
+3. **Un ordre fixe** : aucune table parcourue dans un ordre qui change (ni `HashMap` ni `HashSet`), ni fil ni horloge
+   dans la simulation. Un seul test lit tout le code pour le vérifier : `tests/regles_du_code.rs`.
+
+4. **Aucune dépendance Cargo**. Un code copié garde sa licence et dit d'où il vient.
+
+5. **La page peut employer une bibliothèque copiée dans le dépôt**, version, licence et empreinte notées et vérifiées
+   par un test ; rien ne se charge d'un autre site. La page 2D marche toujours sans la 3D.
+
+6. **La preuve, c'est l'état et les nombres** : une empreinte par scénario et par graine, des mesures avec une
+   tolérance. Un changement voulu de l'état met à jour son empreinte dans la même PR et le dit.
+
+7. **Les aperçus de `apercus/` sont pour l'œil** ; chaque PR qui change ce qu'on voit en montre un.
+
+8. **Un mécanisme cite sa référence publiée quand elle existe** ; sinon il dit « choix » ou « dérivé ».
+
+9. **Ce qui porte un nombre** : les tests d'abord, le code ensuite, en deux vagues. Le reste : tests et code ensemble.
+
+10. **Critique** : `src/`, `references/`, les tests d'empreinte, `scenarios/`, `Cargo.toml`, `Cargo.lock`,
+    `rust-toolchain.toml`, tout `build.rs`, `docs/`, `AGENTS.md` et `CLAUDE.md`. Une tâche qui les touche porte
+    `critique : oui`. Leur fusion : selon le choix de l'humain.
+
+11. **Rien sous `.github/`**, aucun `.cargo/` : la CI et la fusion restent à l'humain. Le banc ne prédit pas la
+    résistance d'un vrai matériau.
