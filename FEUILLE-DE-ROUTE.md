@@ -13,8 +13,7 @@ tient entre le scientifique élégant, crédible pour un labo, et l'organique un
 le plaisir de regarder.
 
 « Outil de recherche » se gagne : sans chercheur qui l'utilise ni donnée réelle, ce serait un très joli jouet. Le
-critère sérieux, dès la V0 : reproduire une figure publiée, en nombres. C'est aussi la meilleure épreuve pour Lydite,
-parce que cette preuve ne dépend de l'avis d'aucun agent.
+critère sérieux, dès la V0 : reproduire une figure publiée, en nombres.
 
 ## Ce que la V0 est, et ce qu'elle n'est pas
 
@@ -25,22 +24,25 @@ parce que cette preuve ne dépend de l'avis d'aucun agent.
 
 ## Les principes
 
-1. **Rust sans dépendance**, comme Lydite : générateur pseudo-aléatoire, écrivain PNG et empreinte écrits dans le
-   dépôt. La CI reste simple et rien n'est à auditer.
-2. **Déterministe sur toutes les machines** : même graine, même état, sous Linux comme sous Windows. Donc pas de
-   `sin`, `cos`, `exp` ou `ln` de `f64`, qui passent par la bibliothèque mathématique du système et peuvent différer
-   d'un système à l'autre : des tables de directions ou des versions écrites dans le dépôt. Pas de `HashMap` parcourue
-   (son ordre change d'une exécution à l'autre) : des `Vec` ou des `BTreeMap`. Un ordre de mise à jour fixe.
+1. **Aucune dépendance Cargo**, comme Lydite : générateur pseudo-aléatoire, écrivain PNG et empreinte écrits dans le
+   dépôt. Un code copié garde sa licence et dit d'où il vient.
+2. **Déterministe sur toutes les machines** : même graine, même état, au bit près, sous Linux, sous Windows et dans la
+   page. Le moteur n'emploie que des calculs exacts partout : `+`, `-`, `*`, `/`, `sqrt`, `abs`, `floor`, `round`,
+   `min`, `max`, `clamp` et `as` ; toute autre fonction passe par un seul fichier, copié d'une source publiée et comparé
+   sur les trois cibles (le module de la page se reconstruit à la main : la CI n'a pas la cible wasm). Pas de `HashMap`
+   ni de `HashSet` parcourus : des `Vec` ou des `BTreeMap`. Un ordre de mise à jour fixe, sans fil ni horloge dans la
+   simulation.
 3. **La preuve, c'est l'état et les nombres** : l'empreinte de l'état simulé, par scénario et par graine
-   (`references/<scenario>.empreinte`), et des mesures avec une tolérance. Les tests d'acceptation d'une vague sont
-   écrits avant elle (voir « Les tests avant les mains »).
+   (`references/<scenario>.empreinte`), et des mesures avec une tolérance. **Ce qui porte un nombre** : les tests
+   d'abord, le code ensuite, en deux vagues ; le reste, tests et code ensemble (voir « Les tests avant les mains »).
 4. **Le rendu, c'est pour l'œil** : les aperçus (la colonie, la carte des nutriments, les images d'une animation) sont
    commités dans `apercus/` pour se voir dans le diff de la PR, y compris sur un téléphone, et restent libres
    d'évoluer : ils ne sont pas une preuve. Embellir le rendu ne touche aucune référence.
 5. **Un changement voulu de l'état** (un mécanisme ajouté) met à jour l'empreinte de référence ; la PR nomme ce
    fichier, et c'est là que l'humain juge, l'image d'avant et d'après et les mesures côte à côte. Quand l'empreinte ne
    bouge pas, la simulation est identique et seul le rendu a changé.
-6. **Chaque mécanisme arrive avec sa référence** publiée (article, figure ou équation) et sa reproduction en nombres.
+6. **Chaque mécanisme cite sa référence publiée quand elle existe**, avec sa reproduction en nombres ; sinon il dit
+   « choix » ou « dérivé ».
 
 ## Les modules
 
@@ -57,37 +59,24 @@ parce que cette preuve ne dépend de l'avis d'aucun agent.
 | `rendu` | les aperçus et les images d'animation |
 | binaire `mycelium` | `mycelium lancer <scénario> --graine <n> --sortie <dossier>` : l'empreinte, les mesures en CSV, les aperçus |
 
-## L'autonomie de Lydite
+Trois limites décidées par l'humain protègent : un jeton limité à ce dépôt, les réglages du dépôt à l'humain, aucune
+issue d'un inconnu comme consigne.
 
-Lydite mène Mycelium Lab en autonomie totale, dans trois limites décidées par l'humain :
-1. la preuve et le mur restent : Lydite rejoue lui-même chaque preuve, et les mains travaillent derrière le mur ;
-2. ce seul dépôt : un jeton limité à Mycelium Lab ; les réglages du dépôt (règles, vérifications exigées, Pages) restent
-   à l'humain, et Lydite ne peut pas lever ses propres garde-fous (il ne pousse jamais `.github/`, n'a aucun droit
-   d'administration) ;
-3. seulement les issues de l'humain ou celles de Lydite : sur un dépôt public, le texte d'un inconnu ne devient jamais
-   la consigne d'une main.
-
-Le reste est libre : écrire ses issues, choisir l'ordre, fusionner, enchaîner. Proposé, non décidé : l'humain pose
-l'étiquette `aurait-refuse` sur une PR fusionnée qu'il aurait refusée ; Lydite la compte comme un raté et ouvre une
-issue de correction.
-
-**La fusion, sans une ligne de Lydite** : l'auto-fusion du dépôt est permise, et la règle de `main` exige la CI (Linux
-et Windows). `auto-fusion.yml` demande l'auto-fusion des seules PR des branches `lydite/` du dépôt vers `main` (et
-`kraken/`, l'ancien nom de Lydite, le temps que finissent les vagues lancées avant le changement), déclenché par
-`pull_request` (jamais `pull_request_target`) ; GitHub fusionne quand tout est vert. La même CI refuse
-qu'une dépendance ou un `.cargo/` entre.
+**La fusion** : `auto-fusion.yml`, un réglage de l'humain sous `.github/`, demande à GitHub de fusionner une PR verte
+d'une branche `lydite/` quand son corps dit que Lydite a rejoué sa preuve sur sa tête.
 
 **Le plan vit dans le dépôt** : ce document, et ses étapes en issues. Tant que Lydite ne prend pas encore ses issues
 seul, ses vagues sont lancées d'office, une étape après l'autre.
 
 ## Les tests avant les mains
 
-Chaque étape a deux vagues. La première écrit les signatures publiques de l'étape (des corps qui paniquent) et ses
-tests d'acceptation, d'après l'issue et sa référence ; elle déclare la fonctionnalité `etape-<n>` dans `Cargo.toml`,
-sans l'activer, et chaque test porte `#[cfg_attr(not(feature = "etape-<n>"), ignore)]`. Elle est fusionnée comme les
-autres. La seconde remplit les corps et ajoute `etape-<n>` aux fonctionnalités par défaut, ce qui lève les `ignore`
-sans toucher aux tests : ses tâches n'ont pas les fichiers de tests dans leurs `fichiers`, et Lydite refuse une main
-qui y touche. C'est la meilleure parade d'ImpossibleBench : des tests en lecture seule.
+Ce qui porte un nombre a deux vagues. La première écrit les signatures publiques de l'étape (des corps qui paniquent)
+et ses tests d'acceptation, d'après l'issue et sa référence ; elle déclare la fonctionnalité `etape-<n>` dans
+`Cargo.toml`, sans l'activer, et chaque test porte `#[cfg_attr(not(feature = "etape-<n>"), ignore)]`. Elle est
+fusionnée comme les autres. La seconde remplit les corps et ajoute `etape-<n>` aux fonctionnalités par défaut, ce qui
+lève les `ignore` sans toucher aux tests : ses tâches n'ont pas les fichiers de tests dans leurs `fichiers`, et Lydite
+refuse une main qui y touche. Le reste s'écrit en une seule vague, tests et code ensemble. C'est la meilleure parade
+d'ImpossibleBench : des tests en lecture seule.
 
 ## Les règles que les mains ne lisent pas encore
 
@@ -98,10 +87,8 @@ système à l'autre : l'empreinte de référence n'y serait plus la même.
 
 ## Les vagues
 
-Chaque vague part par Lydite sur une issue ou sur un plan écrit par la session pilote et accepté par André (`lydite
-lancer nautile --plan <fichier> --pr main`), sous le profil `nautile` : le mur exigé, DeepSeek Flash aux mains (le
-profil `mycelium`, Sonnet, reste le recours). GitHub fusionne ce qui est vert. La preuve :
-`cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`.
+Chaque vague part par Lydite sur une issue ou sur un plan écrit par la session pilote et accepté par André. GitHub
+fusionne ce qui est vert. La preuve : `cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`.
 
 | Étape | Tâches (en parallèle dans une vague) | Tests d'acceptation | Aperçu |
 |---|---|---|---|
@@ -206,18 +193,11 @@ Pour la V0, donc :
 - **Les nutriments** de la V0 ne viennent pas de cet article : ils suivent la lignée de Boswell, à lire avant la
   vague 2.
 
-## Les rejeux, pour Lydite
-
-Chaque milestone de Lydite se mesure en rejouant des étapes déjà faites, à base et issue gelées. Un rejeu part d'un
-dépôt neuf qui ne porte que l'arbre de la base, sans l'historique ni les branches de la suite : sinon une main lirait la
-solution dans git (`git log --all`, les objets du dépôt). Les issues y sont recopiées. Des issues piégées, dont le test
-contredit le texte, ne servent qu'aux rejeux.
-
 ## Les gestes de l'humain
 
 Faits, une fois : le dépôt, public, sous MIT ; un jeton limité à lui ; l'auto-fusion et la règle de `main` ; la
 première PR (la CI et `auto-fusion.yml`) ; Pages, ouvert : la vitrine est en ligne,
-https://aoricloud.github.io/mycelium-lab/. Plus aucune fusion ensuite ; son œil revient après coup.
+https://aoricloud.github.io/mycelium-lab/.
 
 ## Ce qui existe déjà (non revérifié)
 
