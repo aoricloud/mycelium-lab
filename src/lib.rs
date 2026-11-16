@@ -15,7 +15,10 @@
 //! - [`empreinte`] : SHA-256 ;
 //! - [`image`] : écrivain PNG et sommes de contrôle ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
+//! - [`cube`] : le scénario du cube et sa simulation, l'étape 18 : une couche à part, elle ne change rien au plan
+//!   2D ;
 //! - [`substrat`] : diffusion explicite du substrat ;
+//! - [`substrat3d`] : le substrat en volume, schéma à sept points ;
 //! - [`mesures`] : biomasse et dimension fractale ;
 //! - [`calage`] : mesurer la colonie en unités qu'une publication donne (longueur d'hyphe par pointe, taux de croissance,
 //!   fenêtre de croissance) — l'étape 12 (M2) : elle mesure, elle ne change rien au noyau de la simulation ;
@@ -42,6 +45,7 @@ pub mod alea;
 pub mod anastomose;
 pub mod calage;
 pub mod croissance;
+pub mod cube;
 pub mod empreinte;
 pub mod grille;
 pub mod image;
@@ -56,6 +60,7 @@ pub mod reseau;
 pub mod scenario;
 pub mod simulation;
 pub mod substrat;
+pub mod substrat3d;
 pub mod systeme;
 pub mod tropisme;
 pub mod vitrine;
