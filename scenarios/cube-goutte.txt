@@ -1,0 +1,4 @@
+cube 32 32 32
+substrat 0.0 0.15
+nourriture 16 16 16 100.0
+duree 300
