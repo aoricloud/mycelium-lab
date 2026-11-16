@@ -244,11 +244,14 @@ fn le_noyau_ne_connait_pas_le_nuage_et_etape_17_est_la() {
         assert!(!lire(&format!("src/{nom}.rs")).contains("nuage"), "src/{nom}.rs parle du nuage");
     }
     assert!(lire("src/lib.rs").contains("\npub mod nuage;\n"));
-    // Aucune dépendance ; la fonctionnalité est déclarée après `etape-16`, et elle est la dernière de `default`.
+    // Aucune dépendance ; la fonctionnalité est déclarée après `etape-16`, et figure dans `default`, où une étape plus
+    // haute peut la suivre.
     let cargo = lire("Cargo.toml");
     assert!(cargo.contains("\n[dependencies]\n\n[features]\n") && cargo.matches("dependencies]").count() == 1);
     assert!(cargo.contains("\netape-16 = []\netape-17 = []\n"), "etape-17 se déclare après etape-16");
-    assert!(cargo.contains("\"etape-16\", \"etape-17\"]\n"), "etape-17 est la dernière de `default`");
+    let defaut = cargo.lines().find(|l| l.starts_with("default = [")).expect("la liste `default`");
+    assert!(defaut.ends_with(']'), "la liste `default` est fermée : {defaut}");
+    assert!(defaut.contains("\"etape-17\""), "etape-17 figure dans `default` : {defaut}");
 }
 
 #[test]
