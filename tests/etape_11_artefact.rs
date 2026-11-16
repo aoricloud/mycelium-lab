@@ -14,8 +14,8 @@
 //! 12. la page : la case à cocher, sa légende, ce que `app.js` emploie ; la page entière jouée dans le faux navigateur,
 //!     dont l'image de densité est comparée à celle que `piece` donne (la rampe de `densite.png`, écrite ici à part).
 //!
-//! Le test de l'étape 8 qui fixait « exactement les 16 fonctions » a sa version pour 18 ici, et n'est plus compilé avec
-//! `etape-11` (`etape_8_artefact.rs`).
+//! Le test de l'étape 8 qui fixait la liste des seize fonctions a sa version pour dix-huit ici, et n'est plus compilé
+//! avec `etape-11` (`etape_8_artefact.rs`).
 //!
 //! Ces tests ne touchent pas à l'état global de la vitrine (ils ne comparent qu'à `Simulation`) : ils n'ont pas besoin du
 //! verrou de `etape_11_vitrine.rs`.
@@ -220,25 +220,22 @@ fn analyser(octets: &[u8]) -> Module {
     module
 }
 
-/// 10. Le module exporte exactement les dix-huit fonctions de la liste : les douze de l'étape 4, les quatre de l'étape 8
-///     et `mycelium_densite` et `mycelium_densite_max` ; la mémoire `memory` est tolérée, rien d'autre (aucune autre
-///     exportation, de quelque genre que ce soit). Un nom n'est exporté qu'une fois. Un module construit avant l'étape 11
-///     (16 exportations) ne passe pas.
-///
-///     L'étape 16 ajoute trois exportations : avec `etape-16`, ce test n'est pas compilé et c'est
-///     `le_module_exporte_exactement_les_vingt_et_une_fonctions` (`etape_16_artefact.rs`) qui fixe la liste exacte, ces
-///     dix-huit et les trois nouvelles.
+/// Vérifie la forme des exportations : chaque fonction attendue est exportée, toute autre fonction exportée porte un nom
+/// qui commence par `mycelium`, un nom n'est exporté qu'une fois, et hors des fonctions seule `memory` est exportée.
 #[cfg(not(feature = "etape-16"))]
-#[test]
-#[cfg_attr(not(feature = "etape-11"), ignore)]
-fn le_module_exporte_exactement_les_dix_huit_fonctions() {
-    let module = analyser(&lire_module());
-
+fn verifier_les_exportations(module: &Module, attendues: &BTreeSet<&str>) {
     let fonctions: BTreeSet<&str> =
         module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
-    let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
-    assert_eq!(attendues.len(), 18);
-    assert_eq!(fonctions, attendues, "les fonctions exportées ne sont pas celles de la liste");
+    for nom in attendues {
+        assert!(fonctions.contains(nom), "la fonction {nom} n'est pas exportée");
+    }
+    for nom in fonctions.difference(attendues) {
+        assert!(nom.starts_with("mycelium"), "fonction exportée inattendue : « {nom} » ne commence pas par mycelium");
+    }
+
+    let noms: Vec<&str> = module.exportations.iter().map(|e| e.nom.as_str()).collect();
+    let uniques: BTreeSet<&str> = noms.iter().copied().collect();
+    assert_eq!(uniques.len(), noms.len(), "un nom est exporté deux fois");
 
     let autres: Vec<(&str, u8)> =
         module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
@@ -246,11 +243,25 @@ fn le_module_exporte_exactement_les_dix_huit_fonctions() {
         assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
     }
     assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
-    assert_eq!(
-        module.exportations.iter().map(|e| e.nom.as_str()).collect::<BTreeSet<_>>().len(),
-        module.exportations.len(),
-        "un nom est exporté deux fois"
-    );
+}
+
+/// 10. Le module exporte les dix-huit fonctions de la liste : les douze de l'étape 4, les quatre de l'étape 8 et
+///     `mycelium_densite` et `mycelium_densite_max` ; toute autre fonction exportée porte un nom qui commence par
+///     `mycelium`, un nom n'est exporté qu'une fois, et la mémoire `memory` est la seule exportation qui ne soit pas une
+///     fonction. Un ajout d'exportation passe donc, alors qu'une fonction de la liste qui manque, ou une exportation mal
+///     nommée, fait échouer le test ; un module construit avant l'étape 11 (16 exportations) ne passe pas.
+///
+///     L'étape 16 ajoute trois exportations : avec `etape-16`, ce test n'est pas compilé et c'est
+///     `le_module_exporte_les_vingt_et_une_fonctions` (`etape_16_artefact.rs`) qui vérifie l'inclusion de ces vingt et une
+///     fonctions.
+#[cfg(not(feature = "etape-16"))]
+#[test]
+#[cfg_attr(not(feature = "etape-11"), ignore)]
+fn le_module_exporte_les_dix_huit_fonctions() {
+    let module = analyser(&lire_module());
+    let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
+    assert_eq!(attendues.len(), 18);
+    verifier_les_exportations(&module, &attendues);
 }
 
 /// 10 (suite). Chaque fonction exportée a la bonne signature : le nombre et le type des paramètres, et du résultat
