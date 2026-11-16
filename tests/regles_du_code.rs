@@ -70,6 +70,8 @@ fn le_code_respecte_les_regles_des_sources() {
     for chemin in &fichiers {
         let rel = chemin.strip_prefix(racine).expect("sous la racine du dépôt");
         let texte = std::fs::read_to_string(chemin).unwrap_or_else(|e| panic!("{} : {e}", rel.display()));
+        // Un fichier vidé passerait sous les vérifications sans qu'elles le voient : il est lu, donc il a des lignes.
+        assert!(texte.lines().next().is_some(), "{} est lu", rel.display());
         let dans_src_ou_examples = rel.starts_with("src") || rel.starts_with("examples");
         for (numero, ligne) in texte.lines().enumerate() {
             let numero = numero + 1;
