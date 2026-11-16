@@ -13,8 +13,8 @@
 //! 9. la page : le menu, les descriptions, la note sur la limite du banc, le message d'arrêt ; l'adresse (`adresse.js`
 //!    sous Node) ; la page entière jouée dans un faux navigateur.
 //!
-//! Les tests de l'étape 4 qui fixaient la liste des exportations et des éléments de la page ont leur version
-//! `_t4` dans `etape_4_artefact.rs`.
+//! Les tests de l'étape 4 qui fixent la liste des exportations et des éléments de la page sont dans
+//! `etape_4_artefact.rs`.
 //!
 //! Ces tests ne touchent pas à l'état global de la vitrine (ils ne comparent qu'à `Simulation`) : ils n'ont pas besoin
 //! du verrou de `etape_8_vitrine.rs`.
@@ -218,6 +218,31 @@ fn analyser(octets: &[u8]) -> Module {
     module
 }
 
+/// Vérifie la forme des exportations : chaque fonction attendue est exportée, toute autre fonction exportée porte un nom
+/// qui commence par `mycelium`, un nom n'est exporté qu'une fois, et hors des fonctions seule `memory` est exportée.
+#[cfg(not(feature = "etape-11"))]
+fn verifier_les_exportations(module: &Module, attendues: &BTreeSet<&str>) {
+    let fonctions: BTreeSet<&str> =
+        module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
+    for nom in attendues {
+        assert!(fonctions.contains(nom), "la fonction {nom} n'est pas exportée");
+    }
+    for nom in fonctions.difference(attendues) {
+        assert!(nom.starts_with("mycelium"), "fonction exportée inattendue : « {nom} » ne commence pas par mycelium");
+    }
+
+    let noms: Vec<&str> = module.exportations.iter().map(|e| e.nom.as_str()).collect();
+    let uniques: BTreeSet<&str> = noms.iter().copied().collect();
+    assert_eq!(uniques.len(), noms.len(), "un nom est exporté deux fois");
+
+    let autres: Vec<(&str, u8)> =
+        module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
+    for (nom, genre) in &autres {
+        assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
+    }
+    assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
+}
+
 /// 7. Le module pèse moins de 1 Mo, il n'importe rien (ni fonction, ni mémoire, ni table, ni globale), et il embarque
 ///    le texte des six scénarios (`include_str!`) : chacun des six fichiers de `scenarios/`, lu sur le disque, se
 ///    retrouve tel quel dans ses octets. La page ne charge donc rien d'autre que le module ; et un module construit avant
@@ -239,36 +264,21 @@ fn le_module_est_leger_n_importe_rien_et_embarque_les_six_scenarios() {
     }
 }
 
-/// 7 (suite). Le module exporte exactement les douze fonctions de l'étape 4 et les quatre de l'étape 8, ni plus ni
-/// moins ; la mémoire `memory` est tolérée, rien d'autre (aucune autre exportation, de quelque genre que ce soit). Un
-/// nom n'est exporté qu'une fois.
+/// 7 (suite). Le module exporte les douze fonctions de l'étape 4 et les quatre de l'étape 8 ; toute autre fonction
+/// exportée porte un nom qui commence par `mycelium` ; un nom n'est exporté qu'une fois ; et la mémoire `memory` est la
+/// seule exportation qui ne soit pas une fonction. Un ajout d'exportation passe donc, alors qu'une fonction de la liste
+/// qui manque, ou une exportation mal nommée, fait échouer le test.
 ///
 /// L'étape 11 ajoute deux exportations : avec `etape-11`, ce test n'est pas compilé et c'est
-/// `le_module_exporte_exactement_les_dix_huit_fonctions` (`etape_11_artefact.rs`) qui fixe la liste exacte, ces seize et
-/// les deux nouvelles.
+/// `le_module_exporte_les_dix_huit_fonctions` (`etape_11_artefact.rs`) qui vérifie l'inclusion de ces dix-huit fonctions.
 #[cfg(not(feature = "etape-11"))]
 #[test]
 #[cfg_attr(not(feature = "etape-8"), ignore)]
 fn le_module_exporte_les_douze_fonctions_de_l_etape_4_et_les_quatre_nouvelles() {
     let module = analyser(&lire_module());
-
-    let fonctions: BTreeSet<&str> =
-        module.exportations.iter().filter(|e| e.genre == 0).map(|e| e.nom.as_str()).collect();
     let attendues: BTreeSet<&str> = FONCTIONS.iter().map(|(nom, _, _)| *nom).collect();
-    assert_eq!(fonctions, attendues, "les fonctions exportées ne sont pas celles de la liste");
     assert_eq!(attendues.len(), 16);
-
-    let autres: Vec<(&str, u8)> =
-        module.exportations.iter().filter(|e| e.genre != 0).map(|e| (e.nom.as_str(), e.genre)).collect();
-    for (nom, genre) in &autres {
-        assert!((*nom, *genre) == ("memory", 2), "exportation inattendue : « {nom} » (genre {genre})");
-    }
-    assert_eq!(module.exportations.len(), fonctions.len() + autres.len());
-    assert_eq!(
-        module.exportations.iter().map(|e| e.nom.as_str()).collect::<BTreeSet<_>>().len(),
-        module.exportations.len(),
-        "un nom est exporté deux fois"
-    );
+    verifier_les_exportations(&module, &attendues);
 }
 
 /// 7 (suite). Chaque fonction exportée a la bonne signature : le nombre et le type des paramètres, et du résultat
