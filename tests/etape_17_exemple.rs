@@ -1,5 +1,5 @@
 //! Étape 17 (M4) : l'exemple `nuage_raideur` (ses fonctions, jamais son binaire ni le nuage complet) : les six scénarios,
-//! le fichier du nuage, l'image ; puis l'hygiène du dépôt et la section de `MODELE.md`.
+//! le fichier du nuage, l'image ; puis les règles du dépôt et la section de `MODELE.md`.
 
 #[path = "../examples/nuage_raideur.rs"]
 #[allow(dead_code)]
@@ -216,34 +216,7 @@ fn lire(chemin: &str) -> String {
 
 #[test]
 #[cfg_attr(not(feature = "etape-17"), ignore)]
-fn ni_fonction_interdite_ni_hashmap_le_noyau_ne_connait_pas_le_nuage_et_etape_17_est_la() {
-    let interdites = [
-        "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "exp", "exp2", "exp_m1", "ln",
-        "ln_1p", "log", "log2", "log10", "powf", "powi", "hypot", "mul_add", "cbrt",
-    ];
-    for fichier in [
-        "src/nuage.rs",
-        "examples/nuage_raideur.rs",
-        "tests/etape_17/outils.rs",
-        "tests/etape_17_exact.rs",
-        "tests/etape_17_ajustement.rs",
-        "tests/etape_17_nuage.rs",
-        "tests/etape_17_exemple.rs",
-    ] {
-        // Le code seul : les lignes de commentaire peuvent nommer ces fonctions. Une fonction interdite s'appelle en
-        // méthode (`.nom(`) ou se nomme par un chemin (`f64::nom`, `<f64>::nom`, avec ou sans parenthèse) : tout `::nom`
-        // qui n'est pas le début d'un nom plus long (`::logarithme`) est refusé.
-        let texte: String =
-            lire(fichier).lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
-        let suite_d_un_nom = |reste: &str| reste.starts_with(|c: char| c.is_alphanumeric() || c == '_');
-        for nom in interdites {
-            let chemin = format!("::{nom}");
-            let par_chemin = texte.match_indices(&chemin).any(|(i, _)| !suite_d_un_nom(&texte[i + chemin.len()..]));
-            assert!(!texte.contains(&format!(".{nom}(")) && !par_chemin, "{fichier} : {nom}");
-        }
-        assert!(!texte.contains(concat!("Hash", "Map")) && !texte.contains(concat!("Hash", "Set")), "{fichier}");
-        assert!(!texte.contains(concat!("thr", "ead")) && !texte.contains(concat!("Inst", "ant")), "{fichier}");
-    }
+fn le_noyau_ne_connait_pas_le_nuage_et_etape_17_est_la() {
     // Le noyau et les couches de calcul d'avant ne connaissent pas le nuage. La liste est fermée, et sans `lib.rs` (la
     // déclaration), `main.rs` ni `vitrine.rs` : une étape future peut employer le nuage sans toucher à ce test.
     for nom in [

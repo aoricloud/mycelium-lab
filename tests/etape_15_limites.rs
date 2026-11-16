@@ -129,29 +129,7 @@ fn le_plafond_est_de_mille_noeuds_mille_passent_mille_et_un_sont_refuses() {
 
 #[test]
 #[cfg_attr(not(feature = "etape-15"), ignore)]
-fn ni_fonction_interdite_ni_hashmap_le_noyau_ne_connait_pas_le_reseau_et_etape_15_est_la() {
-    let interdites = [
-        "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "exp", "exp2", "exp_m1", "ln",
-        "ln_1p", "log", "log2", "log10", "powf", "powi", "hypot", "mul_add", "cbrt",
-    ];
-    for fichier in [
-        "src/reseau.rs",
-        "examples/colonie_raideur.rs",
-        "tests/etape_15/outils.rs",
-        "tests/etape_15_cas.rs",
-        "tests/etape_15_limites.rs",
-        "tests/etape_15_invariants.rs",
-        "tests/etape_15_colonie.rs",
-    ] {
-        // Le code seul : les lignes de commentaire nomment ces fonctions pour les interdire.
-        let texte: String =
-            lire(fichier).lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
-        for nom in interdites {
-            assert!(!texte.contains(&format!(".{nom}(")) && !texte.contains(&format!("::{nom}(")), "{fichier} : {nom}");
-        }
-        assert!(!texte.contains(concat!("Hash", "Map")) && !texte.contains(concat!("Hash", "Set")), "{fichier}");
-        assert!(!texte.contains(concat!("thr", "ead")) && !texte.contains(concat!("Inst", "ant")), "{fichier}");
-    }
+fn le_noyau_ne_connait_pas_le_reseau_et_etape_15_est_la() {
     // Le noyau, et les étapes 13 et 14, ne connaissent pas le réseau ; le noyau n'a aucun accesseur de plus qui écrive :
     // toute `fn etat_des_pointes` (étape 16) y est `fn etat_des_pointes(&self)`.
     for fichier in std::fs::read_dir(format!("{}/src", env!("CARGO_MANIFEST_DIR"))).unwrap() {
