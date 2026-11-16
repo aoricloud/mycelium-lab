@@ -1,0 +1,8 @@
+cube 32 32 32
+substrat 0.0 0.15
+bloc 0 0 20 31 13 21
+bloc 0 18 20 31 31 21
+bloc 0 14 20 13 17 21
+bloc 18 14 20 31 17 21
+nourriture 16 16 8 100.0
+duree 400
