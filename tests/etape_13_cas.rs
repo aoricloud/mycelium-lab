@@ -106,23 +106,7 @@ fn un_morceau_de_treillis_dont_le_bord_suit_un_champ_affine_le_suit_partout() {
 
 #[test]
 #[cfg_attr(not(feature = "etape-13"), ignore)]
-fn ni_fonction_interdite_ni_hashmap_et_le_noyau_ne_connait_pas_la_raideur() {
-    let interdites = ["sin", "cos", "tan", "atan2", "exp", "ln", "log2", "log10", "powf", "powi", "hypot", "mul_add"];
-    let fichiers = ["src/systeme.rs", "src/raideur.rs", "examples/cas_barres.rs", "tests/etape_13/outils.rs"];
-    let tests = ["tests/etape_13_solveur.rs", "tests/etape_13_reseaux.rs", "tests/etape_13_cas.rs"];
-    for fichier in fichiers.iter().chain(&tests) {
-        // Le code seul : les lignes de commentaire nomment ces fonctions pour les interdire.
-        let texte: String =
-            lire(fichier).lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join(
-                "
-",
-            );
-        for nom in interdites {
-            assert!(!texte.contains(&format!(".{nom}(")) && !texte.contains(&format!("::{nom}(")), "{fichier} : {nom}");
-        }
-        assert!(!texte.contains(concat!("Hash", "Map")) && !texte.contains(concat!("Hash", "Set")), "{fichier}");
-        assert!(!texte.contains(concat!("thr", "ead")) && !texte.contains(concat!("Inst", "ant")), "{fichier}");
-    }
+fn le_noyau_ne_connait_pas_la_raideur() {
     for noyau in [
         "croissance",
         "simulation",

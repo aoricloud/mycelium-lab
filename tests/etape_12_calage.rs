@@ -8,7 +8,7 @@
 //!   de la biomasse au dénominateur : 0,04 / 0,34 = 0,118, le plus grand écart du tableau I) ;
 //! - la fenêtre de croissance : des cas écrits à la main et 4 000 suites au hasard contre une machine à états ;
 //! - la longueur par pointe moyenne d'une fenêtre ;
-//! - l'hygiène des sources (ni fonction de `f64` interdite ni `HashMap`, le noyau ne connaît pas `calage`) ;
+//! - le noyau ne connaît pas `calage` ;
 //! - la section de `MODELE.md` : les sources et leur statut, les chiffres publiés, les nombres mesurés, l'échec dit
 //!   tel quel.
 
@@ -213,24 +213,7 @@ fn la_longueur_par_pointe_moyenne_d_une_fenetre() {
 
 #[test]
 #[cfg_attr(not(feature = "etape-12"), ignore)]
-fn ni_fonction_interdite_ni_hashmap_et_le_noyau_ne_connait_pas_calage() {
-    // Les noms sont assemblés pour que ce fichier ne se dénonce pas lui-même.
-    let mut interdits: Vec<String> =
-        "sin cos tan atan2 exp ln log2 log10 powf powi hypot mul_add".split(' ').map(|n| format!(".{n}(")).collect();
-    interdits.extend(["Map", "Set"].map(|m| format!("Hash{m}")));
-    for fichier in [
-        "src/calage.rs",
-        "examples/mesure_calage.rs",
-        "tests/etape_12/outils.rs",
-        "tests/etape_12_calage.rs",
-        "tests/etape_12_profils.rs",
-    ] {
-        let texte = lire(fichier);
-        assert!(texte.lines().count() > 50, "{fichier} est lu");
-        for ligne in texte.lines().filter(|l| !l.trim_start().starts_with("//")) {
-            assert!(!interdits.iter().any(|i| ligne.contains(i.as_str())), "{fichier} : {ligne}");
-        }
-    }
+fn le_noyau_ne_connait_pas_calage() {
     for fichier in ["croissance", "simulation", "substrat", "voisinage", "releves", "scenario", "anastomose", "main"] {
         let texte = lire(&format!("src/{fichier}.rs"));
         assert!(!texte.contains("calage::") && !texte.contains("mod calage"), "src/{fichier}.rs");

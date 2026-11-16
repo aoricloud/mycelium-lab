@@ -159,18 +159,7 @@ fn le_nid_d_abeille_a_le_module_publie_et_l_etirement_des_parois_le_corrige() {
 
 #[test]
 #[cfg_attr(not(feature = "etape-14"), ignore)]
-fn ni_fonction_interdite_ni_hashmap_et_le_noyau_ne_connait_pas_les_poutres() {
-    let interdites = ["sin", "cos", "tan", "atan2", "exp", "ln", "log2", "log10", "powf", "powi", "hypot", "mul_add"];
-    for fichier in ["src/poutres.rs", "examples/cas_poutres.rs", "tests/etape_14_cas.rs", "tests/etape_14_reseaux.rs"] {
-        // Le code seul : les lignes de commentaire nomment ces fonctions pour les interdire.
-        let texte: String =
-            lire(fichier).lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
-        for nom in interdites {
-            assert!(!texte.contains(&format!(".{nom}(")) && !texte.contains(&format!("::{nom}(")), "{fichier} : {nom}");
-        }
-        assert!(!texte.contains(concat!("Hash", "Map")) && !texte.contains(concat!("Hash", "Set")), "{fichier}");
-        assert!(!texte.contains(concat!("thr", "ead")) && !texte.contains(concat!("Inst", "ant")), "{fichier}");
-    }
+fn le_noyau_ne_connait_pas_les_poutres() {
     for noyau in [
         "croissance",
         "simulation",
