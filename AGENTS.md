@@ -23,6 +23,7 @@ est dans `FEUILLE-DE-ROUTE.md` ; le modèle, ses équations et ses limites, dans
 
 5. **La page peut employer une bibliothèque copiée dans le dépôt**, version, licence et empreinte notées et vérifiées
    par un test ; rien ne se charge d'un autre site. La page 2D marche toujours sans la 3D.
+   Une bibliothèque copiée vit sous `docs/bibliotheques/`, 1 Mo au plus en tout ; le code propre de la page, hors module et hors `docs/bibliotheques/`, tient sous 200 Ko.
 
 6. **La preuve, c'est l'état et les nombres** : une empreinte par scénario et par graine, des mesures avec une
    tolérance. Un changement voulu de l'état met à jour son empreinte dans la même PR et le dit.
