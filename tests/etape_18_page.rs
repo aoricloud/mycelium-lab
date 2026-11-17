@@ -268,13 +268,15 @@ fn la_page_du_cube_est_en_francais_et_charge_cube_js() {
     assert!(minuscules.contains("name=\"viewport\""), "cube.html n'a pas la balise viewport");
 
     let balises = balises(&minuscules);
-    let ids: BTreeSet<String> = balises.iter().filter_map(|balise| attribut_id(balise)).collect();
     let canvas: Vec<&str> =
         balises.iter().copied().filter(|balise| balise.trim_start().starts_with("canvas")).collect();
     assert_eq!(canvas.len(), 2, "cube.html n'a pas exactement deux canvas");
-    for identifiant in ["volume", "coupe"] {
-        assert!(ids.contains(identifiant), "cube.html n'a pas d'élément d'id « {identifiant} »");
-    }
+    let ids_canvas: BTreeSet<String> = canvas
+        .iter()
+        .map(|balise| attribut_id(balise).expect("un <canvas> de cube.html n'a pas d'attribut id"))
+        .collect();
+    let attendus: BTreeSet<String> = ["volume", "coupe"].iter().map(|identifiant| identifiant.to_string()).collect();
+    assert_eq!(ids_canvas, attendus, "les deux canvas ne portent pas exactement les ids « volume » et « coupe »");
 
     let debut = minuscules.find("<script type=\"module\"").expect("pas de <script type=\"module\" dans cube.html");
     let fin = minuscules[debut..].find('>').expect("balise <script> non fermée");
@@ -331,6 +333,13 @@ fn cube_js_ne_demande_que_des_elements_de_la_page() {
     let existants: BTreeSet<String> = balises(&html).iter().filter_map(|balise| attribut_id(balise)).collect();
     for identifiant in &demandes {
         assert!(existants.contains(identifiant), "cube.html n'a pas d'élément d'id « {identifiant} »");
+    }
+
+    for identifiant in ["volume", "coupe"] {
+        assert!(
+            demandes.iter().any(|demande| demande == identifiant),
+            "cube.js ne demande pas le canvas d'id « {identifiant} » par getElementById"
+        );
     }
 }
 
