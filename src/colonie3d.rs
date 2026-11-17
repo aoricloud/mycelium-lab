@@ -68,12 +68,10 @@
 //! `colonie-cube` et `colonie-goutte` ne changent pas).
 
 use crate::alea::Alea;
-#[allow(unused_imports)]
 use crate::croissance::{COS, SIN};
 use crate::cube::Depot;
 use crate::direction3d::Direction3d;
 use crate::substrat3d::{ErreurSubstrat3d, Substrat3d};
-#[allow(unused_imports)]
 use crate::tropisme::{FORCE_MAXIMALE, GRADIENT_DE_REFERENCE};
 
 /// Le plus grand angle permis pour `angle` et `amplitude`, en degrés.
@@ -388,9 +386,20 @@ fn verifier(scenario: &ScenarioColonie3d) -> Result<(), ErreurColonie3d> {
 /// le produit par `0.5` (qui donne, au bit près, la division par 2). Une case bloquée vaut `0.0`
 /// ([`Substrat3d::valeur`]) ; la colonie n'en a pas encore. Rend `None` si la case est hors du cube, sans paniquer
 /// (la colonie ne l'appelle que sur la case d'un apex, toujours dans le cube).
-#[allow(unused_variables)]
 pub fn gradient_3d(substrat: &Substrat3d, x: usize, y: usize, z: usize) -> Option<(f64, f64, f64)> {
-    todo!()
+    let (largeur, hauteur, profondeur) = (substrat.largeur(), substrat.hauteur(), substrat.profondeur());
+    if x >= largeur || y >= hauteur || z >= profondeur {
+        return None;
+    }
+    let c = substrat.valeur(x, y, z);
+    // Un voisin hors du cube vaut la case elle-même (aucun flux), comme dans `Substrat::gradient`.
+    let gauche = if x == 0 { c } else { substrat.valeur(x - 1, y, z) };
+    let droite = if x + 1 == largeur { c } else { substrat.valeur(x + 1, y, z) };
+    let haut = if y == 0 { c } else { substrat.valeur(x, y - 1, z) };
+    let bas = if y + 1 == hauteur { c } else { substrat.valeur(x, y + 1, z) };
+    let devant = if z == 0 { c } else { substrat.valeur(x, y, z - 1) };
+    let derriere = if z + 1 == profondeur { c } else { substrat.valeur(x, y, z + 1) };
+    Some(((droite - gauche) * 0.5, (bas - haut) * 0.5, (derriere - devant) * 0.5))
 }
 
 /// La nouvelle direction d'une pointe de direction `d` qui se penche vers le gradient `g = (gx, gy, gz)`, de force
@@ -413,9 +422,40 @@ pub fn gradient_3d(substrat: &Substrat3d, x: usize, y: usize, z: usize) -> Optio
 ///    construction échouait. La pointe tourne de `t` degrés dans le plan `(d, g)`, vers `g`.
 ///
 /// Ne panique pas.
-#[allow(unused_variables)]
 pub fn tourner_chimiotropique_3d(d: Direction3d, g: (f64, f64, f64), force: f64, alea: &mut Alea) -> Direction3d {
-    todo!()
+    if force <= 0.0 {
+        return d;
+    }
+    let (gx, gy, gz) = g;
+    let n = ((gx * gx + gy * gy) + gz * gz).sqrt();
+    if n == 0.0 {
+        return d;
+    }
+    let dg = d.x() * gx + d.y() * gy + d.z() * gz;
+    let px = gx - dg * d.x();
+    let py = gy - dg * d.y();
+    let pz = gz - dg * d.z();
+    let m = ((px * px + py * py) + pz * pz).sqrt();
+    let sinus = (m / n).min(1.0);
+    let s = n / (n + GRADIENT_DE_REFERENCE);
+    let virage = (force * s) * sinus;
+    let bas = virage.floor();
+    let frac = virage - bas;
+    let mut t = bas as usize;
+    if alea.suivant_f64() < frac {
+        t += 1;
+    }
+    t = t.min(180);
+    if t == 0 || m == 0.0 {
+        return d;
+    }
+    let ax = px / m;
+    let ay = py / m;
+    let az = pz / m;
+    let cx = COS[t] * d.x() + SIN[t] * ax;
+    let cy = COS[t] * d.y() + SIN[t] * ay;
+    let cz = COS[t] * d.z() + SIN[t] * az;
+    Direction3d::nouvelle(cx, cy, cz).unwrap_or(d)
 }
 
 /// Une colonie en volume : ses apex, ses segments, son substrat, son aléa et son horloge.
