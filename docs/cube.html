@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Mycelium Lab en volume : la nourriture qui diffuse dans un cube, calculée par le vrai moteur en WebAssembly.">
+<title>Mycelium Lab — le cube de nourriture</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --fond: #060a0b;
+    --carte: rgba(15, 23, 24, 0.74);
+    --trait: rgba(205, 226, 203, 0.13);
+    --encre: #e9efe6;
+    --encre-douce: #9fb0a4;
+    --accent: #cfe6a6;
+    --mesure: #f3f7ea;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--fond); }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--encre);
+    background:
+      radial-gradient(90rem 60rem at 50% -20%, #12201c 0%, transparent 60%),
+      radial-gradient(60rem 40rem at 100% 100%, #0c1513 0%, transparent 55%),
+      var(--fond);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    width: min(1180px, 100% - 2rem);
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 3.5rem) 0 4rem;
+  }
+
+  .retour {
+    display: inline-block;
+    margin-bottom: 1.2rem;
+    font-size: 0.82rem;
+    color: var(--encre-douce);
+    text-decoration: none;
+  }
+
+  .retour:hover { color: var(--accent); }
+
+  .surtitre {
+    margin: 0 0 0.55rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  .chapeau {
+    max-width: 64ch;
+    margin: 0.9rem 0 0;
+    font-size: clamp(1rem, 1.8vw, 1.12rem);
+    line-height: 1.6;
+    color: var(--encre-douce);
+  }
+
+  .atelier {
+    display: grid;
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  }
+
+  @media (min-width: 900px) {
+    .atelier {
+      grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 1fr);
+      align-items: start;
+    }
+  }
+
+  .cadre {
+    margin: 0;
+    padding: clamp(0.5rem, 1.4vw, 0.9rem) clamp(0.5rem, 1.4vw, 0.9rem) 0.7rem;
+    border: 1px solid var(--trait);
+    border-radius: 22px;
+    background: linear-gradient(160deg, rgba(30, 44, 40, 0.9), rgba(9, 14, 14, 0.95));
+    box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    background: #040607;
+  }
+
+  #volume { cursor: grab; touch-action: none; }
+  #volume.tenu { cursor: grabbing; }
+
+  .etat {
+    min-height: 1.5em;
+    margin: 0.7rem 0.15rem 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--encre-douce);
+  }
+
+  .legende {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 1rem;
+    margin: 0.4rem 0.15rem 0;
+    font-size: 0.72rem;
+    color: var(--encre-douce);
+  }
+
+  .legende span { display: inline-flex; align-items: center; gap: 0.45rem; }
+
+  .rampe {
+    width: 5rem;
+    height: 0.5rem;
+    border: 1px solid var(--trait);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgb(14, 24, 52), rgb(36, 112, 120), rgb(96, 186, 104), rgb(246, 226, 92));
+  }
+
+  .ardoise {
+    width: 1.6rem;
+    height: 0.5rem;
+    border: 1px solid #9fb0b8;
+    border-radius: 2px;
+    background: #5b6b73;
+  }
+
+  .panneau { display: grid; gap: 0.9rem; }
+
+  .bloc {
+    padding: 1rem 1.05rem 1.1rem;
+    border: 1px solid var(--trait);
+    border-radius: 18px;
+    background: var(--carte);
+  }
+
+  h2 {
+    margin: 0 0 0.8rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--encre-douce);
+  }
+
+  .champ {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--encre-douce);
+  }
+
+  select {
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    background: rgba(4, 8, 8, 0.7);
+    color: var(--mesure);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  select option { background: #0c1513; color: var(--mesure); }
+
+  .description {
+    min-height: 3.2em;
+    margin: -0.2rem 0 0.9rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--encre-douce);
+  }
+
+  input[type="range"] {
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .boutons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .axes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.45rem;
+    margin-bottom: 0.2rem;
+  }
+
+  button {
+    min-height: 44px;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--encre);
+    font: inherit;
+    font-weight: 550;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:hover { background: rgba(207, 232, 168, 0.1); border-color: rgba(207, 232, 168, 0.28); }
+
+  button.principal {
+    border-color: transparent;
+    background: linear-gradient(180deg, #d6eda9, #a9c97e);
+    color: #10170c;
+  }
+
+  button[aria-pressed="true"] { border-color: rgba(207, 232, 168, 0.42); background: rgba(207, 232, 168, 0.16); }
+
+  output { font-variant-numeric: tabular-nums; color: var(--mesure); }
+
+  .titre-champ { display: flex; justify-content: space-between; gap: 0.5rem; }
+
+  .mesures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+    margin: 0;
+  }
+
+  .mesures div {
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--trait);
+    border-radius: 12px;
+    background: rgba(4, 8, 8, 0.45);
+  }
+
+  .mesures dt { font-size: 0.7rem; color: var(--encre-douce); }
+  .mesures dd { margin: 0.2rem 0 0; font-size: 1rem; font-variant-numeric: tabular-nums; color: var(--mesure); }
+
+  #coupe { border-radius: 12px; image-rendering: pixelated; }
+
+  .note {
+    margin: 0.7rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--encre-douce);
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <a class="retour" href="index.html">← La colonie en 2D</a>
+  <p class="surtitre">Mycelium Lab · la 3D, première marche</p>
+  <h1>Le cube de nourriture</h1>
+  <p class="chapeau">Le vrai moteur de Mycelium, en volume : une goutte de nourriture diffuse dans un cube de 32 cases
+    de côté, calculée ici par le même code que les tests, au bit près. Faites tourner le cube à la souris ou au doigt.
+    Pas encore de mycélium : il viendra à la marche suivante.</p>
+
+  <div class="atelier">
+    <figure class="cadre">
+      <canvas id="volume" width="720" height="720" aria-label="Le cube de nourriture vu en volume"></canvas>
+      <p class="etat" id="etat" role="status">Chargement du moteur…</p>
+      <div class="legende">
+        <span><i class="rampe"></i>de la case la plus pauvre à la plus riche</span>
+        <span><i class="ardoise"></i>mur</span>
+      </div>
+    </figure>
+
+    <div class="panneau">
+      <section class="bloc">
+        <h2>La scène</h2>
+        <label class="champ">Scène
+          <select id="scene">
+            <option value="0">Une goutte près du centre</option>
+            <option value="1">Une goutte devant un mur percé</option>
+          </select>
+        </label>
+        <p class="description" id="description"></p>
+        <div class="boutons">
+          <button class="principal" id="lecture" type="button">Pause</button>
+          <button id="recommencer" type="button">Recommencer</button>
+        </div>
+        <label class="champ"><span class="titre-champ">Vitesse <output id="vitesse-lue">2 pas par image</output></span>
+          <input id="vitesse" type="range" min="1" max="10" step="1" value="2">
+        </label>
+      </section>
+
+      <section class="bloc">
+        <h2>La coupe</h2>
+        <div class="axes" role="group" aria-label="Axe de la coupe">
+          <button type="button" data-axe="0" aria-pressed="false">x</button>
+          <button type="button" data-axe="1" aria-pressed="false">y</button>
+          <button type="button" data-axe="2" aria-pressed="true">z</button>
+        </div>
+        <label class="champ"><span class="titre-champ">Position <output id="position-lue">16</output></span>
+          <input id="position" type="range" min="0" max="31" step="1" value="16">
+        </label>
+        <canvas id="coupe" width="256" height="256" aria-label="La coupe du cube"></canvas>
+        <p class="note">La tranche choisie, vue à plat ; elle est aussi tracée dans le cube.</p>
+      </section>
+
+      <section class="bloc">
+        <h2>Les mesures</h2>
+        <dl class="mesures">
+          <div><dt>Pas</dt><dd><output id="pas">0</output></dd></div>
+          <div><dt>Masse totale</dt><dd><output id="masse">—</output></dd></div>
+          <div><dt>Case la plus riche</dt><dd><output id="maximum">—</output></dd></div>
+          <div><dt>Empreinte</dt><dd><output id="empreinte">—</output></dd></div>
+        </dl>
+        <p class="note">La masse reste à 100, aux arrondis près : rien ne sort du cube ni ne traverse un mur. L'empreinte résume l'état au
+          bit près ; à la fin de la scène, c'est celle que les tests du dépôt exigent.</p>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module" src="cube.js"></script>
+</body>
+</html>
