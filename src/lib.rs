@@ -17,6 +17,8 @@
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`cube`] : le scénario du cube et sa simulation, l'étape 18 : une couche à part, elle ne change rien au plan
 //!   2D ;
+//! - [`direction3d`] : la direction en volume, un vecteur unitaire qu'on fait tourner d'angles entiers par les tables
+//!   de [`croissance`] — l'étape 19, la première de la colonie en 3D ;
 //! - [`substrat`] : diffusion explicite du substrat ;
 //! - [`substrat3d`] : le substrat en volume, schéma à sept points ;
 //! - [`mesures`] : biomasse et dimension fractale ;
@@ -48,6 +50,7 @@ pub mod anastomose;
 pub mod calage;
 pub mod croissance;
 pub mod cube;
+pub mod direction3d;
 pub mod empreinte;
 pub mod grille;
 pub mod image;
