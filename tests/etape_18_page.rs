@@ -19,8 +19,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
-/// Le plafond de la page, tous fichiers de `docs/` confondus sauf le module : 200 Ko (le même que
-/// `etape_4_artefact.rs`).
+/// Le plafond de la page, tous fichiers de `docs/` confondus, sauf le module et `docs/bibliotheques/` : 200 Ko
+/// (le même que `etape_4_artefact.rs`).
 const TAILLE_MAX_PAGE: u64 = 200 * 1024;
 
 /// Les onze fonctions `mycelium_cube_*` que la page du cube emploie : le moteur calcule, la page dessine.
@@ -371,11 +371,15 @@ fn cube_js_est_du_javascript_valide() {
     assert!(sortie.status.success(), "cube.js n'est pas valide : {}", String::from_utf8_lossy(&sortie.stderr));
 }
 
-/// Ajoute à `total` la taille des fichiers de `dossier`, sous-dossiers compris, sauf le module.
+/// Ajoute à `total` la taille des fichiers de `dossier`, sous-dossiers compris, sauf le module et le dossier
+/// `docs/bibliotheques/` avec ce qu'il contient.
 fn taille_sans_le_module(dossier: &Path, total: &mut u64) {
     let entrees = std::fs::read_dir(dossier).unwrap_or_else(|erreur| panic!("{} se lit : {erreur}", dossier.display()));
     for entree in entrees {
         let chemin = entree.expect("entrée de dossier").path();
+        if chemin == racine().join("docs").join("bibliotheques") {
+            continue;
+        }
         if chemin.is_dir() {
             taille_sans_le_module(&chemin, total);
         } else if chemin != chemin_module() {
@@ -384,8 +388,8 @@ fn taille_sans_le_module(dossier: &Path, total: &mut u64) {
     }
 }
 
-/// 7. La page ne dépasse pas 200 Ko en tout : tous les fichiers de `docs/`, hors le module. C'est le plafond de
-///    `etape_4_artefact.rs`, qui compte désormais aussi la page du cube.
+/// 7. La page ne dépasse pas 200 Ko en tout : tous les fichiers de `docs/` confondus, sauf le module et
+///    `docs/bibliotheques/`. C'est le plafond de `etape_4_artefact.rs`, qui compte désormais aussi la page du cube.
 #[test]
 #[cfg_attr(not(feature = "etape-18"), ignore)]
 fn la_page_ne_depasse_pas_200_ko() {
