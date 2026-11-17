@@ -1,9 +1,17 @@
 //! La colonie en volume : des apex qui marchent, se nourrissent et se ramifient dans un cube de substrat.
 //!
-//! C'est le portage en 3D de la marche, de la longueur de pas tirée du substrat, de la consommation et de la
-//! ramification de [`crate::simulation`]. Le chimiotropisme, les obstacles, le thigmotropisme, l'anastomose et la
-//! mémoire de direction n'y sont pas (des étapes plus tard). Le substrat est un [`Substrat3d`] ; une direction est une
-//! [`Direction3d`], qu'on fait tourner d'angles entiers.
+//! C'est le portage en 3D de la marche, de la longueur de pas tirée du substrat, de la consommation, de la
+//! ramification et du chimiotropisme de [`crate::simulation`] et [`crate::tropisme`]. Les obstacles, le
+//! thigmotropisme, l'anastomose et la mémoire de direction n'y sont pas (des étapes plus tard). Le substrat est un
+//! [`Substrat3d`] ; une direction est une [`Direction3d`], qu'on fait tourner d'angles entiers.
+//!
+//! # Le chimiotropisme en volume
+//!
+//! Comme en 2D ([`crate::tropisme`]), une pointe se penche vers le côté où il y a plus de nutriments, d'un virage
+//! réel `force · s · sinus`, avec `s = n / (n + G₀)` ([`GRADIENT_DE_REFERENCE`], la constante de la 2D), `n` la norme
+//! du gradient et `sinus` le sinus de l'angle entre la pointe et le gradient ; le virage est arrondi au sort, d'un
+//! seul tirage. En volume, la pointe tourne dans le plan qui contient sa direction et le gradient, vers le gradient.
+//! Le calcul, opération par opération, est dans la doc de [`Colonie3d::avancer`].
 //!
 //! # Format du scénario
 //!
@@ -23,13 +31,16 @@
 //!   des entiers de `0` à `180` ;
 //! - `couplage <affinite> <cout>` : obligatoire et unique ; `affinite` est un nombre fini strictement positif, `cout`
 //!   un nombre fini positif ou nul ;
-//! - `duree <n>` (entier) : obligatoire et unique.
+//! - `duree <n>` (entier) : obligatoire et unique ;
+//! - `chimiotropisme <force>` : facultatif, au plus une fois ; `force` est un nombre fini de `0` à `45`
+//!   ([`FORCE_MAXIMALE`], la borne de la 2D), lu comme les autres nombres (`parse::<f64>`, comme
+//!   [`crate::simulation::lire_scenario_tropismes`]) ; absent, il vaut `0.0`, qui éteint le chimiotropisme.
 //!
 //! Un entier s'écrit en chiffres seulement (ni signe ni point). Une ligne `bloc`, quelle que soit sa forme, donne
 //! [`ErreurColonie3d::BlocRefuse`] avec son numéro, dès qu'elle est lue : les obstacles viendront plus tard. Une
 //! ligne inconnue ou mal formée (nombre de mots, nombre illisible ou hors de ses bornes) donne
-//! [`ErreurColonie3d::LigneInvalide`] avec son numéro (à partir de 1). Une directive unique répétée donne
-//! [`ErreurColonie3d::EnDouble`] (sur la seconde ligne, une fois celle-ci lue sans faute). Une fois tout lu, une
+//! [`ErreurColonie3d::LigneInvalide`] avec son numéro (à partir de 1). Une directive unique répétée, ou une seconde
+//! ligne `chimiotropisme`, donne [`ErreurColonie3d::EnDouble`] (sur la seconde ligne, une fois celle-ci lue sans faute). Une fois tout lu, une
 //! directive unique absente donne [`ErreurColonie3d::Manquante`], dans l'ordre `cube`, `substrat`, `spore`,
 //! `croissance`, `couplage`, `duree` ; puis une spore hors du cube, puis une nourriture hors du cube (dans l'ordre du
 //! texte) donnent [`ErreurColonie3d::HorsDuCube`] avec le numéro de leur ligne.
@@ -50,12 +61,20 @@
 //! 3. le nombre d'apex en `u64`, puis chaque apex dans l'ordre de son identifiant, sur 53 octets : `id` (`u32`),
 //!    `x`, `y`, `z`, les composantes `x`, `y`, `z` de la direction, `actif` (`u8`, 1 ou 0) ;
 //! 4. le nombre de ramifications en `u64` ;
-//! 5. [`Substrat3d::ecrire_canonique`].
+//! 5. [`Substrat3d::ecrire_canonique`] ;
+//! 6. seulement si `chimiotropisme != 0.0`, `chimiotropisme.to_bits()` (`u64`, 8 octets), tout à la fin.
+//!
+//! Sans chimiotropisme, l'écriture est donc celle d'avant, octet pour octet (les empreintes des scènes
+//! `colonie-cube` et `colonie-goutte` ne changent pas).
 
 use crate::alea::Alea;
+#[allow(unused_imports)]
+use crate::croissance::{COS, SIN};
 use crate::cube::Depot;
 use crate::direction3d::Direction3d;
 use crate::substrat3d::{ErreurSubstrat3d, Substrat3d};
+#[allow(unused_imports)]
+use crate::tropisme::{FORCE_MAXIMALE, GRADIENT_DE_REFERENCE};
 
 /// Le plus grand angle permis pour `angle` et `amplitude`, en degrés.
 pub const ANGLE_MAXIMAL: u32 = 180;
@@ -64,8 +83,8 @@ pub const ANGLE_MAXIMAL: u32 = 180;
 /// [`ErreurColonie3d::ReglageInvalide`] de nom `cube`, avant toute allocation.
 pub const CASES_MAXIMALES: u64 = 256 * 256 * 256;
 
-/// Le scénario d'une colonie en volume : le cube, son substrat, ses nourritures, la spore, la croissance, le couplage
-/// et la durée.
+/// Le scénario d'une colonie en volume : le cube, son substrat, ses nourritures, la spore, la croissance, le couplage,
+/// la durée et le chimiotropisme.
 ///
 /// Contrat : un scénario rendu par [`lire_scenario_colonie3d`] respecte les bornes du format (voir la doc du module),
 /// et sa spore et ses nourritures sont dans le cube. [`Colonie3d::nouvelle`] revérifie tout cela, sans paniquer, pour
@@ -100,6 +119,8 @@ pub struct ScenarioColonie3d {
     pub cout: f64,
     /// Durée de la simulation, en pas.
     pub duree: u32,
+    /// Force du chimiotropisme, en degrés, dans `0.0..=45.0` ; `0.0` (le défaut, ligne absente) l'éteint.
+    pub chimiotropisme: f64,
 }
 
 /// Erreur de lecture ou de construction d'une colonie en volume.
@@ -172,7 +193,7 @@ impl Segment3d {
     }
 }
 
-/// Lit un entier décimal non signé : des chiffres seulement (ni signe ni point).
+/// Lit un entier décimal non signé (chiffres seulement).
 fn entier(mot: &str) -> Option<u32> {
     if mot.is_empty() || !mot.bytes().all(|c| c.is_ascii_digit()) {
         return None;
@@ -187,25 +208,24 @@ fn nombre(mot: &str) -> Option<f64> {
 }
 
 /// Lit un nombre fini et strictement positif.
-fn nombre_positif(mot: &str) -> Option<f64> {
-    let valeur: f64 = mot.parse().ok()?;
-    if valeur.is_finite() && valeur > 0.0 { Some(valeur) } else { None }
+fn positif(mot: &str) -> Option<f64> {
+    nombre(mot).filter(|&valeur| valeur > 0.0)
 }
 
-/// Vrai si la case `(x, y, z)` est dans un cube de ces dimensions.
-fn dans_le_cube(x: u32, y: u32, z: u32, largeur: u32, hauteur: u32, profondeur: u32) -> bool {
-    x < largeur && y < hauteur && z < profondeur
+/// Lit un angle entier de `0` à [`ANGLE_MAXIMAL`].
+fn angle(mot: &str) -> Option<u32> {
+    entier(mot).filter(|&valeur| valeur <= ANGLE_MAXIMAL)
 }
 
 /// Lit un scénario de colonie en volume depuis son texte (format et ordre des erreurs dans la doc du module).
 pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurColonie3d> {
     let mut dimensions: Option<(u32, u32, u32)> = None;
     let mut substrat: Option<(f64, f64)> = None;
+    let mut spore: Option<((u32, u32, u32), usize)> = None;
     let mut croissance: Option<(f64, f64, u32, u32)> = None;
     let mut couplage: Option<(f64, f64)> = None;
-    let mut spore: Option<(u32, u32, u32)> = None;
-    let mut spore_ligne = 0;
     let mut duree: Option<u32> = None;
+    let mut chimiotropisme: Option<f64> = None;
     let mut depots: Vec<Depot> = Vec::new();
     let mut depots_lignes: Vec<usize> = Vec::new();
 
@@ -216,92 +236,92 @@ pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurC
             continue;
         }
         let mots: Vec<&str> = ligne.split_whitespace().collect();
+        let invalide = ErreurColonie3d::LigneInvalide(numero);
         match mots.as_slice() {
-            ["cube", largeur, hauteur, profondeur] => match (entier(largeur), entier(hauteur), entier(profondeur)) {
-                (Some(largeur), Some(hauteur), Some(profondeur)) if largeur > 0 && hauteur > 0 && profondeur > 0 => {
-                    if dimensions.is_some() {
-                        return Err(ErreurColonie3d::EnDouble("cube"));
-                    }
-                    dimensions = Some((largeur, hauteur, profondeur));
+            ["bloc", ..] => return Err(ErreurColonie3d::BlocRefuse(numero)),
+            ["cube", l, h, p] => {
+                let (Some(l), Some(h), Some(p)) = (entier(l), entier(h), entier(p)) else { return Err(invalide) };
+                if l == 0 || h == 0 || p == 0 {
+                    return Err(invalide);
                 }
-                _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            ["substrat", initiale, diffusion] => match (nombre(initiale), nombre(diffusion)) {
-                (Some(initiale), Some(diffusion)) => {
-                    if substrat.is_some() {
-                        return Err(ErreurColonie3d::EnDouble("substrat"));
-                    }
-                    substrat = Some((initiale, diffusion));
+                if dimensions.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("cube"));
                 }
-                _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            ["nourriture", x, y, z, quantite] => match (entier(x), entier(y), entier(z), nombre(quantite)) {
-                (Some(x), Some(y), Some(z), Some(quantite)) => {
-                    depots.push(Depot { x, y, z, quantite });
-                    depots_lignes.push(numero);
-                }
-                _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            ["spore", x, y, z] => match (entier(x), entier(y), entier(z)) {
-                (Some(x), Some(y), Some(z)) => {
-                    if spore.is_some() {
-                        return Err(ErreurColonie3d::EnDouble("spore"));
-                    }
-                    spore = Some((x, y, z));
-                    spore_ligne = numero;
-                }
-                _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            ["croissance", pas, intervalle, angle, amplitude] => {
-                let pas = nombre_positif(pas);
-                let intervalle = if *intervalle == "infini" { Some(f64::INFINITY) } else { nombre_positif(intervalle) };
-                let angle = entier(angle).filter(|angle| *angle <= ANGLE_MAXIMAL);
-                let amplitude = entier(amplitude).filter(|amplitude| *amplitude <= ANGLE_MAXIMAL);
-                match (pas, intervalle, angle, amplitude) {
-                    (Some(pas), Some(intervalle), Some(angle), Some(amplitude)) => {
-                        if croissance.is_some() {
-                            return Err(ErreurColonie3d::EnDouble("croissance"));
-                        }
-                        croissance = Some((pas, intervalle, angle, amplitude));
-                    }
-                    _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-                }
+                dimensions = Some((l, h, p));
             }
-            ["couplage", affinite, cout] => match (nombre_positif(affinite), nombre(cout)) {
-                (Some(affinite), Some(cout)) => {
-                    if couplage.is_some() {
-                        return Err(ErreurColonie3d::EnDouble("couplage"));
-                    }
-                    couplage = Some((affinite, cout));
+            ["substrat", initiale, diffusion] => {
+                let (Some(initiale), Some(diffusion)) = (nombre(initiale), nombre(diffusion)) else {
+                    return Err(invalide);
+                };
+                if substrat.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("substrat"));
                 }
-                _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            ["duree", valeur] => match entier(valeur) {
-                Some(valeur) => {
-                    if duree.is_some() {
-                        return Err(ErreurColonie3d::EnDouble("duree"));
-                    }
-                    duree = Some(valeur);
+                substrat = Some((initiale, diffusion));
+            }
+            ["nourriture", x, y, z, q] => {
+                let (Some(x), Some(y), Some(z), Some(quantite)) = (entier(x), entier(y), entier(z), nombre(q)) else {
+                    return Err(invalide);
+                };
+                depots.push(Depot { x, y, z, quantite });
+                depots_lignes.push(numero);
+            }
+            ["spore", x, y, z] => {
+                let (Some(x), Some(y), Some(z)) = (entier(x), entier(y), entier(z)) else { return Err(invalide) };
+                if spore.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("spore"));
                 }
-                None => return Err(ErreurColonie3d::LigneInvalide(numero)),
-            },
-            _ if mots.first() == Some(&"bloc") => return Err(ErreurColonie3d::BlocRefuse(numero)),
-            _ => return Err(ErreurColonie3d::LigneInvalide(numero)),
+                spore = Some(((x, y, z), numero));
+            }
+            ["croissance", pas, intervalle, a, amplitude] => {
+                let intervalle = if *intervalle == "infini" { Some(f64::INFINITY) } else { positif(intervalle) };
+                let (Some(pas), Some(intervalle), Some(a), Some(amplitude)) =
+                    (positif(pas), intervalle, angle(a), angle(amplitude))
+                else {
+                    return Err(invalide);
+                };
+                if croissance.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("croissance"));
+                }
+                croissance = Some((pas, intervalle, a, amplitude));
+            }
+            ["couplage", affinite, cout] => {
+                let (Some(affinite), Some(cout)) = (positif(affinite), nombre(cout)) else { return Err(invalide) };
+                if couplage.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("couplage"));
+                }
+                couplage = Some((affinite, cout));
+            }
+            ["duree", n] => {
+                let Some(n) = entier(n) else { return Err(invalide) };
+                if duree.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("duree"));
+                }
+                duree = Some(n);
+            }
+            ["chimiotropisme", force] => {
+                let Some(force) = nombre(force).filter(|&force| force <= FORCE_MAXIMALE) else { return Err(invalide) };
+                if chimiotropisme.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("chimiotropisme"));
+                }
+                chimiotropisme = Some(force);
+            }
+            _ => return Err(invalide),
         }
     }
 
     let (largeur, hauteur, profondeur) = dimensions.ok_or(ErreurColonie3d::Manquante("cube"))?;
     let (substrat_initial, diffusion) = substrat.ok_or(ErreurColonie3d::Manquante("substrat"))?;
-    let (spore, spore_ligne) = spore.map(|spore| (spore, spore_ligne)).ok_or(ErreurColonie3d::Manquante("spore"))?;
+    let (spore, spore_ligne) = spore.ok_or(ErreurColonie3d::Manquante("spore"))?;
     let (pas, intervalle, angle, amplitude) = croissance.ok_or(ErreurColonie3d::Manquante("croissance"))?;
     let (affinite, cout) = couplage.ok_or(ErreurColonie3d::Manquante("couplage"))?;
     let duree = duree.ok_or(ErreurColonie3d::Manquante("duree"))?;
 
-    if !dans_le_cube(spore.0, spore.1, spore.2, largeur, hauteur, profondeur) {
+    let dans_le_cube = |x: u32, y: u32, z: u32| x < largeur && y < hauteur && z < profondeur;
+    if !dans_le_cube(spore.0, spore.1, spore.2) {
         return Err(ErreurColonie3d::HorsDuCube(spore_ligne));
     }
     for (depot, &numero) in depots.iter().zip(&depots_lignes) {
-        if !dans_le_cube(depot.x, depot.y, depot.z, largeur, hauteur, profondeur) {
+        if !dans_le_cube(depot.x, depot.y, depot.z) {
             return Err(ErreurColonie3d::HorsDuCube(numero));
         }
     }
@@ -321,7 +341,81 @@ pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurC
         affinite,
         cout,
         duree,
+        chimiotropisme: chimiotropisme.unwrap_or(0.0),
     })
+}
+
+/// Vérifie un scénario fait à la main : les mêmes bornes que la lecture, sans numéro de ligne.
+fn verifier(scenario: &ScenarioColonie3d) -> Result<(), ErreurColonie3d> {
+    let fini_positif = |v: f64| v.is_finite() && v >= 0.0;
+    let s = scenario;
+    // En `u128` : trois `u32` ne débordent pas.
+    let cases = u128::from(s.largeur) * u128::from(s.hauteur) * u128::from(s.profondeur);
+    if cases > u128::from(CASES_MAXIMALES) {
+        return Err(ErreurColonie3d::ReglageInvalide("cube"));
+    }
+    if !fini_positif(s.substrat_initial) || !fini_positif(s.diffusion) {
+        return Err(ErreurColonie3d::ReglageInvalide("substrat"));
+    }
+    let intervalle_permis = s.intervalle == f64::INFINITY || (s.intervalle.is_finite() && s.intervalle > 0.0);
+    if !(s.pas.is_finite() && s.pas > 0.0) || !intervalle_permis || s.angle > ANGLE_MAXIMAL {
+        return Err(ErreurColonie3d::ReglageInvalide("croissance"));
+    }
+    if s.amplitude > ANGLE_MAXIMAL {
+        return Err(ErreurColonie3d::ReglageInvalide("croissance"));
+    }
+    if !(s.affinite.is_finite() && s.affinite > 0.0) || !fini_positif(s.cout) {
+        return Err(ErreurColonie3d::ReglageInvalide("couplage"));
+    }
+    if !fini_positif(s.chimiotropisme) || s.chimiotropisme > FORCE_MAXIMALE {
+        return Err(ErreurColonie3d::ReglageInvalide("chimiotropisme"));
+    }
+    if s.depots.iter().any(|d| !fini_positif(d.quantite)) {
+        return Err(ErreurColonie3d::ReglageInvalide("nourriture"));
+    }
+    let dans_le_cube = |x: u32, y: u32, z: u32| x < s.largeur && y < s.hauteur && z < s.profondeur;
+    if !dans_le_cube(s.spore.0, s.spore.1, s.spore.2) || s.depots.iter().any(|d| !dans_le_cube(d.x, d.y, d.z)) {
+        return Err(ErreurColonie3d::HorsDuCube(0));
+    }
+    Ok(())
+}
+
+/// Le gradient du substrat dans la case `(x, y, z)`, par différences centrées sur ses six voisines.
+///
+/// Contrat : avec `c = substrat.valeur(x, y, z)` et `v(…)` la valeur d'une voisine, ou `c` si elle sort du cube (aucun
+/// flux, comme au bord de [`Substrat3d::pas`] et comme [`crate::substrat::Substrat::gradient`] en 2D), le résultat
+/// est `((v(x+1) − v(x−1)) * 0.5, (v(y+1) − v(y−1)) * 0.5, (v(z+1) − v(z−1)) * 0.5)` : la soustraction d'abord, puis
+/// le produit par `0.5` (qui donne, au bit près, la division par 2). Une case bloquée vaut `0.0`
+/// ([`Substrat3d::valeur`]) ; la colonie n'en a pas encore. Rend `None` si la case est hors du cube, sans paniquer
+/// (la colonie ne l'appelle que sur la case d'un apex, toujours dans le cube).
+#[allow(unused_variables)]
+pub fn gradient_3d(substrat: &Substrat3d, x: usize, y: usize, z: usize) -> Option<(f64, f64, f64)> {
+    todo!()
+}
+
+/// La nouvelle direction d'une pointe de direction `d` qui se penche vers le gradient `g = (gx, gy, gz)`, de force
+/// `force` (en degrés) : le chimiotropisme de [`crate::tropisme::tourner_chimiotropique`], porté en volume.
+///
+/// Contrat, dans cet ordre d'opérations :
+///
+/// 1. si `force ≤ 0` : rend `d`, sans tirage ;
+/// 2. `n = sqrt((gx * gx + gy * gy) + gz * gz)` ; si `n == 0` : rend `d`, sans tirage ;
+/// 3. `dg = d.x * gx + d.y * gy + d.z * gz` (l'ordre de [`Direction3d::scalaire`]), puis `p = g − dg · d`
+///    composante par composante (`px = gx - dg * d.x`, …) : la part du gradient perpendiculaire à `d` ;
+///    `m = sqrt((px * px + py * py) + pz * pz)` ;
+/// 4. `sinus = (m / n).min(1.0)` (le sinus de l'angle entre `d` et `g`, dans `[0, 1]`) ;
+///    `s = n / (n + G₀)` avec `G₀ =` [`GRADIENT_DE_REFERENCE`] (`0.01`, la constante de la 2D) ;
+///    `virage = (force * s) * sinus`, en degrés, dans `[0, force]` ;
+/// 5. l'arrondi au sort de la 2D : `t = floor(virage)`, `frac = virage − t`, un tirage `alea.suivant_f64()`,
+///    toujours (même pour `sinus = 0`) ; s'il est `< frac`, `t` croît de 1 ; `t` est ensuite borné à `180` ;
+/// 6. si `t == 0` ou `m == 0` : rend `d` ; sinon, avec `a = p / m` (`ax = px / m`, …), rend
+///    `Direction3d::nouvelle(COS[t] * d.x + SIN[t] * ax, …)` (chaque produit, puis leur somme), ou `d` si cette
+///    construction échouait. La pointe tourne de `t` degrés dans le plan `(d, g)`, vers `g`.
+///
+/// Ne panique pas.
+#[allow(unused_variables)]
+pub fn tourner_chimiotropique_3d(d: Direction3d, g: (f64, f64, f64), force: f64, alea: &mut Alea) -> Direction3d {
+    todo!()
 }
 
 /// Une colonie en volume : ses apex, ses segments, son substrat, son aléa et son horloge.
@@ -352,54 +446,7 @@ impl Colonie3d {
     /// hors du cube (une dimension nulle en fait partie : la spore n'y tient pas), et [`ErreurColonie3d::Substrat`]
     /// pour un refus de [`Substrat3d::nouveau`] (`6 · diffusion > 1`). Ne panique pas.
     pub fn nouvelle(scenario: &ScenarioColonie3d, graine: u64) -> Result<Colonie3d, ErreurColonie3d> {
-        // Les réglages du format, vérifiés avant toute allocation. Le nombre de cases se calcule en `u128` : le
-        // produit de trois `u32` déborde un `u64`.
-        let cases = (scenario.largeur as u128) * (scenario.hauteur as u128) * (scenario.profondeur as u128);
-        if cases > CASES_MAXIMALES as u128 {
-            return Err(ErreurColonie3d::ReglageInvalide("cube"));
-        }
-        if !scenario.substrat_initial.is_finite()
-            || scenario.substrat_initial < 0.0
-            || !scenario.diffusion.is_finite()
-            || scenario.diffusion < 0.0
-        {
-            return Err(ErreurColonie3d::ReglageInvalide("substrat"));
-        }
-        let intervalle_valide =
-            scenario.intervalle == f64::INFINITY || (scenario.intervalle.is_finite() && scenario.intervalle > 0.0);
-        if !scenario.pas.is_finite()
-            || scenario.pas <= 0.0
-            || !intervalle_valide
-            || scenario.angle > ANGLE_MAXIMAL
-            || scenario.amplitude > ANGLE_MAXIMAL
-        {
-            return Err(ErreurColonie3d::ReglageInvalide("croissance"));
-        }
-        if !scenario.affinite.is_finite()
-            || scenario.affinite <= 0.0
-            || !scenario.cout.is_finite()
-            || scenario.cout < 0.0
-        {
-            return Err(ErreurColonie3d::ReglageInvalide("couplage"));
-        }
-        for depot in &scenario.depots {
-            if !depot.quantite.is_finite() || depot.quantite < 0.0 {
-                return Err(ErreurColonie3d::ReglageInvalide("nourriture"));
-            }
-        }
-
-        // La spore puis les nourritures, dans l'ordre du texte : une dimension nulle ne contient aucune case, donc
-        // la spore n'y tient pas.
-        let (sx, sy, sz) = scenario.spore;
-        if !dans_le_cube(sx, sy, sz, scenario.largeur, scenario.hauteur, scenario.profondeur) {
-            return Err(ErreurColonie3d::HorsDuCube(0));
-        }
-        for depot in &scenario.depots {
-            if !dans_le_cube(depot.x, depot.y, depot.z, scenario.largeur, scenario.hauteur, scenario.profondeur) {
-                return Err(ErreurColonie3d::HorsDuCube(0));
-            }
-        }
-
+        verifier(scenario)?;
         let (largeur, hauteur, profondeur) =
             (scenario.largeur as usize, scenario.hauteur as usize, scenario.profondeur as usize);
         let mut substrat = Substrat3d::nouveau(largeur, hauteur, profondeur, scenario.diffusion, 1.0, 1.0)
@@ -416,13 +463,16 @@ impl Colonie3d {
         for depot in &scenario.depots {
             substrat.deposer(depot.x as usize, depot.y as usize, depot.z as usize, depot.quantite);
         }
-
-        // Le premier tirage fixe la direction du premier apex : `au_hasard` en consomme deux.
         let mut alea = Alea::new(graine);
         let direction = Direction3d::au_hasard(&mut alea);
-        let premier =
-            Apex3d { id: 0, x: sx as f64 + 0.5, y: sy as f64 + 0.5, z: sz as f64 + 0.5, direction, actif: true };
-
+        let premier = Apex3d {
+            id: 0,
+            x: scenario.spore.0 as f64 + 0.5,
+            y: scenario.spore.1 as f64 + 0.5,
+            z: scenario.spore.2 as f64 + 0.5,
+            direction,
+            actif: true,
+        };
         Ok(Colonie3d {
             scenario: scenario.clone(),
             substrat,
@@ -446,30 +496,29 @@ impl Colonie3d {
     ///    2. lit `s`, le substrat de sa case (`x`, `y`, `z` tronqués vers le bas), et en tire
     ///       `longueur = si s ≤ 0 { 0 } sinon { pas * s / (affinite + s) }`, ramenée à `s / cout` si `cout > 0` et
     ///       `cout * longueur > s` ;
-    ///    3. calcule l'arrivée `x + longueur * d.x()`, et de même en `y` et `z` ;
-    ///    4. si `longueur ≤ 0` ou si l'arrivée sort de `[0, largeur) × [0, hauteur) × [0, profondeur)`, reste où il est
+    ///    3. si `chimiotropisme > 0`, se penche vers le gradient du substrat ([`tourner_chimiotropique_3d`], sur la
+    ///       case de l'étape 2 et la direction de l'étape 1), même si `longueur` est nulle : aucun tirage si le
+    ///       gradient est nul, un tirage `alea.suivant_f64()` sinon ; à `chimiotropisme = 0`, rien, aucun tirage ;
+    ///    4. calcule l'arrivée `x + longueur * d.x()`, et de même en `y` et `z`, avec la direction de l'étape 3 ;
+    ///    5. si `longueur ≤ 0` ou si l'arrivée sort de `[0, largeur) × [0, hauteur) × [0, profondeur)`, reste où il est
     ///       avec sa nouvelle direction, sans consommer, laisser, se ramifier ni tirer davantage ;
-    ///    5. sinon retire `cout * longueur` de sa case de départ ([`Substrat3d::retirer`], qui ne retire jamais plus
+    ///    6. sinon retire `cout * longueur` de sa case de départ ([`Substrat3d::retirer`], qui ne retire jamais plus
     ///       que la case ne contient), laisse un [`Segment3d`] du départ à l'arrivée, et s'y déplace ;
-    ///    6. si `intervalle` est fini, tire `alea.suivant_f64()` ; s'il est `< 1.0 / intervalle`, tire
+    ///    7. si `intervalle` est fini, tire `alea.suivant_f64()` ; s'il est `< 1.0 / intervalle`, tire
     ///       `phi = alea.suivant() % 360`, et un apex neuf, actif, d'identifiant suivant, naît à l'arrivée dans la
     ///       direction `direction.tourner(angle, phi)` ; les ramifications croissent de 1.
     pub fn avancer(&mut self) {
-        // 1. Le substrat diffuse d'abord, puis le temps avance ; seuls les apex présents au début du pas agissent.
         self.substrat.pas();
         self.temps += 1;
         let temps = self.temps;
         let nb_apex_au_debut = self.apex.len();
 
-        let pas = self.scenario.pas;
-        let amplitude = self.scenario.amplitude as u64;
-        let angle = self.scenario.angle;
-        let intervalle = self.scenario.intervalle;
-        let affinite = self.scenario.affinite;
-        let cout = self.scenario.cout;
-        let largeur = self.scenario.largeur as f64;
-        let hauteur = self.scenario.hauteur as f64;
-        let profondeur = self.scenario.profondeur as f64;
+        let s = &self.scenario;
+        let (pas, affinite, cout, force) = (s.pas, s.affinite, s.cout, s.chimiotropisme);
+        let amplitude = u64::from(s.amplitude);
+        let angle = s.angle;
+        let probabilite = if s.intervalle.is_finite() { Some(1.0 / s.intervalle) } else { None };
+        let (largeur, hauteur, profondeur) = (s.largeur as f64, s.hauteur as f64, s.profondeur as f64);
 
         for i in 0..nb_apex_au_debut {
             if !self.apex[i].actif {
@@ -477,48 +526,51 @@ impl Colonie3d {
             }
             let mut apex = self.apex[i];
 
-            // a. Tourner : deux tirages toujours, même à amplitude nulle.
+            // 1. Tourner, même si l'apex n'avance pas ensuite.
             let theta = (self.alea.suivant() % (amplitude + 1)) as u32;
             let phi = (self.alea.suivant() % 360) as u32;
             apex.direction = apex.direction.tourner(theta, phi);
 
-            // b. La case de départ, son substrat et la longueur qu'il autorise : aucun tirage.
-            let depart_x = apex.x as usize;
-            let depart_y = apex.y as usize;
-            let depart_z = apex.z as usize;
-            let s = self.substrat.valeur(depart_x, depart_y, depart_z);
-            let mut longueur = if s <= 0.0 { 0.0 } else { pas * s / (affinite + s) };
-            if cout > 0.0 && cout * longueur > s {
-                longueur = s / cout;
+            // 2. La longueur que le substrat de la case de départ autorise.
+            let (cx, cy, cz) = (apex.x as usize, apex.y as usize, apex.z as usize);
+            let valeur = self.substrat.valeur(cx, cy, cz);
+            let mut longueur = if valeur <= 0.0 { 0.0 } else { (pas * valeur) / (affinite + valeur) };
+            if cout > 0.0 && cout * longueur > valeur {
+                longueur = valeur / cout;
             }
 
-            // c. L'arrivée, dans la direction de la pointe.
-            let x1 = apex.x + longueur * apex.direction.x();
-            let y1 = apex.y + longueur * apex.direction.y();
-            let z1 = apex.z + longueur * apex.direction.z();
+            // 3. Le chimiotropisme, après la longueur et avant l'arrivée, comme en 2D.
+            if force > 0.0 {
+                let g = gradient_3d(&self.substrat, cx, cy, cz).unwrap_or((0.0, 0.0, 0.0));
+                apex.direction = tourner_chimiotropique_3d(apex.direction, g, force, &mut self.alea);
+            }
 
-            // d. Une pointe bloquée garde sa position et sa nouvelle direction, sans rien consommer, laisser,
-            //    ramifier, ni tirer de plus.
-            if longueur <= 0.0 || x1 < 0.0 || y1 < 0.0 || z1 < 0.0 || x1 >= largeur || y1 >= hauteur || z1 >= profondeur
-            {
+            // 4-5. L'arrivée ; un apex bloqué garde sa position et sa nouvelle direction. Bornes hautes exclues.
+            let d = apex.direction;
+            let x1 = apex.x + longueur * d.x();
+            let y1 = apex.y + longueur * d.y();
+            let z1 = apex.z + longueur * d.z();
+            let dehors = x1 < 0.0 || y1 < 0.0 || z1 < 0.0 || x1 >= largeur || y1 >= hauteur || z1 >= profondeur;
+            if longueur <= 0.0 || dehors {
                 self.apex[i] = apex;
                 continue;
             }
 
-            // e. Consommer dans la case de départ, laisser le segment et s'y déplacer.
-            self.substrat.retirer(depart_x, depart_y, depart_z, cout * longueur);
-            let segment = Segment3d { apex: apex.id, temps, x0: apex.x, y0: apex.y, z0: apex.z, x1, y1, z1 };
-            self.segments.push(segment);
+            // 6. Consommer dans la case de départ, laisser le segment, avancer.
+            self.substrat.retirer(cx, cy, cz, cout * longueur);
+            self.segments.push(Segment3d { apex: apex.id, temps, x0: apex.x, y0: apex.y, z0: apex.z, x1, y1, z1 });
             apex.x = x1;
             apex.y = y1;
             apex.z = z1;
             self.apex[i] = apex;
 
-            // f. Se ramifier : un tirage par pas, puis un second pour `phi` ; l'apex neuf n'agira qu'au pas suivant.
-            if intervalle.is_finite() && self.alea.suivant_f64() < 1.0 / intervalle {
+            // 7. Se ramifier : la branche naît à l'arrivée et n'agira qu'au pas suivant.
+            if let Some(probabilite) = probabilite
+                && self.alea.suivant_f64() < probabilite
+            {
                 let phi = (self.alea.suivant() % 360) as u32;
-                let direction = apex.direction.tourner(angle, phi);
                 let id = self.apex.len() as u32;
+                let direction = d.tourner(angle, phi);
                 self.apex.push(Apex3d { id, x: x1, y: y1, z: z1, direction, actif: true });
                 self.nb_ramifications += 1;
             }
@@ -573,34 +625,33 @@ impl Colonie3d {
     }
 
     /// L'écriture canonique de la colonie (format dans la doc du module). Longueur :
-    /// `4 + 8 + 56 · segments + 8 + 53 · apex + 8 + 24 + 8 · cases` octets.
+    /// `4 + 8 + 56 · segments + 8 + 53 · apex + 8 + 24 + 8 · cases` octets, plus 8 si `chimiotropisme != 0.0`.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
-        let mut octets = Vec::new();
+        let substrat = self.substrat.ecrire_canonique();
+        let mut octets = Vec::with_capacity(28 + 56 * self.segments.len() + 53 * self.apex.len() + substrat.len());
         octets.extend_from_slice(&self.temps.to_le_bytes());
         octets.extend_from_slice(&(self.segments.len() as u64).to_le_bytes());
         for segment in &self.segments {
             octets.extend_from_slice(&segment.apex.to_le_bytes());
             octets.extend_from_slice(&segment.temps.to_le_bytes());
-            octets.extend_from_slice(&segment.x0.to_bits().to_le_bytes());
-            octets.extend_from_slice(&segment.y0.to_bits().to_le_bytes());
-            octets.extend_from_slice(&segment.z0.to_bits().to_le_bytes());
-            octets.extend_from_slice(&segment.x1.to_bits().to_le_bytes());
-            octets.extend_from_slice(&segment.y1.to_bits().to_le_bytes());
-            octets.extend_from_slice(&segment.z1.to_bits().to_le_bytes());
+            for v in [segment.x0, segment.y0, segment.z0, segment.x1, segment.y1, segment.z1] {
+                octets.extend_from_slice(&v.to_bits().to_le_bytes());
+            }
         }
         octets.extend_from_slice(&(self.apex.len() as u64).to_le_bytes());
         for apex in &self.apex {
             octets.extend_from_slice(&apex.id.to_le_bytes());
-            octets.extend_from_slice(&apex.x.to_bits().to_le_bytes());
-            octets.extend_from_slice(&apex.y.to_bits().to_le_bytes());
-            octets.extend_from_slice(&apex.z.to_bits().to_le_bytes());
-            octets.extend_from_slice(&apex.direction.x().to_bits().to_le_bytes());
-            octets.extend_from_slice(&apex.direction.y().to_bits().to_le_bytes());
-            octets.extend_from_slice(&apex.direction.z().to_bits().to_le_bytes());
+            let d = apex.direction;
+            for v in [apex.x, apex.y, apex.z, d.x(), d.y(), d.z()] {
+                octets.extend_from_slice(&v.to_bits().to_le_bytes());
+            }
             octets.push(u8::from(apex.actif));
         }
         octets.extend_from_slice(&self.nb_ramifications.to_le_bytes());
-        octets.extend_from_slice(&self.substrat.ecrire_canonique());
+        octets.extend_from_slice(&substrat);
+        if self.scenario.chimiotropisme != 0.0 {
+            octets.extend_from_slice(&self.scenario.chimiotropisme.to_bits().to_le_bytes());
+        }
         octets
     }
 
