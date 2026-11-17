@@ -2101,3 +2101,101 @@ sont ceux des tests.
 - les empreintes et les comptes sont ceux de la graine 1 ;
 - aucune pointe ne meurt : au bord du cube ou dans une case vide (`s ≤ 0`), elle reste sur place et réessaie au pas
   suivant, avec sa nouvelle direction.
+
+# Le chimiotropisme en volume (étape 22, marche 2 de la 3D)
+
+## Ce que fait le code
+
+Le chimiotropisme en volume (`src/colonie3d.rs`) est le portage du chimiotropisme du plan (étape 6) dans la colonie du
+cube (étape 20) : une pointe se penche vers le côté où le substrat est le plus fort. À chaque pas, entre la longueur tirée
+du substrat et le calcul de l'arrivée, une pointe dont la force est non nulle lit le gradient de sa case et tourne d'au
+plus `force` degrés vers lui.
+
+Le gradient (`gradient_3d`) se lit sur les six voisines de la case, par différences centrées :
+`((v(x+1) − v(x−1)) · 0,5, (v(y+1) − v(y−1)) · 0,5, (v(z+1) − v(z−1)) · 0,5)`, la soustraction d'abord, puis le
+produit par `0,5`. Une voisine hors du cube vaut la case elle-même, comme au bord de la diffusion : le gradient y est une
+demi-différence ; une case bloquée vaut `0,0`. Hors du cube, la fonction rend `None`, sans paniquer.
+
+Le virage (`tourner_chimiotropique_3d`) suit le contrat du plan, dans cet ordre :
+
+- `n = sqrt((gx · gx + gy · gy) + gz · gz)` est la norme du gradient ; si `force ≤ 0` ou si `n = 0`, la direction est
+  rendue telle quelle, **sans tirage** ;
+- `p = g − (d · g) · d`, composante par composante, est la part du gradient perpendiculaire à la direction ; `m` est sa
+  norme ;
+- `sinus = m / n` (borné à 1) est le sinus de l'angle entre la pointe et le gradient, et `s = n / (n + G₀)` avec
+  `G₀ = 0,01` (`GRADIENT_DE_REFERENCE`, la constante de la 2D) : le virage réel est `force · s · sinus`, en degrés, dans
+  `[0 ; force]` ;
+- ce virage est arrondi **au sort** comme en 2D : `t = floor(virage)`, puis un tirage `alea.suivant_f64()` — toujours,
+  même quand le sinus est nul — fait croître `t` d'un degré avec la probabilité de la partie fractionnaire ; `t` est
+  ensuite borné à 180 ;
+- si `t = 0` ou si `m = 0`, la direction ne bouge pas ; sinon la pointe tourne de `t` degrés dans le plan qui contient sa
+  direction et le gradient, vers le gradient : `Direction3d::nouvelle(COS[t] · d + SIN[t] · a)` avec `a = p / m`, chaque
+  produit puis leur somme.
+
+Dans le pas, ce virage prend la place de l'étape 3 : après le virage au hasard et la longueur tirée du substrat, avant
+l'arrivée. Il emploie la direction d'après le virage au hasard et la case de départ, et a lieu même quand la longueur
+est nulle.
+
+Sans chimiotropisme — la ligne absente, ou `chimiotropisme 0` — rien de tout cela : aucun tirage, aucune lecture du
+gradient, et l'écriture canonique reste celle d'avant, octet pour octet. Ce n'est qu'avec une force non nulle que ses
+8 derniers octets portent la force.
+
+## La référence
+
+C'est le chimiotropisme du plan (section « Le chimiotropisme (étape 6) », plus haut), avec la source qu'elle cite :
+D. Turrà, M. El Ghalid, F. Rossi et A. Di Pietro, *Nature* 527:521–524 (2015), et S. Hopkins et G. P. Boswell, *Fungal
+Ecology* 5:124–136 (2012) — dont nous n'avons lu que les résumés. La forme du virage (`force · s · sinus`), la constante
+`G₀ = 0,01`, la borne de 45° et l'arrondi au sort sont les choix de modélisation de cette section.
+
+Le passage au volume est un **choix**, dit comme tel : le sinus y est pris comme la part du gradient perpendiculaire à la
+direction (`m / n`), et la pointe tourne dans le plan `(d, g)` qui contient sa direction et le gradient, vers le gradient.
+Ni la source ni l'article ne décrivent ce passage ; rien ici ne le publie.
+
+## Ce que les tests vérifient
+
+Neuf groupes, dans `tests/etape_22_chimio3d.rs` :
+
+- les empreintes de `colonie-chimio`, graine 1 : au temps 0, après 1 et après 10 pas (trois valeurs écrites dans le
+  test), puis à la fin de sa durée, l'empreinte de son fichier de `references/` (`colonie-chimio.empreinte`) ; et les
+  comptes de la fin : 14 215 segments, 2 321 ramifications et 2 322 apex (un de plus que de ramifications) ;
+- sans chimiotropisme, rien ne change : `colonie-cube` et `colonie-goutte` gardent l'empreinte de leur fichier, une
+  ligne `chimiotropisme 0` donne les mêmes octets canoniques qu'aucune ligne (au temps 0 comme à la fin), et
+  `colonie-chimio` à force nulle rend l'empreinte de `colonie-goutte` ;
+- l'écriture canonique : 8 octets de plus que sans chimiotropisme, les 8 octets petit-boutistes de `10.0` à la fin, le
+  reste de l'écriture celui d'avant, et la longueur du contrat, au temps 0 comme après 10 pas ;
+- les tirages de `tourner_chimiotropique_3d` : aucun si la force ou le gradient est nul, exactement un si le gradient est
+  non nul — y compris quand il est parallèle ou antiparallèle à la direction, où la direction est alors rendue telle
+  quelle ;
+- le virage refait à la main avec un aléa témoin de même graine : pour un gradient de `0,25` en `x` et une force de 10,
+  un virage réel de 9,615… degrés, donc 9 ou 10 au sort, sur 40 graines ; la composante `x` vaut `SIN[t]` et le produit
+  scalaire avec la direction `COS[t]`, à 1e-15 près, et la pointe reste dans le plan `(d, g)` (`z` nul) ; trois autres
+  cas montrent que c'est le gradient qui décide du côté ;
+- `gradient_3d` : différences centrées sur un champ affine exact en binaire (un quart, une demie, un huitième par case),
+  demi-différences au bord, `None` hors du cube, sur les 60 cases d'un cube de 5 × 4 × 3 et sur un scénario de lignes
+  `nourriture` ;
+- la colonie va vers la goutte, pour les graines 1 à 5 : plus de bouts de segments du côté de la goutte (`x1 > 10,5`) et
+  une distance moyenne à son centre plus petite que la colonie sans chimiotropisme ;
+- le déterminisme et la nourriture : même graine, mêmes octets ; `avancer_n(n)` comme `n` appels à `avancer` ; deux
+  graines différentes donnent deux empreintes ; et la masse du départ moins `cout · longueur()` des segments vaut la
+  masse finale, à 1e-9 près en relatif ;
+- les erreurs de lecture du mot `chimiotropisme`, une par cas, avec leur numéro de ligne (force de 46, force négative,
+  `nan`, `inf`, mot illisible, mot manquant, mot en trop) ; `0`, `45` et `2,5` sont acceptés, sans la ligne la force
+  vaut `0,0`, et une seconde ligne `chimiotropisme` donne `EnDouble`, même à force nulle.
+
+## Ce qu'on voit
+
+`scenarios/colonie-chimio.txt` est la scène de la goutte (`colonie-goutte.txt`) plus une ligne : `chimiotropisme 10`, la
+force de la scène 2D `scenarios/chimiotropisme.txt`. Même cube de 32 cases de côté, même substrat `0.03 0.15`, même
+goutte de 3 000 en `(20, 16, 16)`, même spore en `(10, 16, 16)`, même croissance `0.4 6 35 20`, même couplage
+`0.1 0.5`, même durée de 85 pas ; seule la dernière ligne change.
+
+L'aperçu de l'étape 22, dans `apercus/`, montre la colonie de `colonie-chimio` à la fin de ses 85 pas, à la graine 1 ;
+l'aperçu `etape-20-colonie-goutte.png` montre à côté la même scène sans chimiotropisme. Ce sont des images pour l'œil,
+pas une preuve ; les empreintes et les comptes sont ceux des tests.
+
+## Les limites
+
+- la colonie qui atteint la goutte la mange et grandit beaucoup plus : à la graine 1, `colonie-chimio` finit avec 14 215
+  segments et 2 321 ramifications, contre 3 439 et 603 pour `colonie-goutte` (les chiffres de l'étape 20) ;
+- le gradient ne voit que les six voisines de la case : une nourriture plus loin ne compte pas dans le virage d'un pas ;
+- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
