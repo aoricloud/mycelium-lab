@@ -35,6 +35,7 @@ etape-18 = []
 etape-19 = []
 etape-20 = []
 etape-21 = []
+etape-22 = []
 
 # Les tests se compilent optimisés : la suite entière passe d'environ 5 minutes à 1 minute 20 (essai du 09/11, sur
 # la VM calme), avec les mêmes 455 tests verts, empreintes comprises. Les vérifications de débordement et les

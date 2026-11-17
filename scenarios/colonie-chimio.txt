@@ -1,0 +1,12 @@
+# La colonie en volume qui sent la goutte : colonie-goutte.txt, plus le chimiotropisme.
+# Même cube, même nourriture, même spore, même croissance, même couplage, même durée ; seule la dernière ligne change.
+# La force est celle de la scène 2D chimiotropisme.txt : chaque pointe se penche d'au plus 10 degrés par pas vers
+# le côté où il y a plus de nutriments.
+cube 32 32 32
+substrat 0.03 0.15
+nourriture 20 16 16 3000.0
+spore 10 16 16
+croissance 0.4 6 35 20
+couplage 0.1 0.5
+duree 85
+chimiotropisme 10
