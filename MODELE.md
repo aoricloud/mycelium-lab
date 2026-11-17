@@ -2014,3 +2014,90 @@ Rien encore. La direction sert à la colonie dans le cube (étape 20) ; la page 
 - le tour `phi` est au degré près, lui aussi ;
 - une colonie du cube ne refait pas, au bit près, une colonie du plan : chaque virage en volume tire un angle de plus ;
 - un choix de calcul, pas une mesure : rien ici ne prédit la résistance d'un vrai matériau.
+
+# La colonie en volume (étape 20, marche 2 de la 3D)
+
+## Ce que fait le code
+
+La colonie en volume (`src/colonie3d.rs`) est le portage en 3D du modèle couplé du dépôt (`src/simulation.rs`, étape 2) :
+la marche d'un apex, le pas tiré du substrat, la consommation et la ramification, sur un substrat en volume
+(`src/substrat3d.rs`) et des directions en volume (`src/direction3d.rs`). Un pas se lit ainsi :
+
+1. le substrat diffuse, puis le temps croît de 1 ;
+2. chaque apex actif présent au début du pas, dans l'ordre de son identifiant, agit ; les apex nés pendant le pas
+   attendent le suivant :
+   1. il tourne, en deux tirages : `theta = alea.suivant() % (amplitude + 1)`, puis
+      `phi = alea.suivant() % 360`, et `direction = direction.tourner(theta, phi)` — les deux tirages ont lieu même à
+      `amplitude = 0` ;
+   2. il lit `s`, le substrat de sa case (coordonnées tronquées vers le bas), et en tire
+      `longueur = si s ≤ 0 { 0 } sinon { pas · s / (affinite + s) }`, ramenée à `s / cout` quand `cout > 0` et que
+      `cout · longueur > s` ;
+   3. il calcule l'arrivée `x + longueur · d.x()`, et de même en `y` et `z` ;
+   4. si la longueur est nulle ou si l'arrivée sort du cube, il reste sur place avec sa nouvelle direction, sans
+      consommer, sans laisser de segment, sans se ramifier et sans tirer davantage ;
+   5. sinon il retire `cout · longueur` de sa case de départ, laisse un segment du départ à l'arrivée et s'y déplace ;
+   6. si `intervalle` est fini, il tire un `f64` ; s'il est inférieur à `1 / intervalle`, il tire un `phi` de 0 à 359
+      et un apex neuf, actif, d'identifiant suivant, naît à l'arrivée dans la direction `direction.tourner(angle, phi)` ;
+      le nombre de ramifications croît de 1.
+
+Aucun apex ne meurt : il y en a toujours `1 + ramifications`. Le chimiotropisme, les obstacles, le thigmotropisme,
+l'anastomose et la mémoire de direction ne sont pas encore là ; une ligne `bloc`, quelle que soit sa forme, est refusée
+dès sa lecture (`BlocRefuse`, avec son numéro de ligne).
+
+## La référence
+
+La marche et la ramification suivent le modèle couplé du dépôt (`src/simulation.rs`, étape 2) : même longueur tirée du
+substrat, même consommation dans la case de départ, même ramification de probabilité `1 / intervalle`. Le virage en volume
+est le **choix** de l'étape 19 : deux tirages, `theta` puis `phi`, et la rotation de `Direction3d` ; le plan ne tirait
+qu'un angle, dans `-amplitude..=amplitude`. Aucune mesure publiée n'est refaite ici.
+
+## Ce que les tests vérifient
+
+Dix groupes, dans `tests/etape_20_colonie3d.rs` :
+
+- les empreintes : au temps 0, après 1 et après 10 pas pour `colonie-cube` (trois valeurs écrites dans le test), puis à
+  la fin de sa durée pour chacune des deux scènes, l'empreinte de son fichier de `references/`
+  (`colonie-cube.empreinte`, `colonie-goutte.empreinte`) ;
+- les comptes de la fin de chaque scène : 3 996 segments et 694 ramifications pour `colonie-cube`, 3 439 et 603 pour
+  `colonie-goutte` ; l'égalité `apex().len() == pointes() == 1 + nb_ramifications()`, et des identifiants d'apex de 0 à
+  n - 1 sans trou ;
+- le déterminisme : même graine, mêmes octets canoniques ; `avancer_n(n)` rend les mêmes octets que `n` appels à
+  `avancer` ; deux graines différentes donnent deux empreintes différentes ;
+- la nourriture : la masse du substrat au temps 0 moins `cout · longueur()` des segments vaut la masse finale, à 1e-9
+  près en relatif ;
+- la géométrie : extrémités de segments et apex dans le cube, longueurs dans `]0, pas]`, et directions de norme 1 à
+  1e-15 près ;
+- l'ordre des segments par `(temps, apex)` strictement croissant, et le premier segment parti du centre de la spore, par
+  l'apex 0, au temps 1 ;
+- le temps 0 : un seul apex, d'identifiant 0, actif, au centre de la spore, aucun segment, aucune ramification ;
+- un scénario sans ramification ni virage (`intervalle` infini, `amplitude` nulle) : un seul apex, un segment par pas, et
+  tous les segments de même direction (produit scalaire 1 à 1e-12 près d'un segment au suivant) ;
+- les erreurs de lecture, une par cas, avec leur numéro de ligne (mot inconnu, trop peu de mots, nombre illisible, entier
+  signé ou écrit avec un point, `angle` ou `amplitude` à 181, directive unique absente ou en double, spore ou nourriture
+  hors du cube) ; les blancs de tête et de queue, les espaces multiples et les lignes `#` sont acceptés, et une ligne
+  `bloc` donne `BlocRefuse` ;
+- la construction : un pas instable (`6 × 0,2` dépasse 1) est refusé
+  (`ErreurColonie3d::Substrat(ErreurSubstrat3d::PasInstable)`), et `0,125` (`6 × 0,125 = 0,75`) est accepté.
+
+## Ce qu'on voit
+
+Les deux scènes, à la graine 1. `scenarios/colonie-cube.txt` : `cube 32 32 32`, `substrat 1.0 0.15`, `spore 16 16 16`,
+`croissance 0.4 6 35 20`, `couplage 0.1 0.5`, `duree 44` — la même nourriture partout. `scenarios/colonie-goutte.txt` :
+`cube 32 32 32`, `substrat 0.03 0.15`, `nourriture 20 16 16 3000.0`, `spore 10 16 16`, `croissance 0.4 6 35 20`,
+`couplage 0.1 0.5`, `duree 85` — peu de substrat partout, une goutte à 10 cases devant la spore.
+
+C'est un **choix**, pas un calage : dans un cube de 32 cases, les réglages des scènes 2D ne conviennent pas — les
+premières pointes atteignent les parois avant que la colonie se ramifie. D'où un pas court (0,4 au lieu de 1,0) et une
+ramification rapide (un intervalle de 6 au lieu de 20, celui de `scenarios/couplage.txt`).
+
+Les deux aperçus de l'étape 20, un par scène, dans `apercus/` : la colonie de `colonie-cube` à 44 pas et celle de
+`colonie-goutte` à 85 pas, à la graine 1. Ce sont des images pour l'œil, pas une preuve ; les empreintes et les comptes
+sont ceux des tests.
+
+## Les limites
+
+- dans un si petit cube, une colonie varie beaucoup d'une graine à l'autre : la loterie des premières ramifications décide
+  de la forme ;
+- les empreintes et les comptes sont ceux de la graine 1 ;
+- aucune pointe ne meurt : au bord du cube ou dans une case vide (`s ≤ 0`), elle reste sur place et réessaie au pas
+  suivant, avec sa nouvelle direction.
