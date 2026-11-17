@@ -1952,3 +1952,65 @@ nourriture passe le mur par la fenêtre. La page du cube viendra à la vague sui
   mesure ;
 - la diffusion seule, sans colonie ni consommation ;
 - le banc ne prédit pas la résistance d'un vrai matériau.
+
+# La direction en volume (étape 19, marche 2 de la 3D)
+
+## Ce que fait le code
+
+Une direction en volume (`src/direction3d.rs`) est un vecteur `(x, y, z)` de norme 1. Dans le plan, une direction est un
+degré entier, et ses cosinus et sinus viennent des tables `COS` et `SIN` de l'étape 1. En volume, on garde ces tables : on
+fait tourner la direction `d` de `theta` degrés, dans le plan choisi par `phi` degrés autour d'elle, par la formule de
+Rodrigues :
+
+`normer(COS[theta] · d + SIN[theta] · (COS[phi] · u + SIN[phi] · v))`
+
+La base `(u, v)` est fixée par le code : l'axe d'appui est l'axe de coordonnées où la composante de `d` est la plus
+petite en valeur absolue, `u` est le produit vectoriel de `d` et de cet axe, `v` celui de `d` et de `u`, chacun divisé
+par sa norme. Pour `d = (0, 0, 1)`, on trouve `u = (0, 1, 0)` et `v = (-1, 0, 0)`. `theta` et `phi` sont pris modulo 360.
+
+Le tirage au hasard fait deux tirages, dans cet ordre : `z = 2 · alea.suivant_f64() - 1`, puis la longitude, un entier
+`alea.suivant() % 360` lu dans les mêmes tables. Avec `r = sqrt(1 - z · z)`, la direction est `(r · COS[p], r · SIN[p], z)`.
+
+Le calcul n'emploie que `+`, `-`, `*`, `/` et `sqrt`. Le plan 2D, son noyau et ses empreintes ne changent pas.
+
+## La référence
+
+C'est un **choix**, pas une référence publiée. Le modèle de Meškauskas, Fricker et Moore (2004) est en 3D (section 9.1 de
+ce fichier), mais l'article ne dit pas comment il tire ses angles. Ce choix évite tout fichier de maths copié (règle 2) :
+seulement `+`, `-`, `*`, `/` et `sqrt`.
+
+## Ce que les tests vérifient
+
+Onze tests, dans `tests/etape_19_direction3d.rs` :
+
+- `nouvelle` refuse le vecteur nul et les composantes non finies (la non-finitude passe avant la nullité : `(NaN, 0, 0)`
+  est non fini, pas nul) ;
+- `nouvelle` rend les composantes divisées par la norme, au bit près : `(3, 0, 4)` donne `(0,6 ; 0 ; 0,8)`, et `(1, 2, 3)`
+  a ses trois valeurs exactes ;
+- `scalaire` : une direction contre elle-même vaut 1 à 4,5e-16 près, deux directions perpendiculaires valent 0
+  exactement ;
+- `base` de l'axe vertical : `u` et `v` exacts au bit près ;
+- `base` sur 1 000 directions tirées au hasard : normes de `u` et `v` égales à 1 à 4,5e-16 près, produits scalaires
+  `d · u`, `d · v` et `u · v` nuls à 3e-16 près ;
+- `tourner` : des cas exacts au bit près (`haut.tourner(90, 0)`, `haut.tourner(90, 90)`, `d123.tourner(37, 211)` et
+  `d123.tourner(180, 0)`, qui rend l'opposée) ;
+- `tourner` sur 2 000 directions, pour `theta` de 0 à 180 par pas de 7 et `phi` de 0 à 359 par pas de 23 (832 000 cas) :
+  la norme vaut 1 à 4,5e-16 près, et le produit scalaire avec la direction de départ vaut `COS[theta]` à 1e-15 près ;
+- `tourner(0, phi)` rend la direction de départ, composante par composante, à 4,5e-16 près ;
+- `tourner` prend les angles modulo 360 : `theta + 360`, `phi + 720` et `theta + 720` avec `phi + 360` donnent les mêmes
+  bits ;
+- `au_hasard` : les trois premières directions de la graine 7, au bit près ;
+- `au_hasard` fait exactement deux tirages (le tirage suivant est le troisième de la graine) ;
+- `au_hasard` est uniforme sur la sphère : sur 100 000 directions, les moyennes de `x`, `y` et `z` sont nulles à 0,01
+  près, et la moyenne de `z · z` vaut 1/3 à 0,005 près.
+
+## Ce qu'on voit
+
+Rien encore. La direction sert à la colonie dans le cube (étape 20) ; la page et les aperçus viendront avec elle.
+
+## Les limites
+
+- la longitude du tirage au hasard est au degré près : 360 valeurs, pas un angle continu ;
+- le tour `phi` est au degré près, lui aussi ;
+- une colonie du cube ne refait pas, au bit près, une colonie du plan : chaque virage en volume tire un angle de plus ;
+- un choix de calcul, pas une mesure : rien ici ne prédit la résistance d'un vrai matériau.
