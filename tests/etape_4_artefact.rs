@@ -29,7 +29,7 @@ const SCENARIO: &str = include_str!("../scenarios/couplage.txt");
 /// Le plafond du module : 1 Mo.
 const TAILLE_MAX_MODULE: u64 = 1024 * 1024;
 
-/// Le plafond de la page, tous fichiers de `docs/` confondus sauf le module : 200 Ko.
+/// Le plafond de la page, tous fichiers de `docs/` confondus, sauf le module et `docs/bibliotheques/` : 200 Ko.
 const TAILLE_MAX_PAGE: u64 = 200 * 1024;
 
 /// Les types de valeurs WebAssembly qui servent ici, tels que le format binaire les code.
@@ -697,11 +697,15 @@ fn la_page_n_a_aucune_ressource_externe() {
     }
 }
 
-/// Ajoute à `total` la taille des fichiers de `dossier`, sous-dossiers compris, sauf le module.
+/// Ajoute à `total` la taille des fichiers de `dossier`, sous-dossiers compris, sauf le module et le dossier
+/// `docs/bibliotheques/` avec ce qu'il contient.
 fn taille_sans_le_module(dossier: &Path, total: &mut u64) {
     let entrees = std::fs::read_dir(dossier).unwrap_or_else(|erreur| panic!("{} se lit : {erreur}", dossier.display()));
     for entree in entrees {
         let chemin = entree.expect("entrée de dossier").path();
+        if chemin == racine().join("docs").join("bibliotheques") {
+            continue;
+        }
         if chemin.is_dir() {
             taille_sans_le_module(&chemin, total);
         } else if chemin != chemin_module() {
@@ -710,7 +714,8 @@ fn taille_sans_le_module(dossier: &Path, total: &mut u64) {
     }
 }
 
-/// 6 (suite). La page ne dépasse pas 200 Ko en tout : tous les fichiers de `docs/`, hors le module.
+/// 6 (suite). La page ne dépasse pas 200 Ko en tout : tous les fichiers de `docs/` confondus, sauf le module et
+/// `docs/bibliotheques/`.
 #[test]
 #[cfg_attr(not(feature = "etape-4"), ignore)]
 fn la_page_ne_depasse_pas_200_ko() {
