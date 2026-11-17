@@ -39,7 +39,9 @@
 //! - [`nuage`] : la raideur selon la densité : la densité d'une colonie, le nuage de beaucoup de colonies et l'ajustement
 //!   en échelle logarithmique — l'étape 17 (M4) : une couche à part, elle ne change rien au noyau de la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
-//!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle).
+//!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle) ;
+//! - [`vitrine_cube`] : le cube de l'étape 18 piloté par des nombres seulement (choix de la scène, démarrage, pas,
+//!   cases, masse et empreinte), pour la page — une couche à part, elle ne change rien au plan 2D.
 
 pub mod alea;
 pub mod anastomose;
@@ -64,4 +66,5 @@ pub mod substrat3d;
 pub mod systeme;
 pub mod tropisme;
 pub mod vitrine;
+pub mod vitrine_cube;
 pub mod voisinage;
