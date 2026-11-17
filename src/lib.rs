@@ -14,6 +14,8 @@
 //! - [`scenario`] : la boîte de Petri et sa lecture depuis un texte ;
 //! - [`empreinte`] : SHA-256 ;
 //! - [`image`] : écrivain PNG et sommes de contrôle ;
+//! - [`colonie3d`] : la colonie en volume, des apex qui marchent, se nourrissent et se ramifient dans un cube de
+//!   substrat — l'étape 20 : une couche à part, elle ne change rien au plan 2D ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`cube`] : le scénario du cube et sa simulation, l'étape 18 : une couche à part, elle ne change rien au plan
 //!   2D ;
@@ -48,6 +50,7 @@
 pub mod alea;
 pub mod anastomose;
 pub mod calage;
+pub mod colonie3d;
 pub mod croissance;
 pub mod cube;
 pub mod direction3d;
