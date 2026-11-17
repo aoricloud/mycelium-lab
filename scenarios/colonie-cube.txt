@@ -1,0 +1,8 @@
+# La colonie en volume, nourriture uniforme : la spore au centre d'un cube de 32 cases de côté.
+# Les réglages de croissance et de couplage sont ceux de colonie-goutte.txt ; seule la nourriture change.
+cube 32 32 32
+substrat 1.0 0.15
+spore 16 16 16
+croissance 0.4 6 35 20
+couplage 0.1 0.5
+duree 44

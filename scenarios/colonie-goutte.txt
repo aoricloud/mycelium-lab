@@ -1,0 +1,9 @@
+# La colonie en volume, limitée par la nourriture : peu de substrat partout, une goutte à 10 cases de la spore.
+# Les réglages de croissance et de couplage sont ceux de colonie-cube.txt ; seule la nourriture change.
+cube 32 32 32
+substrat 0.03 0.15
+nourriture 20 16 16 3000.0
+spore 10 16 16
+croissance 0.4 6 35 20
+couplage 0.1 0.5
+duree 85
