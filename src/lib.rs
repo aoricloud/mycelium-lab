@@ -16,6 +16,8 @@
 //! - [`image`] : écrivain PNG et sommes de contrôle ;
 //! - [`colonie3d`] : la colonie en volume, des apex qui marchent, se nourrissent et se ramifient dans un cube de
 //!   substrat — l'étape 20 : une couche à part, elle ne change rien au plan 2D ;
+//! - [`contact3d`] : le contact d'un segment avec un obstacle en volume (parcours des cases d'Amanatides et Woo en
+//!   3D, première case bloquée touchée et face franchie) — l'étape 23 ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`cube`] : le scénario du cube et sa simulation, l'étape 18 : une couche à part, elle ne change rien au plan
 //!   2D ;
@@ -54,6 +56,7 @@ pub mod alea;
 pub mod anastomose;
 pub mod calage;
 pub mod colonie3d;
+pub mod contact3d;
 pub mod croissance;
 pub mod cube;
 pub mod direction3d;
