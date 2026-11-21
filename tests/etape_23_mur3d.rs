@@ -297,14 +297,11 @@ fn le_mur_n_est_jamais_traverse_et_les_apex_restent_dans_le_cube() {
                 );
                 points_vus += 1;
             }
-            if let Traversee3d::Contact(contact) =
-                traverser_3d(substrat, (segment.x0, segment.y0, segment.z0), (segment.x1, segment.y1, segment.z1))
-            {
-                panic!(
-                    "graine {graine}, segment {numero} : il touche la case {:?} par l'axe {:?}",
-                    contact.case, contact.axe
-                );
-            }
+            assert_eq!(
+                traverser_3d(substrat, (segment.x0, segment.y0, segment.z0), (segment.x1, segment.y1, segment.z1)),
+                Traversee3d::Libre,
+                "graine {graine}, segment {numero} : un segment de la colonie est libre dans le cube"
+            );
         }
         assert_eq!(points_vus, 64 * segments.len(), "graine {graine} : les 64 points de chaque segment sont vus");
 
