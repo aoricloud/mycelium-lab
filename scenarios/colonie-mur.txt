@@ -1,0 +1,19 @@
+# La colonie en volume devant un mur percé (étape 23).
+# Un mur de deux cases d'épaisseur (x = 16 et 17) coupe le cube ; une fenêtre de 4 × 4 cases (y et z de 14 à 17) le
+# perce en son centre. La spore est d'un côté (x = 8), la goutte de nourriture de l'autre (x = 24).
+# Avec `thigmotropisme 35` (le seuil de la 2D, Held et al. 2019), une pointe qui touche le mur sous moins de 35° le
+# longe puis retrouve son cap au bout ; au-delà, elle s'arrête et deux pointes naissent le long du mur. Le
+# chimiotropisme (10, la force de colonie-chimio) mène vers la fenêtre, par où la goutte diffuse.
+cube 32 32 32
+substrat 0.1 0.15
+obstacle 16 0 0 17 13 31
+obstacle 16 18 0 17 31 31
+obstacle 16 14 0 17 17 13
+obstacle 16 14 18 17 17 31
+nourriture 24 16 16 30000.0
+spore 8 16 16
+croissance 1.0 12 35 20
+couplage 0.1 0.2
+duree 100
+chimiotropisme 10
+thigmotropisme 35
