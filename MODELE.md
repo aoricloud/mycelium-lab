@@ -2199,3 +2199,142 @@ pas une preuve ; les empreintes et les comptes sont ceux des tests.
   segments et 2 321 ramifications, contre 3 439 et 603 pour `colonie-goutte` (les chiffres de l'étape 20) ;
 - le gradient ne voit que les six voisines de la case : une nourriture plus loin ne compte pas dans le virage d'un pas ;
 - la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
+
+# Les obstacles et le thigmotropisme en volume (étape 23, marche 2 de la 3D)
+
+## Ce que fait le code
+
+Les obstacles d'un scénario de colonie en volume (`src/colonie3d.rs`) sont des pavés de cases bloquées, écrits par les
+lignes `obstacle <x0> <y0> <z0> <x1> <y1> <z1>`, bornes comprises et répétables ; une ligne `bloc` est refusée
+(`BlocRefuse`), les obstacles d'une colonie s'écrivent `obstacle`. À la construction, chaque pavé est bloqué dans le
+substrat en volume (`Substrat3d::bloquer`), qui retire ce que ses cases contenaient ; un obstacle n'est jamais touché par
+un segment de la colonie, et le gradient le voit comme un bord sans flux.
+
+Le contact (`src/contact3d.rs`) est le parcours des cases d'Amanatides et Woo, porté en 3D. `traverser_3d` suit le
+segment fermé de son départ à son arrivée, case par case, dans l'ordre des axes `x`, `y`, `z` : règle du plancher
+(`⌊·⌋`), première case bloquée touchée, et face franchie pour y entrer (l'axe, et le sens du mouvement le long de cet
+axe). Un passage exact par une arête ou un coin reste dans la règle du plancher : le point de passage est la case dont
+les axes en égalité avancent, et la face d'entrée est le premier axe dont la case voisine du départ est bloquée, sinon le
+premier axe. Le départ dans une case bloquée donne `DepartBloque`, une coordonnée non finie ou hors du cube fermé
+`Invalide`, et `Libre` dit qu'aucun point du segment n'est dans une case bloquée. En 2D, la face redonne exactement celle
+de `Substrat::face_de_contact`.
+
+Quand le segment prévu touche une case bloquée, c'est un **contact** d'axe `n` (la normale à la face, un axe de
+coordonnées). L'angle de contact `α` est l'angle entre la direction `d` de la pointe et le plan de la face ; sans
+trigonométrie, `α < a` se lit `|d_n| < SIN[a]`, avec `d_n = d · n` la composante de `d` sur l'axe de la face et `SIN` la
+table de l'étape 1 :
+
+- `α < a` : la pointe **longe**. Elle prend `g`, la projection de `d` sur le plan de la face (la composante `d_n`
+  remplacée par `0.0`, puis normée), garde en mémoire `(cap, g)` (`cap` est sa direction `d` de ce pas), et refait son
+  pas dans la direction `g`, avec la même longueur. Si ce pas sort du cube, elle reste là, direction `g`, et perd sa
+  mémoire ; s'il touche encore (coin concave), c'est un arrêt contre la seconde face.
+- `α ≥ a` : elle **s'arrête et se partage en deux pointes**. Elle devient inactive, perd sa mémoire et ne laisse pas de
+  segment ; avec `p` la projection de `d` sur le plan de la face, pour `+p` puis `−p`, une pointe neuve, active et sans
+  mémoire, naît à sa position si un pas plein (`pas`) dans cette direction est libre ; chaque naissance est une
+  ramification. Si la projection est nulle, les deux directions sont celles du plan de la face dans l'ordre `x`, `y`,
+  `z` (`y` pour `n = x`, `x` sinon) et son opposée.
+
+Une pointe qui a une mémoire tire d'abord sa marche au hasard, comme les autres (le résultat est écrasé), puis toujours
+un écart de deux tirages : `theta = alea.suivant() % (MEMOIRE_DE_DIRECTION + 1)` (de 0 à 20) et
+`phi = alea.suivant() % 360`, et `candidat = cap.tourner(theta, phi)`, le virage de l'étape 19. Si un pas plein dans la
+direction `cap` est libre **et** qu'un pas de sa longueur dans la direction `candidat` l'est aussi (un pas est libre si
+son arrivée est dans le cube et si `traverser_3d` rend `Libre`), elle prend `candidat` et la mémoire s'efface : elle a
+retrouvé son cap, à `MEMOIRE_DE_DIRECTION` degrés près, au bout du mur. Sinon elle reprend `g`. Tant qu'elle a une
+mémoire, elle ne subit pas le chimiotropisme.
+
+À `thigmotropisme 0` (le défaut, la ligne absente), rien de tout cela : une pointe dont le pas touche un obstacle reste
+où elle est, avec sa nouvelle direction, sans mémoire, sans segment et sans tirage de plus, et retente au pas suivant.
+Sans obstacle, l'étape du contact ne lit rien, aucun apex n'a de mémoire, et le pas est celui de l'étape 22, bit pour
+bit.
+
+Le gradient en volume (`gradient_3d`) lit les six voisines de la case par différences centrées,
+`((v(x+1) − v(x−1)) · 0,5, …)`, la soustraction d'abord. Une voisine hors du cube vaut la case elle-même ; une voisine
+**bloquée** aussi : un mur est un bord sans flux, comme le bord de la diffusion. Le gradient d'une case bloquée est
+`(0, 0, 0)`, et la fonction rend `None` hors du cube, sans paniquer. Sans case bloquée, le résultat est celui de l'étape
+22, bit pour bit.
+
+L'écriture canonique ne change pas sans obstacle ni thigmotropisme : les empreintes de `colonie-cube`, `colonie-goutte`
+et `colonie-chimio` restent celles de leurs fichiers. S'il y a au moins un obstacle **ou** `thigmotropisme ≠ 0`, une
+queue s'ajoute après le substrat et le chimiotropisme : le nombre d'obstacles en `u64`, chaque pavé sur 24 octets (`x0`,
+`y0`, `z0`, `x1`, `y1`, `z1` en `u32`), le seuil en `u32`, puis, pour chaque apex dans l'ordre de son identifiant, sa
+mémoire sur 49 octets (un drapeau, puis les trois composantes de `cap` et les trois de `g`, toutes `0.0` sans mémoire).
+
+## La référence
+
+C'est le thigmotropisme du plan (section « Les obstacles et le thigmotropisme (étape 7) », plus haut), avec la source
+qu'elle cite : M. Held, O. Kašpar, C. Edwards et D. V. Nicolau, « Intracellular mechanisms of fungal space searching in
+microenvironments », *PNAS* 116(27):13543–13552 (2019), lue en entier par le juge des tests. Le seuil de 35° est celui
+de l'article (une hyphe qui touche sous moins de 35° de la surface longe, « nestling » ; au-delà elle se divise,
+« hit & split »), et le 35° de `colonie-mur` est ce paramètre repris de la mesure, pas un résultat du modèle. Le
+parcours des cases est celui de J. Amanatides et A. Woo, « A Fast Voxel Traversal Algorithm for Ray Tracing »,
+*Eurographics '87* (1987), porté de deux à trois axes ; en 2D, il rend la face de `Substrat::face_de_contact`.
+
+Le passage au volume est un **choix**, dit comme tel : glisser par la projection de la direction sur le plan de la face,
+se partager en `±p` (les deux sens parallèles à la face), et tirer l'écart de la mémoire par le virage de l'étape 19
+(`cap.tourner(theta, phi)`, deux tirages, `theta` de 0 à 20) plutôt que par un écart plan comme en 2D. Ni Held et
+collaborateurs ni Amanatides et Woo ne décrivent ce passage ; rien ici ne le publie.
+
+## Ce que les tests vérifient
+
+Dix groupes, dans `tests/etape_23_mur3d.rs` :
+
+- les empreintes de `colonie-mur`, graine 1 : au temps 0, après 1 et après 10 pas (trois valeurs écrites dans le test),
+  puis à la fin de sa durée, l'empreinte de son fichier (`colonie-mur.empreinte`) ; et les comptes de la fin : 3 227
+  segments, 319 ramifications et 298 pointes actives ;
+- sans obstacle ni thigmotropisme, rien ne change : `colonie-cube`, `colonie-goutte` et `colonie-chimio` gardent
+  l'empreinte de leur fichier, et une ligne `bloc`, quelle que soit sa forme, reste refusée (`BlocRefuse`, avec son
+  numéro de ligne) ;
+- le mur n'est jamais traversé, graines 1 à 3 : quatre pavés et `thigmotropisme 35` ; chaque segment est échantillonné en
+  64 points, aucun n'est dans une case bloquée et `traverser_3d` rend `Libre` ; aucun apex n'est dans une case bloquée,
+  un apex inactif n'a pas de mémoire, et le nombre d'apex vaut `1 + ramifications` ;
+- les pointes passent par la fenêtre, graine 1 : au moins un bout de segment est au-delà du mur (`x ≥ 18`), au moins un
+  est dans son épaisseur (`16 ≤ x < 18`), et tout bout dans l'épaisseur a `y` et `z` dans `[14 ; 18)` ;
+- le déterminisme, la différence des graines et le bilan de la nourriture, sur `colonie-mur` : même graine, mêmes
+  octets ; `avancer_n(n)` comme `n` appels à `avancer` ; les graines 1 et 2 donnent deux empreintes ; et la masse du
+  départ moins `cout · longueur()` des segments vaut la masse finale, à 1e-9 près en relatif ;
+- les cas faits à la main, à la graine 15 : le longement d'un mur plein à `thigmotropisme 90`, avec la mémoire `(cap, g)`
+  (`g` la projection de `cap` sur l'axe `x`, `g.x() = 0`), la direction `g`, dix pas de plus sans ramification et un
+  segment par pas, tous parallèles à la face (`x0 = x1`) ; la reprise du cap au bout d'un mur étroit d'une case, en un
+  pas, à 20° près et vers l'avant (`x > 0`), puis le passage au-delà (`x > 7`, un bout de segment au-delà) ; l'arrêt
+  contre une face à `thigmotropisme 1`, qui laisse après un pas trois apex, deux ramifications et deux pointes, l'apex
+  touché inactif et sans mémoire, sans segment, avec `|d.x| ≥ SIN[1]`, et deux naissances à sa position, `+p` puis `−p`,
+  d'identifiants 1 et 2 ; et l'immobilité à `thigmotropisme 0` dans une cellule entourée de six cases bloquées, dix pas
+  sans segment ni naissance, la pointe toujours active, sans mémoire et à la même position ;
+- `traverser_3d` sur des cas vérifiés à la main : les deux sens de chaque axe, une arrivée exactement sur une face, un
+  départ sur une frontière en descendant, les coins (2D, voisine, triple), `DepartBloque`, `Invalide` (coordonnée NaN,
+  infinie, négative, au-delà du cube) et l'absence de lecture hors du cube (une arrivée exactement sur la face haute est
+  `Libre`) ;
+- les erreurs de lecture des lignes `obstacle` et `thigmotropisme`, avec leur numéro de ligne : boîte inversée, mot
+  manquant, mot en trop, nombre illisible, nombre négatif ; obstacle qui déborde du cube (`HorsDuCube`) ; seuil de 91,
+  de 35,5 ou négatif refusé, 0, 35 et 90 acceptés ; une seconde ligne `thigmotropisme` en double (`EnDouble`), même à
+  zéro ; spore ou nourriture dans un obstacle (`DansUnObstacle`, avec la ligne de l'une ou de l'autre) ; et les obstacles
+  valides gardés dans l'ordre du texte ;
+- l'écriture canonique de `colonie-mur` à la longueur du contrat, au temps 0 comme après 10 pas :
+  `4 + 8 + 56 · segments + 8 + 53 · apex + 8 + 24 + 8 · cases`, plus 8 pour le chimiotropisme et la queue
+  `8 + 24 · obstacles + 4 + 49 · apex` ; le seuil de 35 précède les mémoires, et le nombre d'obstacles précède les
+  pavés ;
+- le gradient près d'un mur, sur un champ affine exact en binaire (`1 + 0,25 x + 0,5 y + 0,125 z`) et une case bloquée :
+  la case bloquée rend `(0, 0, 0)`, et chacune des six voisines la voit comme elle-même (par exemple `(1, 2, 2)` rend
+  `(0,125 ; 0,5 ; 0,125)`).
+
+## Ce qu'on voit
+
+`scenarios/colonie-mur.txt` écrit `cube 32 32 32`, `substrat 0.1 0.15`, quatre lignes `obstacle` qui font un mur de
+deux cases d'épaisseur (`x = 16` et `17`) percé d'une fenêtre de 4 × 4 cases (`y` et `z` de 14 à 17), une
+`nourriture 24 16 16 30000.0` de l'autre côté, une `spore 8 16 16`, `croissance 1.0 12 35 20`, `couplage 0.1 0.2`,
+`duree 100`, `chimiotropisme 10` et `thigmotropisme 35`. C'est un **choix**, pas un calage : les scènes de l'étape 22
+ont un pas de 0,4 et une goutte de 3 000 ; ici le pas de 1,0 laisse la colonie atteindre le mur, à huit cases de la
+spore, avant la fin des 100 pas, et la goutte de 30 000, dix fois plus grosse, laisse assez de nourriture diffuser par
+la fenêtre pour que la colonie la trouve de l'autre côté ; le chimiotropisme `10`, la force de `colonie-chimio`, mène
+vers cette fenêtre. Ces réglages sont un choix pour voir, pas une mesure.
+
+Les deux aperçus de l'étape 23, dans `apercus/`, donnent à voir la colonie de `colonie-mur` à la fin de ses 100 pas, à
+la graine 1 : le mur et sa fenêtre, et les hyphes de part et d'autre. Ce sont des images pour l'œil, pas une preuve ;
+les empreintes et les comptes sont ceux des tests.
+
+## Les limites
+
+- d'une graine à l'autre, le passage par la fenêtre varie beaucoup : une graine peut ne pas passer du tout ; le test ne
+  l'exige qu'à la graine 1 ;
+- les empreintes et les comptes sont ceux de la graine 1 ;
+- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
