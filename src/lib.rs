@@ -18,6 +18,8 @@
 //!   substrat — l'étape 20 : une couche à part, elle ne change rien au plan 2D ;
 //! - [`contact3d`] : le contact d'un segment avec un obstacle en volume (parcours des cases d'Amanatides et Woo en
 //!   3D, première case bloquée touchée et face franchie) — l'étape 23 ;
+//! - [`anastomose3d`] : l'anastomose en volume (la distance d'un point à un segment, l'index des segments en cases de
+//!   côté 1 et la recherche du segment d'un autre apex le plus proche) — l'étape 24 ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
 //! - [`cube`] : le scénario du cube et sa simulation, l'étape 18 : une couche à part, elle ne change rien au plan
 //!   2D ;
@@ -54,6 +56,7 @@
 
 pub mod alea;
 pub mod anastomose;
+pub mod anastomose3d;
 pub mod calage;
 pub mod colonie3d;
 pub mod contact3d;
