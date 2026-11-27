@@ -2338,3 +2338,127 @@ les empreintes et les comptes sont ceux des tests.
   l'exige qu'à la graine 1 ;
 - les empreintes et les comptes sont ceux de la graine 1 ;
 - la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
+
+# L'anastomose en volume (étape 24, marche 2 de la 3D)
+
+## Ce que fait le code
+
+La ligne `anastomose <rayon> <delai>` du scénario de colonie en volume (`src/colonie3d.rs`) allume une chose de plus
+dans `avancer` : une pointe qui arrive près d'un segment laissé par un autre apex, assez ancien, s'y anastomose. `rayon`
+est un nombre fini et positif ou nul, lu comme les autres nombres ; `delai` un entier de `0` à `u32::MAX`, en pas ; la
+ligne est facultative et au plus une fois. Absente, l'anastomose est éteinte.
+
+La distance (`src/anastomose3d.rs`) est celle du plan, avec une coordonnée de plus. Le point du segment le plus proche
+du point qui cherche est la projection orthogonale bornée aux deux extrémités (`clamp(0.0, 1.0)`, un segment réduit à un
+point rendant ce point), et la distance est la racine de la somme des carrés des trois écarts, jamais celle à la droite
+qui prolonge le segment.
+
+L'index (`Index3d`) range chaque segment dans la case de côté 1 de son milieu,
+`(floor((x0 + x1) / 2), floor((y0 + y1) / 2), floor((z0 + z1) / 2))` ; les cases sont au nombre de
+`(largeur + 1) · (hauteur + 1) · (profondeur + 1)`, la dernière de chaque axe ne recevant que les milieux posés sur la
+face haute. Il retient la plus grande longueur ajoutée, `longueur_max`. Une recherche visite toutes les cases qu'une
+boule de rayon `rayon + longueur_max / 2` autour du point peut toucher : un segment à distance `rayon` au plus a son
+milieu à `rayon + longueur / 2` au plus du point, donc la fenêtre le contient.
+
+Un segment examiné est **candidat** si les trois conditions tiennent : il vient d'un autre apex (`s.apex != apex`) ; il a
+été déposé au moins `delai` pas plus tôt (`temps >= s.temps + reglage.delai`, la somme faite en `u64`, sans
+débordement) ; sa distance au point vaut `rayon` au plus, l'égalité comptant comme dedans. La recherche rend le candidat
+le plus proche, et à distance égale le plus petit numéro, c'est-à-dire le plus ancien dans l'ordre des ajouts ; un
+segment du même apex n'est jamais candidat.
+
+L'étape 10 de `Colonie3d::avancer` cherche ce candidat **au point d'arrivée du pas**, après que l'apex a consommé,
+laissé son segment et s'y est déplacé ; l'index contient donc tous les segments laissés jusqu'ici, celui de ce pas
+compris (le sien, jamais candidat, et ceux des apex d'identifiant plus petit, qui ont déjà joué leur pas). S'il y a un
+candidat, l'apex s'anastomose : il devient inactif, perd sa mémoire, ne se ramifie pas, et le compteur croît de 1 ; une
+anastomose ne crée aucun segment.
+
+S'il y a au moins un obstacle, la recherche est `chercher_si`, avec la règle de l'obstacle : le point le plus proche du
+candidat `q` est borné au cube fermé (`clamp(0.0, largeur)`, et de même en `y` et `z`), et si `traverser_3d` de
+l'arrivée à `q` ne rend pas `Libre`, le candidat est écarté — la recherche continue, et un candidat plus loin peut être
+retenu. Sans obstacle, c'est `chercher`, qui accepte tout.
+
+La queue de l'écriture canonique s'ajoute après le substrat et, s'il y en a, la queue du chimiotropisme, puis celle
+des obstacles et du thigmotropisme : seulement si la ligne `anastomose` est là, 20 octets, `rayon.to_bits()` en `u64`,
+`delai` en `u32`, le nombre d'anastomoses en `u64`, en petit-boutiste. Sans la ligne, l'index n'est ni construit, ni
+rempli, ni interrogé, et l'écriture est celle d'avant, octet pour octet : les empreintes de `colonie-cube`,
+`colonie-goutte` et `colonie-chimio` ne changent pas, ni celle de `colonie-mur`.
+
+## La référence
+
+C'est l'anastomose du plan, celle du couplage de l'étape 2 (`src/anastomose.rs`) : le même
+`Reglage`, le même choix du plus proche et du plus petit numéro à égalité, la même grille de côté 1 et la même portée.
+Le dépôt ne cite **aucune source publiée** pour cette règle, ni en 2D ni en 3D : le rayon, le délai, le plus proche et
+le plus petit numéro à égalité sont un **choix** du dépôt. Son passage au volume est **dérivé** : les mêmes conditions,
+la même fenêtre, avec une coordonnée de plus ; rien ici ne le publie.
+
+## Ce que les tests vérifient
+
+Dix groupes, dans `tests/etape_24_anastomose3d.rs` :
+
+- les empreintes de `colonie-anastomose`, graine 1 : au temps 0, après 1 et après 10 pas (trois valeurs écrites dans le
+  test), puis à la fin de sa durée, l'empreinte de son fichier (`colonie-anastomose.empreinte`) ; et les comptes de la
+  fin : 12 510 segments, 2 131 ramifications, 86 anastomoses, 2 046 pointes actives et 2 132 apex ;
+- sans la ligne `anastomose`, rien ne change : `colonie-cube`, `colonie-goutte`, `colonie-chimio` et `colonie-mur`
+  gardent l'empreinte de leur fichier ; et le témoin de `colonie-anastomose` sans sa ligne diffère seulement de la queue
+  de 20 octets, tant qu'aucune anastomose n'a eu lieu (le test s'arrête à la première) ;
+- l'écriture canonique de `colonie-anastomose` à la longueur du contrat,
+  `4 + 8 + 56 · segments + 8 + 53 · apex + 8 + 24 + 8 · cases + 20`, et sa queue : le rayon sur 8 octets, le délai sur
+  4, le nombre d'anastomoses sur 8, en petit-boutiste ;
+- le rejeu sans index, graines 1 à 3 : les anastomoses observées pas à pas (un apex actif au début du pas, qui laisse un
+  segment et finit inactif) sont celles que redonne un parcours de tous les segments, avec la distance point-segment
+  écrite dans le test ; à la graine 1, 86 ;
+- le rejeu avec obstacles, graines 1 et 2, sur une forêt de piliers (mille cases bloquées, `anastomose 1.5 10`,
+  `thigmotropisme 35`) : le même parcours, avec la règle de l'obstacle, redonne les anastomoses ; à la graine 1, au moins
+  une anastomose est empêchée par un obstacle et au moins une est faite avec un candidat plus loin qu'un candidat écarté ;
+- les invariants et le déterminisme, graines 1 à 3 : un apex pour la spore, plus un par ramification ; pointes +
+  anastomoses = apex (sans obstacle) ; un apex inactif n'a pas de mémoire ; la masse du départ moins `cout · longueur()`
+  des segments vaut la masse finale, à 1e-9 près en relatif ; même graine, mêmes octets ; `avancer_n(n)` comme `n`
+  appels à `avancer` ; les graines 1 et 2 donnent deux empreintes ;
+- les cas faits à la main : le retour d'une branche sur le premier segment de sa mère (une pointe droite d'un pas de 0,5
+  qui se ramifie à chaque pas d'un demi-tour ; au pas 2, la branche s'anastomose, ne se ramifie pas, et l'apex inactif
+  perd sa mémoire), à cinq graines et pour les délais 0 et 1 ; au délai 2, aucune anastomose au pas 2 ; sans la ligne,
+  aucune en six pas. Et la pointe seule, qui ne s'anastomose jamais avec elle-même : dix segments en dix pas, aucune
+  anastomose, la pointe active, le dernier segment touchant la pointe ;
+- les erreurs de lecture de la ligne `anastomose`, avec leur numéro (mot manquant, mot en trop, rayon négatif, `inf`,
+  `NaN`, mot illisible, délai négatif, délai non entier, `+3`, délai de `4294967296`), le doublon (`EnDouble`, même
+  quand la seconde est mal formée : c'est alors sa ligne qui est refusée), et les formes acceptées `0 0`, `0.5 10` et
+  `1e-3 4294967295` ;
+- l'ordre des refus de `Colonie3d::nouvelle` et les réglages limites : un rayon négatif, `NaN` ou infini donne
+  `ReglageInvalide("anastomose")`, une spore dans un obstacle passe avant lui, et lui passe avant un substrat instable ;
+  un rayon nul et un délai de `u32::MAX` se construisent ;
+- `Index3d` seul, et `chercher_si` : la distance et le point le plus proche (au milieu, au-delà de l'arrivée, avant le
+  départ, sur le segment, `t = 0,5` sur une diagonale, un segment réduit à un point) ; les bornes du cube fermé et un
+  cube plat ; les trois paniques de `ajouter` (extrémité au-delà du cube, négative, non finie) ; les trois conditions du
+  candidat (même apex, segment né après le temps courant, délai à un pas près, sommes en `u64` aux plus grandes
+  valeurs) ; les bornes du rayon et les points non finis (l'égalité au rayon compte, un rayon nul trouve un point sur le
+  segment, un rayon négatif ou `NaN` ne trouve rien, un rayon infini atteint un point hors du cube) ; l'index vide,
+  l'égalité de distance (le plus petit numéro), un point hors du cube et un long segment vu près de son départ ;
+  `chercher_si` (un candidat écarté laisse trouver le suivant, tous écartés ne donnent rien, `retenu` ne voit que des
+  candidats et reçoit leur point le plus proche, une plaque bloquée écarte le plus proche derrière elle).
+
+## Ce qu'on voit
+
+`scenarios/colonie-anastomose.txt` écrit `cube 32 32 32`, `substrat 1.0 0.15`, `spore 16 16 16`,
+`croissance 0.4 6 35 20`, `couplage 0.1 0.002`, `duree 50` et `anastomose 0.5 10`. C'est `colonie-cube.txt` plus la
+dernière ligne, avec deux réglages changés. Le couplage `0.1 0.002` est celui de `scenarios/couplage.txt`, la scène 2D
+qui s'anastomose, au lieu de `0.1 0.5` : le substrat ne s'épuise presque pas, et les pointes avancent partout au même
+pas. La durée passe de 44 à 50 pas, et le réglage de l'anastomose, `rayon 0.5` et `délai 10`, est celui de la 2D : une
+pointe qui arrive à 0,5 case au plus d'un segment laissé par un autre apex au moins 10 pas plus tôt s'y fusionne et
+cesse de croître. Le substrat presque intact et la durée plus longue servent à rendre l'anastomose visible : en volume,
+deux hyphes se croisent bien plus rarement que dans le plan, et il faut une colonie plus dense. Ces réglages sont un
+choix pour voir, pas une mesure.
+
+Les deux aperçus de l'étape 24, dans `apercus/`, donnent à voir la colonie de `colonie-anastomose` à la fin de ses
+50 pas, à la graine 1, chaque segment teinté selon sa profondeur, du bleu au jaune. Ce sont des images pour l'œil, pas
+une preuve ; les empreintes et les comptes sont ceux des tests.
+
+## Les limites
+
+- d'une graine à l'autre, le nombre d'anastomoses varie beaucoup : de zéro à près de neuf cents sur les graines 1 à 40,
+  et cinq de ces graines n'en font aucune ; le test n'exige 86 qu'à la graine 1 ;
+- à la graine 1, la première anastomose vient tard, quand la colonie est dense : au pas 43 sur 50, et les huit derniers
+  pas portent les 86 ;
+- les empreintes et les comptes sont ceux de la graine 1 ;
+- l'index alloue une `Vec` par case du cube dès sa construction, vide ou non : pour `colonie-anastomose`, 33³ = 35 937
+  listes ; c'est à l'appelant de borner le cube ;
+- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
