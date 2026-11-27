@@ -1,0 +1,14 @@
+# La colonie en volume qui s'anastomose (étape 24) : colonie-cube.txt, plus la ligne anastomose.
+# Le réglage de l'anastomose est celui des scènes 2D (couplage.txt) : une pointe qui arrive à 0,5 case au plus d'un
+# segment laissé par un autre apex au moins 10 pas plus tôt s'y fusionne et cesse de croître.
+# Deux changements, pour que l'anastomose se voie : en volume, deux hyphes se croisent bien plus rarement que dans le
+# plan. Le coût est celui de couplage.txt (0.002 au lieu de 0.5) : le substrat ne s'épuise presque pas, et les
+# pointes avancent partout au même pas. La durée passe de 44 à 50 pas : la colonie est plus dense, et touche les
+# faces du cube à la fin.
+cube 32 32 32
+substrat 1.0 0.15
+spore 16 16 16
+croissance 0.4 6 35 20
+couplage 0.1 0.002
+duree 50
+anastomose 0.5 10
