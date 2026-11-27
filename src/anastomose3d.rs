@@ -27,9 +27,6 @@
 //! `sqrt`, `floor`, `min`, `max` et `clamp`, toutes exactes ; tout est déterministe d'une machine à l'autre. L'index
 //! possède ses segments, comme celui du plan, et les rend dans l'ordre de leur ajout ; une `Vec` par case, aucun
 //! `HashMap` ni `HashSet`.
-//!
-//! Étape 24, vague a : le contrat seul ; le code vient à la vague b.
-#![allow(unused_variables, dead_code)]
 
 use crate::anastomose::Reglage;
 use crate::colonie3d::Segment3d;
@@ -49,7 +46,19 @@ use crate::colonie3d::Segment3d;
 /// Sert à la règle de l'obstacle de [`crate::colonie3d::Colonie3d::avancer`] : une anastomose ne se fait pas à travers
 /// un obstacle, et ce point dit de quel côté est le segment.
 pub fn point_le_plus_proche_3d((x, y, z): (f64, f64, f64), segment: &Segment3d) -> (f64, f64, f64) {
-    todo!()
+    let dx = segment.x1 - segment.x0;
+    let dy = segment.y1 - segment.y0;
+    let dz = segment.z1 - segment.z0;
+    let carre = (dx * dx + dy * dy) + dz * dz;
+
+    // Un segment réduit à un point n'a pas de direction : le point le plus proche est ce point.
+    if carre == 0.0 {
+        (segment.x0, segment.y0, segment.z0)
+    } else {
+        // Projection orthogonale, bornée aux deux extrémités.
+        let t = ((((x - segment.x0) * dx + (y - segment.y0) * dy) + (z - segment.z0) * dz) / carre).clamp(0.0, 1.0);
+        (segment.x0 + t * dx, segment.y0 + t * dy, segment.z0 + t * dz)
+    }
 }
 
 /// La distance du point `(x, y, z)` au segment `segment` : la distance à son point le plus proche, extrémités
@@ -59,7 +68,11 @@ pub fn point_le_plus_proche_3d((x, y, z): (f64, f64, f64), segment: &Segment3d) 
 /// `ez = z - pz`, rend `((ex * ex + ey * ey) + ez * ez).sqrt()`, dans cet ordre. Un segment réduit à un point rend la
 /// distance à ce point ; une distance nulle dit que le point est sur le segment. Ne panique pas.
 pub fn distance_au_segment_3d((x, y, z): (f64, f64, f64), segment: &Segment3d) -> f64 {
-    todo!()
+    let (px, py, pz) = point_le_plus_proche_3d((x, y, z), segment);
+    let ex = x - px;
+    let ey = y - py;
+    let ez = z - pz;
+    ((ex * ex + ey * ey) + ez * ez).sqrt()
 }
 
 /// Un index des segments contenus dans un cube fermé, pour chercher vite le segment candidat à une anastomose.
@@ -92,7 +105,19 @@ impl Index3d {
     /// Si le nombre de cases `(largeur + 1) · (hauteur + 1) · (profondeur + 1)` dépasse `usize`. Le coût en mémoire
     /// est d'une `Vec` vide (24 octets sur une cible de 64 bits) par case : c'est à l'appelant de borner le cube.
     pub fn nouveau(largeur: usize, hauteur: usize, profondeur: usize) -> Index3d {
-        todo!()
+        let colonnes = largeur.checked_add(1).expect("le nombre de cases dépasse usize");
+        let lignes = hauteur.checked_add(1).expect("le nombre de cases dépasse usize");
+        let plans = profondeur.checked_add(1).expect("le nombre de cases dépasse usize");
+        let cases =
+            colonnes.checked_mul(lignes).and_then(|n| n.checked_mul(plans)).expect("le nombre de cases dépasse usize");
+        Index3d {
+            largeur,
+            hauteur,
+            profondeur,
+            segments: Vec::new(),
+            cellules: vec![Vec::new(); cases],
+            longueur_max: 0.0,
+        }
     }
 
     /// Ajoute `segment` à l'index et rend son numéro : `0` pour le premier ajout, puis `1`, `2`…
@@ -107,13 +132,40 @@ impl Index3d {
     /// hors de `[0, hauteur]`, `z0` ou `z1` hors de `[0, profondeur]`. Les bornes elles-mêmes sont admises ; une
     /// coordonnée non finie est hors du cube. L'index n'est pas modifié quand il panique.
     pub fn ajouter(&mut self, segment: Segment3d) -> usize {
-        todo!()
+        let largeur = self.largeur as f64;
+        let hauteur = self.hauteur as f64;
+        let profondeur = self.profondeur as f64;
+        let dans_le_cube = |x: f64, y: f64, z: f64| {
+            (0.0..=largeur).contains(&x) && (0.0..=hauteur).contains(&y) && (0.0..=profondeur).contains(&z)
+        };
+        assert!(
+            dans_le_cube(segment.x0, segment.y0, segment.z0) && dans_le_cube(segment.x1, segment.y1, segment.z1),
+            "une extrémité du segment sort du cube fermé"
+        );
+
+        // Le segment est rangé dans la case de son milieu, où qu'il aille ensuite.
+        let i = ((segment.x0 + segment.x1) / 2.0).floor() as usize;
+        let j = ((segment.y0 + segment.y1) / 2.0).floor() as usize;
+        let k = ((segment.z0 + segment.z1) / 2.0).floor() as usize;
+        let colonnes = self.largeur + 1;
+        let lignes = self.hauteur + 1;
+
+        let numero = self.segments.len();
+        self.cellules[(k * lignes + j) * colonnes + i].push(numero);
+
+        let longueur = segment.longueur();
+        if longueur > self.longueur_max {
+            self.longueur_max = longueur;
+        }
+
+        self.segments.push(segment);
+        numero
     }
 
     /// Les segments ajoutés, dans l'ordre de leur numéro : le segment `n` est celui qu'a rendu le `n`-ième
     /// [`Index3d::ajouter`] (à partir de 0).
     pub fn segments(&self) -> &[Segment3d] {
-        todo!()
+        &self.segments
     }
 
     /// Cherche pour l'apex `apex`, au temps courant `temps`, le segment candidat à une anastomose au point `(x, y, z)`,
@@ -150,7 +202,56 @@ impl Index3d {
         reglage: &Reglage,
         retenu: impl Fn(&Segment3d, (f64, f64, f64)) -> bool,
     ) -> Option<usize> {
-        todo!()
+        if reglage.rayon.is_nan() || reglage.rayon < 0.0 {
+            return None;
+        }
+        if !x.is_finite() || !y.is_finite() || !z.is_finite() {
+            return None;
+        }
+
+        // Un segment candidat a son milieu à `rayon + longueur / 2` au plus du point ; on visite donc toutes les
+        // cases qu'une telle boule peut toucher, jamais seulement celle du point.
+        let portee = reglage.rayon + self.longueur_max / 2.0;
+        let colonnes = self.largeur + 1;
+        let lignes = self.hauteur + 1;
+        let i_min = borne(x - portee, self.largeur);
+        let i_max = borne(x + portee, self.largeur);
+        let j_min = borne(y - portee, self.hauteur);
+        let j_max = borne(y + portee, self.hauteur);
+        let k_min = borne(z - portee, self.profondeur);
+        let k_max = borne(z + portee, self.profondeur);
+
+        let mut meilleur: Option<(usize, f64)> = None;
+        for k in k_min..=k_max {
+            for j in j_min..=j_max {
+                for i in i_min..=i_max {
+                    for &numero in &self.cellules[(k * lignes + j) * colonnes + i] {
+                        let segment = &self.segments[numero];
+                        if segment.apex == apex {
+                            continue;
+                        }
+                        if u64::from(temps) < u64::from(segment.temps) + u64::from(reglage.delai) {
+                            continue;
+                        }
+                        let distance = distance_au_segment_3d((x, y, z), segment);
+                        if distance > reglage.rayon {
+                            continue;
+                        }
+                        let meilleur_que = match meilleur {
+                            None => true,
+                            Some((numero_vu, distance_vue)) => {
+                                distance < distance_vue || (distance == distance_vue && numero < numero_vu)
+                            }
+                        };
+                        if meilleur_que && retenu(segment, point_le_plus_proche_3d((x, y, z), segment)) {
+                            meilleur = Some((numero, distance));
+                        }
+                    }
+                }
+            }
+        }
+
+        meilleur.map(|(numero, _)| numero)
     }
 
     /// Cherche pour l'apex `apex`, au temps courant `temps`, le segment candidat à une anastomose au point `(x, y, z)`.
@@ -167,6 +268,12 @@ impl Index3d {
     /// l'ordre des ajouts) ; `None` s'il n'y en a aucun. C'est [`Index3d::chercher_si`] avec un `retenu` qui accepte
     /// tout : mêmes refus (rayon négatif ou `NaN`, point non fini), même fenêtre. Ne panique pas.
     pub fn chercher(&self, point: (f64, f64, f64), apex: u32, temps: u32, reglage: &Reglage) -> Option<usize> {
-        todo!()
+        self.chercher_si(point, apex, temps, reglage, |_, _| true)
     }
+}
+
+/// Le rang de la case touchée par la coordonnée `valeur` sur un axe de dimension `dimension`, borné au cube fermé :
+/// `(valeur.floor()).max(0.0).min(dimension as f64)` converti en `usize`.
+fn borne(valeur: f64, dimension: usize) -> usize {
+    ((valeur.floor()).max(0.0).min(dimension as f64)) as usize
 }
