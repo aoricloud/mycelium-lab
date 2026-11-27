@@ -2,8 +2,9 @@
 //!
 //! C'est le portage en 3D de la marche, de la longueur de pas tirée du substrat, de la consommation, de la
 //! ramification, du chimiotropisme, des obstacles et du thigmotropisme (avec la mémoire de direction) de
-//! [`crate::simulation`] et [`crate::tropisme`]. L'anastomose n'y est pas (une étape plus tard). Le substrat est un
-//! [`Substrat3d`] ; une direction est une [`Direction3d`], qu'on fait tourner d'angles entiers.
+//! [`crate::simulation`] et [`crate::tropisme`], et de l'anastomose de [`crate::anastomose`] (par
+//! [`crate::anastomose3d`]). Le substrat est un [`Substrat3d`] ; une direction est une [`Direction3d`], qu'on fait
+//! tourner d'angles entiers.
 //!
 //! # Le chimiotropisme en volume
 //!
@@ -36,6 +37,19 @@
 //! plein dans la direction `cap` est libre (le bout du mur est passé). Le détail est dans la doc de
 //! [`Colonie3d::avancer`]. Sans obstacle, rien de tout cela n'agit : la colonie est celle d'avant, bit pour bit.
 //!
+//! # L'anastomose en volume
+//!
+//! Comme en 2D (l'étape h de [`crate::simulation::Simulation::avancer`]), une pointe qui arrive près d'un segment
+//! laissé par un autre apex, assez ancien, s'y **anastomose** : elle devient inactive, perd sa mémoire et ne se ramifie
+//! pas, et le compteur [`Colonie3d::nb_anastomoses`] croît de 1 ; une anastomose ne crée aucun segment. La recherche est
+//! celle de [`Index3d::chercher`], au point d'arrivée du pas, avec le [`Reglage`] de la ligne
+//! `anastomose <rayon> <delai>` : le segment d'un autre apex à distance `rayon` au plus (l'égalité compte), déposé au
+//! moins `delai` pas plus tôt, le plus proche, et à distance égale le plus petit numéro (le plus ancien). S'il y a des
+//! obstacles, une anastomose ne se fait pas à travers un obstacle : un candidat dont le point le plus proche est séparé
+//! de l'arrivée ([`traverser_3d`] de l'arrivée à ce point ne rend pas `Libre`) est écarté, et la recherche continue
+//! ([`Index3d::chercher_si`]). Sans la ligne `anastomose`, rien de tout cela : l'index n'est ni construit, ni rempli, ni
+//! interrogé, et la colonie est celle d'avant, bit pour bit.
+//!
 //! # Format du scénario
 //!
 //! Le texte se lit par lignes. Chaque ligne est débarrassée de ses blancs de tête et de queue ; une ligne alors vide,
@@ -61,14 +75,17 @@
 //! - `obstacle <x0> <y0> <z0> <x1> <y1> <z1>` (entiers, `x0 ≤ x1`, `y0 ≤ y1`, `z0 ≤ z1`) : se répète, gardé dans
 //!   l'ordre du texte ; le pavé de cases `x0..=x1 × y0..=y1 × z0..=z1` est bloqué (comme `bloc` dans [`crate::cube`]) ;
 //! - `thigmotropisme <a>` : facultatif, au plus une fois ; `a` est un **entier** de `0` à `90`
-//!   ([`ANGLE_CRITIQUE_MAXIMAL`]), en degrés ; absent, il vaut `0`.
+//!   ([`ANGLE_CRITIQUE_MAXIMAL`]), en degrés ; absent, il vaut `0` ;
+//! - `anastomose <rayon> <delai>` : facultatif, au plus une fois ; `rayon` est un nombre fini et positif ou nul, lu
+//!   comme les autres nombres (`parse::<f64>`), `delai` un entier (de `0` à `u32::MAX`, en pas) ; absent,
+//!   l'anastomose est éteinte (`None`).
 //!
 //! Un entier s'écrit en chiffres seulement (ni signe ni point). Une ligne `bloc`, quelle que soit sa forme, donne
 //! [`ErreurColonie3d::BlocRefuse`] avec son numéro, dès qu'elle est lue : les obstacles d'une colonie s'écrivent
 //! `obstacle`. Une ligne inconnue ou mal formée (nombre de mots, nombre illisible ou hors de ses bornes, obstacle à
 //! l'envers) donne [`ErreurColonie3d::LigneInvalide`] avec son numéro (à partir de 1). Une directive unique répétée, ou
-//! une seconde ligne `chimiotropisme` ou `thigmotropisme`, donne [`ErreurColonie3d::EnDouble`] (sur la seconde ligne,
-//! une fois celle-ci lue sans faute). Une fois tout lu, une directive unique absente donne
+//! une seconde ligne `chimiotropisme`, `thigmotropisme` ou `anastomose`, donne [`ErreurColonie3d::EnDouble`] (sur la
+//! seconde ligne, une fois celle-ci lue sans faute). Une fois tout lu, une directive unique absente donne
 //! [`ErreurColonie3d::Manquante`], dans l'ordre `cube`, `substrat`, `spore`, `croissance`, `couplage`, `duree` ; puis
 //! une spore hors du cube, puis une nourriture hors du cube, puis un obstacle qui déborde du cube (`x1`, `y1` ou `z1`
 //! hors du cube), chacun dans l'ordre du texte, donnent [`ErreurColonie3d::HorsDuCube`] avec le numéro de sa ligne ;
@@ -97,12 +114,17 @@
 //!    d'obstacles en `u64`, puis chacun dans l'ordre du texte sur 24 octets (`x0`, `y0`, `z0`, `x1`, `y1`, `z1` en
 //!    `u32`) ; puis `thigmotropisme` en `u32` ; puis, pour chaque apex dans l'ordre de son identifiant, sa mémoire sur
 //!    49 octets : un drapeau (`u8`, 1 si l'apex a une mémoire), puis les composantes `x`, `y`, `z` de `cap`, puis
-//!    celles de `g` (six `f64`), toutes `0.0` sans mémoire.
+//!    celles de `g` (six `f64`), toutes `0.0` sans mémoire ;
+//! 8. seulement si la ligne `anastomose` est là (`anastomose` vaut `Some(reglage)`), la queue de l'anastomose, sur 20
+//!    octets : `reglage.rayon.to_bits()` (`u64`), `reglage.delai` (`u32`), puis le nombre d'anastomoses (`u64`).
 //!
-//! Sans chimiotropisme, sans obstacle et à `thigmotropisme 0`, l'écriture est donc celle d'avant, octet pour octet
-//! (les empreintes des scènes `colonie-cube` et `colonie-goutte` ne changent pas, ni celle de `colonie-chimio`).
+//! Sans chimiotropisme, sans obstacle, à `thigmotropisme 0` et sans anastomose, l'écriture est donc celle d'avant, octet
+//! pour octet (les empreintes des scènes `colonie-cube` et `colonie-goutte` ne changent pas, ni celle de
+//! `colonie-chimio`) ; sans la ligne `anastomose`, celle de `colonie-mur` non plus.
 
 use crate::alea::Alea;
+use crate::anastomose::Reglage;
+use crate::anastomose3d::Index3d;
 use crate::contact3d::{Axe3d, Traversee3d, traverser_3d};
 use crate::croissance::{COS, SIN};
 use crate::cube::{Bloc, Depot};
@@ -118,7 +140,7 @@ pub const ANGLE_MAXIMAL: u32 = 180;
 pub const CASES_MAXIMALES: u64 = 256 * 256 * 256;
 
 /// Le scénario d'une colonie en volume : le cube, son substrat, ses nourritures, la spore, la croissance, le couplage,
-/// la durée, le chimiotropisme, les obstacles et le thigmotropisme.
+/// la durée, le chimiotropisme, les obstacles, le thigmotropisme et l'anastomose.
 ///
 /// Contrat : un scénario rendu par [`lire_scenario_colonie3d`] respecte les bornes du format (voir la doc du module) ;
 /// sa spore, ses nourritures et ses obstacles sont dans le cube, et ni la spore ni une nourriture n'est dans un
@@ -160,6 +182,9 @@ pub struct ScenarioColonie3d {
     /// L'angle critique du thigmotropisme, en degrés entiers, dans `0..=90` ; `0` (le défaut, ligne absente) : une
     /// pointe qui touche un obstacle reste où elle est.
     pub thigmotropisme: u32,
+    /// Le réglage de l'anastomose (`rayon` fini et positif ou nul, `delai` en pas) ; `None` (le défaut, ligne absente)
+    /// l'éteint.
+    pub anastomose: Option<Reglage>,
 }
 
 /// Erreur de lecture ou de construction d'une colonie en volume.
@@ -189,7 +214,7 @@ pub enum ErreurColonie3d {
 ///
 /// Contrat : `id` est son rang de naissance (0, 1, 2… sans trou) ; la position est toujours dans
 /// `[0, largeur) × [0, hauteur) × [0, profondeur)`, jamais dans une case bloquée. Un apex n'est rendu inactif que par
-/// un arrêt contre un obstacle ; un apex inactif n'a pas de mémoire.
+/// un arrêt contre un obstacle ou par une anastomose ; un apex inactif n'a pas de mémoire.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Apex3d {
     /// Identifiant de l'apex.
@@ -274,6 +299,7 @@ pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurC
     let mut duree: Option<u32> = None;
     let mut chimiotropisme: Option<f64> = None;
     let mut thigmotropisme: Option<u32> = None;
+    let mut anastomose: Option<Reglage> = None;
     let mut depots: Vec<Depot> = Vec::new();
     let mut depots_lignes: Vec<usize> = Vec::new();
     let mut obstacles: Vec<Bloc> = Vec::new();
@@ -376,6 +402,13 @@ pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurC
                 }
                 thigmotropisme = Some(a);
             }
+            ["anastomose", rayon, delai] => {
+                let (Some(rayon), Some(delai)) = (nombre(rayon), entier(delai)) else { return Err(invalide) };
+                if anastomose.is_some() {
+                    return Err(ErreurColonie3d::EnDouble("anastomose"));
+                }
+                anastomose = Some(Reglage { rayon, delai });
+            }
             _ => return Err(invalide),
         }
     }
@@ -428,6 +461,7 @@ pub fn lire_scenario_colonie3d(texte: &str) -> Result<ScenarioColonie3d, ErreurC
         chimiotropisme: chimiotropisme.unwrap_or(0.0),
         obstacles,
         thigmotropisme: thigmotropisme.unwrap_or(0),
+        anastomose,
     })
 }
 
@@ -481,6 +515,9 @@ fn verifier(scenario: &ScenarioColonie3d) -> Result<(), ErreurColonie3d> {
         || s.depots.iter().any(|d| dans_un_obstacle(&s.obstacles, (d.x, d.y, d.z)))
     {
         return Err(ErreurColonie3d::DansUnObstacle(0));
+    }
+    if s.anastomose.is_some_and(|reglage| !fini_positif(reglage.rayon)) {
+        return Err(ErreurColonie3d::ReglageInvalide("anastomose"));
     }
     Ok(())
 }
@@ -621,7 +658,7 @@ fn branches_d_arret(d: Direction3d, axe: Axe3d) -> (Direction3d, Direction3d) {
 ///
 /// Contrat : l'état complet est déterminé par le scénario, la graine et le nombre de pas joués ; mêmes entrées, mêmes
 /// octets ([`Colonie3d::ecrire_canonique`]). Aucun apex n'est retiré : il y en a toujours `1 + ramifications`, actifs
-/// ou non (une naissance contre un obstacle est une ramification).
+/// ou non (une naissance contre un obstacle est une ramification ; un apex anastomosé reste, inactif).
 #[derive(Clone, Debug)]
 pub struct Colonie3d {
     scenario: ScenarioColonie3d,
@@ -631,6 +668,10 @@ pub struct Colonie3d {
     segments: Vec<Segment3d>,
     temps: u32,
     nb_ramifications: u64,
+    /// L'index des segments, seulement si l'anastomose est allumée : il en garde une copie, dans le même ordre que
+    /// `segments` (le segment `n` de l'un est le segment `n` de l'autre).
+    index: Option<Index3d>,
+    nb_anastomoses: u64,
 }
 
 impl Colonie3d {
@@ -649,8 +690,12 @@ impl Colonie3d {
     /// [`ErreurColonie3d::ReglageInvalide`] de nom `thigmotropisme` pour un angle de plus de `90`, puis de nom
     /// `obstacle` pour un obstacle à l'envers (`x0 > x1`, `y0 > y1` ou `z0 > z1`) ; [`ErreurColonie3d::HorsDuCube`] (de
     /// numéro `0`) pour un obstacle qui déborde du cube ; [`ErreurColonie3d::DansUnObstacle`] (de numéro `0`) pour une
-    /// spore ou une nourriture dans un obstacle ; enfin [`ErreurColonie3d::Substrat`] pour un refus de
+    /// spore ou une nourriture dans un obstacle ; [`ErreurColonie3d::ReglageInvalide`] de nom `anastomose` pour un
+    /// rayon d'anastomose négatif ou non fini ; enfin [`ErreurColonie3d::Substrat`] pour un refus de
     /// [`Substrat3d::nouveau`] (`6 · diffusion > 1`). Ne panique pas.
+    ///
+    /// Si l'anastomose est allumée, la colonie construit un [`Index3d`] vide du cube (`largeur`, `hauteur`,
+    /// `profondeur`) ; sinon elle n'en construit aucun. Le compteur d'anastomoses part de 0.
     pub fn nouvelle(scenario: &ScenarioColonie3d, graine: u64) -> Result<Colonie3d, ErreurColonie3d> {
         verifier(scenario)?;
         let (largeur, hauteur, profondeur) =
@@ -684,6 +729,8 @@ impl Colonie3d {
             actif: true,
             memoire: None,
         };
+        // L'index n'existe que si l'anastomose est allumée : sans elle, rien de `anastomose3d` n'est appelé.
+        let index = scenario.anastomose.map(|_| Index3d::nouveau(largeur, hauteur, profondeur));
         Ok(Colonie3d {
             scenario: scenario.clone(),
             substrat,
@@ -692,6 +739,8 @@ impl Colonie3d {
             segments: Vec::new(),
             temps: 0,
             nb_ramifications: 0,
+            index,
+            nb_anastomoses: 0,
         })
     }
 
@@ -737,13 +786,24 @@ impl Colonie3d {
     ///       un apex neuf, actif, sans mémoire, d'identifiant suivant, naît à la position de l'apex arrêté, et les
     ///       ramifications croissent de 1. Aucun tirage ; fin du pas de l'apex ;
     ///    9. sinon retire `cout * longueur` de sa case de départ ([`Substrat3d::retirer`], qui ne retire jamais plus
-    ///       que la case ne contient), laisse un [`Segment3d`] du départ à l'arrivée, et s'y déplace ;
-    ///    10. si `intervalle` est fini, tire `alea.suivant_f64()` ; s'il est `< 1.0 / intervalle`, tire
+    ///       que la case ne contient), laisse un [`Segment3d`] du départ à l'arrivée, et s'y déplace ; si l'anastomose
+    ///       est allumée, le segment est aussi ajouté à l'index ([`Index3d::ajouter`]), à la suite de ceux d'avant ;
+    ///    10. si l'anastomose est allumée, de réglage `reglage` : cherche dans l'index un candidat au point d'arrivée,
+    ///        pour l'identifiant de l'apex et le temps courant ([`Index3d::chercher`]) ; l'index contient tous les
+    ///        segments laissés jusqu'ici, ceux de ce pas compris (le sien, qui n'est jamais candidat, et ceux des apex
+    ///        d'identifiant plus petit). S'il y a au moins un obstacle, c'est [`Index3d::chercher_si`], qui écarte un
+    ///        candidat dont le point le plus proche `q`, chaque coordonnée bornée au cube fermé
+    ///        (`clamp(0.0, largeur)`, et de même en `y` et `z`), est séparé de l'arrivée : [`traverser_3d`] de
+    ///        l'arrivée à `q` ne rend pas [`Traversee3d::Libre`]. S'il y a un candidat, l'apex **s'anastomose** : il
+    ///        devient inactif, perd sa mémoire, les anastomoses croissent de 1, et c'est la fin de son pas (aucune
+    ///        ramification, aucun tirage) ;
+    ///    11. si `intervalle` est fini, tire `alea.suivant_f64()` ; s'il est `< 1.0 / intervalle`, tire
     ///        `phi = alea.suivant() % 360`, et un apex neuf, actif, sans mémoire, d'identifiant suivant, naît à
     ///        l'arrivée dans la direction `d.tourner(angle, phi)`, `d` étant la direction du segment laissé (`g` pour
     ///        un apex qui longe, qui garde sa mémoire) ; les ramifications croissent de 1.
     ///
     /// Sans obstacle, l'étape 7 ne lit rien, aucun apex n'a de mémoire, et le pas est celui de l'étape 22, bit pour
+    /// bit. Sans anastomose, l'étape 10 ne fait rien (aucun index n'existe) et le pas est celui de l'étape 23, bit pour
     /// bit.
     pub fn avancer(&mut self) {
         self.substrat.pas();
@@ -759,6 +819,8 @@ impl Colonie3d {
         let a_des_obstacles = !s.obstacles.is_empty();
         // Borné à 90 par la lecture et par `verifier`.
         let angle_critique = s.thigmotropisme as usize;
+        let anastomose = s.anastomose;
+        let (largeur, hauteur, profondeur) = (s.largeur as f64, s.hauteur as f64, s.profondeur as f64);
 
         for i in 0..nb_apex_au_debut {
             if !self.apex[i].actif {
@@ -853,15 +915,40 @@ impl Colonie3d {
                 continue;
             }
 
-            // 9. Consommer dans la case de départ, laisser le segment, avancer.
+            // 9. Consommer dans la case de départ, laisser le segment (et le ranger dans l'index), avancer.
             self.substrat.retirer(cx, cy, cz, cout * longueur);
-            self.segments.push(Segment3d { apex: apex.id, temps, x0: apex.x, y0: apex.y, z0: apex.z, x1, y1, z1 });
+            let segment = Segment3d { apex: apex.id, temps, x0: apex.x, y0: apex.y, z0: apex.z, x1, y1, z1 };
+            self.segments.push(segment);
+            if let Some(index) = &mut self.index {
+                index.ajouter(segment);
+            }
             apex.x = x1;
             apex.y = y1;
             apex.z = z1;
             self.apex[i] = apex;
 
-            // 10. Se ramifier : la branche naît à l'arrivée et n'agira qu'au pas suivant.
+            // 10. Une anastomose rend l'apex inactif, lui fait perdre sa mémoire et empêche sa ramification. S'il y a
+            //     des obstacles, un candidat que sépare un obstacle est écarté et la recherche continue.
+            if let (Some(reglage), Some(index)) = (anastomose, &self.index) {
+                let arrivee = (x1, y1, z1);
+                let candidat = if a_des_obstacles {
+                    let substrat = &self.substrat;
+                    index.chercher_si(arrivee, apex.id, temps, &reglage, |_, (qx, qy, qz)| {
+                        let q = (qx.clamp(0.0, largeur), qy.clamp(0.0, hauteur), qz.clamp(0.0, profondeur));
+                        traverser_3d(substrat, arrivee, q) == Traversee3d::Libre
+                    })
+                } else {
+                    index.chercher(arrivee, apex.id, temps, &reglage)
+                };
+                if candidat.is_some() {
+                    self.apex[i].actif = false;
+                    self.apex[i].memoire = None;
+                    self.nb_anastomoses += 1;
+                    continue;
+                }
+            }
+
+            // 11. Se ramifier : la branche naît à l'arrivée et n'agira qu'au pas suivant.
             if let Some(probabilite) = probabilite
                 && self.alea.suivant_f64() < probabilite
             {
@@ -940,6 +1027,11 @@ impl Colonie3d {
         self.nb_ramifications
     }
 
+    /// Le nombre cumulé d'anastomoses : `0` tant que l'anastomose est éteinte. Chacune a rendu un apex inactif.
+    pub fn nb_anastomoses(&self) -> u64 {
+        self.nb_anastomoses
+    }
+
     /// Le nombre d'apex actifs : les pointes de la colonie.
     pub fn pointes(&self) -> usize {
         self.apex.iter().filter(|apex| apex.actif).count()
@@ -947,7 +1039,8 @@ impl Colonie3d {
 
     /// L'écriture canonique de la colonie (format dans la doc du module). Longueur :
     /// `4 + 8 + 56 · segments + 8 + 53 · apex + 8 + 24 + 8 · cases` octets, plus 8 si `chimiotropisme != 0.0`, plus
-    /// `8 + 24 · obstacles + 4 + 49 · apex` s'il y a un obstacle ou si `thigmotropisme != 0`.
+    /// `8 + 24 · obstacles + 4 + 49 · apex` s'il y a un obstacle ou si `thigmotropisme != 0`, plus `8 + 4 + 8 = 20` si
+    /// la ligne `anastomose` est là.
     pub fn ecrire_canonique(&self) -> Vec<u8> {
         let substrat = self.substrat.ecrire_canonique();
         let mut octets = Vec::with_capacity(28 + 56 * self.segments.len() + 53 * self.apex.len() + substrat.len());
@@ -992,6 +1085,11 @@ impl Colonie3d {
                     octets.extend_from_slice(&v.to_bits().to_le_bytes());
                 }
             }
+        }
+        if let Some(reglage) = self.scenario.anastomose {
+            octets.extend_from_slice(&reglage.rayon.to_bits().to_le_bytes());
+            octets.extend_from_slice(&reglage.delai.to_le_bytes());
+            octets.extend_from_slice(&self.nb_anastomoses.to_le_bytes());
         }
         octets
     }
