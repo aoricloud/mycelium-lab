@@ -310,7 +310,7 @@ fn les_formes_hors_contrat_sont_refusees() {
     // Un tore de petit rayon égal ou supérieur au grand.
     assert_eq!(erreur(10, 10, 10, &tore(5, 5, 5, 3, 3)), invalide);
     assert_eq!(erreur(10, 10, 10, &tore(5, 5, 5, 3, 4)), invalide);
-    assert!(libres(10, 10, 10, &tore(5, 5, 5, 3, 2)).is_ok());
+    assert!(libres(11, 11, 11, &tore(5, 5, 5, 3, 2)).is_ok());
     // Un labyrinthe dont un des quatre nombres vaut 0.
     assert_eq!(erreur(30, 30, 30, &labyrinthe(0, 3, 3, 2, 1)), invalide);
     assert_eq!(erreur(30, 30, 30, &labyrinthe(3, 0, 3, 2, 1)), invalide);
