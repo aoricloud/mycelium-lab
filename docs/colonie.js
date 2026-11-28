@@ -1,4 +1,4 @@
-// La page de la colonie dans le cube (étape 21 de Mycelium Lab, la deuxième marche de la 3D).
+// La page de la colonie dans le cube (étapes 21 et 25 de Mycelium Lab, la deuxième marche de la 3D).
 //
 // Elle charge le module WebAssembly `mycelium.wasm`, celui des autres pages, et n'emploie que ses exportations
 // `mycelium_colonie_*` : le moteur calcule, la page ne fait que dessiner. Le dessin passe par three.js, copié dans
@@ -7,7 +7,10 @@
 // La colonie est un seul objet `LineSegments`, dont les tampons de positions et de couleurs sont réservés une fois
 // par démarrage, à la taille finale de la scène, puis remplis au fil des pas : seuls les nouveaux segments sont
 // écrits, et `setDrawRange` montre ce qui est rempli. Le dernier pas joué pousse en douceur : ses segments
-// s'allongent de 0 à leur longueur pendant le temps d'un pas, puis restent tels que le moteur les a laissés.
+// s'allongent de 0 à leur longueur pendant le temps d'un pas, puis restent tels que le moteur les a laissés. Les
+// soudures (le lieu de chaque anastomose, lu dans le module) sont un objet `Points` tenu de la même façon : celles du
+// dernier pas paraissent quand ses segments ont fini de s'allonger. Les obstacles du scénario sont des pavés
+// translucides, posés à chaque démarrage.
 //
 // Les axes : le moteur compte en cases, de 0 à la largeur (x), la hauteur (y) et la profondeur (z). Le cube est
 // centré sur l'origine, et la verticale de three.js est le z du moteur : X = x − L/2, Y = z − P/2, Z = H/2 − y.
@@ -15,18 +18,33 @@
 
 import * as THREE from "./bibliotheques/three/three.module.min.js";
 
+// Une description par scène, dans l'ordre des numéros du module (0 à 4).
 const DESCRIPTIONS = [
   "La spore au centre d'un cube où la nourriture est partout la même. Rien n'oriente les filaments : ils marchent " +
     "au hasard et se ramifient. Partie d'une seule pointe, la colonie s'ouvre en éventail du côté où celle-ci est " +
     "partie, et atteint la paroi avant de s'ouvrir tout à fait.",
   "Peu de nourriture partout, et une goutte de 3 000 unités à 10 cases de la spore. Un filament avance d'autant " +
     "moins qu'il a peu à manger : la colonie s'étend du côté de la goutte.",
+  "La même goutte, mais les pointes la sentent : à chaque pas, une pointe se penche d'au plus 10 degrés vers le " +
+    "côté où il y a plus de nourriture (le chimiotropisme). La colonie file vers la goutte et s'y nourrit : avec la " +
+    "graine 1, elle laisse quatre fois plus de filaments que sans.",
+  "Un mur de deux cases d'épaisseur coupe le cube, percé en son centre d'une fenêtre de 4 × 4 cases. La spore est " +
+    "d'un côté, une goutte de l'autre, qui ne diffuse que par la fenêtre. Une pointe qui touche le mur sous moins de " +
+    "35 degrés le longe ; plus de face, elle s'arrête et jusqu'à deux pointes repartent le long du mur. Le passage " +
+    "dépend beaucoup de la graine : avec la 1, 7 % des filaments finissent de l'autre côté ; avec la 3, aucun.",
+  "La nourriture partout, et une règle de plus : une pointe qui arrive à une demi-case au plus d'un filament laissé " +
+    "par une autre pointe il y a 10 pas ou plus s'y soude et cesse de pousser (l'anastomose). En volume, deux " +
+    "filaments se croisent rarement : avec la graine 1, la première soudure vient au pas 43 sur 50.",
 ];
 
-// Les empreintes de la fin de chaque scène avec la graine 1, celles du moteur natif (`references/colonie-*.empreinte`).
+// Les empreintes de la fin de chaque scène avec la graine 1, celles du moteur natif (`references/colonie-*.empreinte`),
+// dans l'ordre des scènes.
 const REFERENCES = [
   "2dc3370c51912df291e0f96fbd9dadc7a5b2d04719d6a51f909c768ebf935440",
   "4d9a09776ecd70f555878e4284e7e7431bbccde24a1ec104ec54657cd4555e51",
+  "1c09aab224ddb44605c0bb297ea200d337f217d35a2e90e54c94cae24aee6cc4",
+  "2cdee7029ee7d132ebbac4dad5a495f93110e1f5f663625c6846e5d48fbbca80",
+  "eea0dcebb30da120d56dbb18fa2fda4d3cd412d3d9a17c6f8cf67bfa04f72f09",
 ];
 const GRAINE_DE_REFERENCE = 1;
 const GRAINE_MAX = 4294967295;
@@ -68,10 +86,13 @@ const curseurVitesse = document.getElementById("vitesse");
 const vitesseLue = document.getElementById("vitesse-lue");
 const champGraine = document.getElementById("graine");
 const legendeGoutte = document.getElementById("legende-goutte");
+const legendeMur = document.getElementById("legende-mur");
+const legendeSoudure = document.getElementById("legende-soudure");
 const sortiePas = document.getElementById("pas");
 const sortieFilaments = document.getElementById("filaments");
 const sortiePointes = document.getElementById("pointes");
 const sortieRamifications = document.getElementById("ramifications");
+const sortieSoudures = document.getElementById("soudures");
 const sortieMasse = document.getElementById("masse");
 const sortieEmpreinte = document.getElementById("empreinte");
 const verdict = document.getElementById("verdict");
@@ -99,13 +120,16 @@ const vue = {
   // La part déjà montrée des segments du dernier pas (elle ne fait que croître), et la dernière part écrite.
   croissance: 1,
   allonge: -1,
+  // Les soudures déjà écrites, et celles d'avant le dernier pas (les seules montrées tant qu'il s'allonge).
+  souduresEcrites: 0,
+  souduresAvantDernierPas: 0,
   empreinteLue: false,
   // La taille du dessin en pixels CSS et le rapport de pixels, pour ne redimensionner qu'au besoin.
   taille: 0,
   ratio: 0,
 };
 
-// La scène three.js : le fond, la caméra, les arêtes du cube, la colonie, la goutte.
+// La scène three.js : le fond, la caméra, les arêtes du cube, le mur, la colonie, ses soudures, la goutte.
 let rendu;
 try {
   rendu = new THREE.WebGLRenderer({ canvas: toile, antialias: true });
@@ -121,12 +145,40 @@ const aretes = new THREE.LineSegments(
   new THREE.LineBasicMaterial({ color: 0xcde2cb, transparent: true, opacity: 0.3 }),
 );
 scene.add(aretes);
+// Les obstacles : un pavé translucide par ligne `obstacle` du scénario, et ses arêtes plus nettes.
+const mur = new THREE.Group();
+const matiereMur = new THREE.MeshBasicMaterial({
+  color: 0x6f8796,
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+const matiereAretesMur = new THREE.LineBasicMaterial({ color: 0xa9bfcc, transparent: true, opacity: 0.6 });
+scene.add(mur);
 const colonie = new THREE.LineSegments(
   new THREE.BufferGeometry(),
   new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false }),
 );
 colonie.frustumCulled = false;
 scene.add(colonie);
+const soudures = new THREE.Points(
+  new THREE.BufferGeometry(),
+  new THREE.PointsMaterial({
+    map: texteRonde(),
+    color: 0xff3dd6,
+    size: 2.4,
+    sizeAttenuation: true,
+    transparent: true,
+    // Dessinées par-dessus les filaments, sans mélange additif : sur une colonie dense et claire, une soudure doit
+    // rester magenta.
+    depthTest: false,
+    depthWrite: false,
+  }),
+);
+soudures.frustumCulled = false;
+soudures.renderOrder = 2;
+scene.add(soudures);
 const goutte = new THREE.Sprite(
   new THREE.SpriteMaterial({
     map: texteRonde(),
@@ -146,7 +198,7 @@ const etiquettes = ["x", "y", "z"].map((nom) => {
   return sprite;
 });
 
-// Une tache ronde et floue, pour la goutte.
+// Une tache ronde et floue, pour la goutte et les soudures.
 function texteRonde() {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
@@ -199,8 +251,31 @@ function poserAretes() {
   });
 }
 
-// Réserve les tampons de la colonie pour `capacite` segments, vides.
-function reserver(capacite) {
+// Les obstacles du scénario : chaque pavé va de la case (x0, y0, z0) à la case (x1, y1, z1), bornes comprises, donc
+// de x0 à x1 + 1 en cases, et de même en y et z.
+function poserMur() {
+  const m = vue.module;
+  for (const objet of mur.children) objet.geometry.dispose();
+  mur.clear();
+  const n = m.mycelium_colonie_nb_obstacles();
+  const centre = new Float32Array(3);
+  for (let i = 0; i < n; i++) {
+    const [x0, y0, z0, x1, y1, z1] = [0, 1, 2, 3, 4, 5].map((k) => m.mycelium_colonie_obstacle(i, k));
+    const [dx, dy, dz] = [x1 + 1 - x0, y1 + 1 - y0, z1 + 1 - z0];
+    versScene(x0 + dx / 2, y0 + dy / 2, z0 + dz / 2, centre, 0);
+    // Dans three.js, la largeur suit x, la hauteur le z du moteur et la profondeur son y.
+    const boite = new THREE.BoxGeometry(dx, dz, dy);
+    const plein = new THREE.Mesh(boite, matiereMur);
+    const bords = new THREE.LineSegments(new THREE.EdgesGeometry(boite), matiereAretesMur);
+    plein.position.set(centre[0], centre[1], centre[2]);
+    bords.position.copy(plein.position);
+    mur.add(plein, bords);
+  }
+  legendeMur.hidden = n === 0;
+}
+
+// Réserve les tampons de la colonie pour `capacite` segments, et ceux des soudures pour `places` soudures, vides.
+function reserver(capacite, places) {
   colonie.geometry.dispose();
   const geometrie = new THREE.BufferGeometry();
   const positions = new THREE.BufferAttribute(new Float32Array(Math.max(1, capacite) * 6), 3);
@@ -214,6 +289,17 @@ function reserver(capacite) {
   vue.ecrits = 0;
   vue.debutDernierPas = 0;
   vue.arrivees = new Float32Array(0);
+
+  soudures.geometry.dispose();
+  const lieux = new THREE.BufferGeometry();
+  const points = new THREE.BufferAttribute(new Float32Array(Math.max(1, places) * 3), 3);
+  points.setUsage(THREE.DynamicDrawUsage);
+  lieux.setAttribute("position", points);
+  lieux.setDrawRange(0, 0);
+  soudures.geometry = lieux;
+  vue.souduresEcrites = 0;
+  vue.souduresAvantDernierPas = 0;
+  legendeSoudure.hidden = places === 0;
 }
 
 // Écrit dans les tampons les segments nés depuis le dernier appel ; ils forment le dernier pas joué.
@@ -251,8 +337,32 @@ function ecrireNouveaux() {
   colonie.geometry.setDrawRange(0, fin * 2);
 }
 
-// Allonge les segments du dernier pas à la part `f` (de 0 à 1) de leur longueur vraie.
+// Écrit les soudures nées depuis le dernier appel ; elles sont celles du dernier pas joué.
+function ecrireSoudures() {
+  const m = vue.module;
+  const points = soudures.geometry.getAttribute("position");
+  const fin = Math.min(m.mycelium_colonie_anastomoses(), points.count);
+  const debut = vue.souduresEcrites;
+  vue.souduresAvantDernierPas = debut;
+  if (fin <= debut) return;
+  for (let i = debut; i < fin; i++) {
+    versScene(
+      m.mycelium_colonie_soudure(i, 0),
+      m.mycelium_colonie_soudure(i, 1),
+      m.mycelium_colonie_soudure(i, 2),
+      points.array,
+      i * 3,
+    );
+  }
+  points.addUpdateRange(debut * 3, (fin - debut) * 3);
+  points.needsUpdate = true;
+  vue.souduresEcrites = fin;
+}
+
+// Allonge les segments du dernier pas à la part `f` (de 0 à 1) de leur longueur vraie ; ses soudures paraissent
+// quand il est entier.
 function allongerDernierPas(f) {
+  soudures.geometry.setDrawRange(0, f >= 1 ? vue.souduresEcrites : vue.souduresAvantDernierPas);
   const positions = colonie.geometry.getAttribute("position");
   const p = positions.array;
   const debut = vue.debutDernierPas;
@@ -272,15 +382,17 @@ function demarrer(pasDeDepart = 0) {
   const m = vue.module;
   const numero = Number(choixScene.value);
   m.mycelium_colonie_choisir(numero);
-  // Une première partie, jouée sans rien dessiner, donne le nombre final de segments : les tampons se réservent à
-  // cette taille, une fois. La colonie repart ensuite du pas 0 avec la même graine, donc à l'identique.
+  // Une première partie, jouée sans rien dessiner, donne le nombre final de segments et de soudures : les tampons se
+  // réservent à cette taille, une fois. La colonie repart ensuite du pas 0 avec la même graine, donc à l'identique.
   m.mycelium_colonie_demarrer(vue.graine);
   m.mycelium_colonie_avancer(m.mycelium_colonie_duree());
   const capacite = m.mycelium_colonie_nb_segments();
+  const places = m.mycelium_colonie_anastomoses();
   m.mycelium_colonie_demarrer(vue.graine);
   vue.dimensions = [0, 1, 2].map((k) => m.mycelium_colonie_dimension(k));
   poserAretes();
-  reserver(capacite);
+  poserMur();
+  reserver(capacite, places);
   poserGoutte();
   description.textContent = DESCRIPTIONS[numero];
   vue.empreinteLue = false;
@@ -288,6 +400,7 @@ function demarrer(pasDeDepart = 0) {
   if (pasDeDepart > 0) {
     m.mycelium_colonie_avancer(Math.min(pasDeDepart, m.mycelium_colonie_duree()));
     ecrireNouveaux();
+    ecrireSoudures();
     // Les pas sautés par l'adresse se montrent entiers.
     vue.croissance = 1;
   }
@@ -324,6 +437,7 @@ function mettreAJourMesures() {
   sortieFilaments.textContent = String(m.mycelium_colonie_nb_segments());
   sortiePointes.textContent = String(m.mycelium_colonie_pointes());
   sortieRamifications.textContent = String(m.mycelium_colonie_ramifications());
+  sortieSoudures.textContent = String(m.mycelium_colonie_anastomoses());
   sortieMasse.textContent = m.mycelium_colonie_nourriture_masse().toFixed(1);
   if (fini && !vue.empreinteLue) {
     vue.empreinteLue = true;
@@ -371,6 +485,7 @@ function image(maintenant) {
       allongerDernierPas(1);
       m.mycelium_colonie_avancer(1);
       ecrireNouveaux();
+      ecrireSoudures();
       mettreAJourMesures();
     }
     if (!vue.enLecture) mettreAJourMesures();
@@ -483,11 +598,16 @@ champGraine.addEventListener("change", () => {
   demarrer();
 });
 
-// L'adresse peut choisir la scène, le pas de départ et la graine : `colonie.html?scene=1&pas=85&graine=1` ouvre la
-// fin de la goutte.
+// L'adresse peut choisir la scène (de 0 à 4), le pas de départ et la graine : `colonie.html?scene=3&pas=100&graine=1`
+// ouvre la fin de la scène du mur.
 const adresse = new URLSearchParams(window.location.search);
 const sceneDemandee = Number(adresse.get("scene"));
-if (adresse.get("scene") !== null && (sceneDemandee === 0 || sceneDemandee === 1)) {
+if (
+  adresse.get("scene") !== null &&
+  Number.isInteger(sceneDemandee) &&
+  sceneDemandee >= 0 &&
+  sceneDemandee < DESCRIPTIONS.length
+) {
   choixScene.value = String(sceneDemandee);
 }
 const pasDemande = Math.max(0, Math.floor(Number(adresse.get("pas")) || 0));
