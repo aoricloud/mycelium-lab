@@ -2630,8 +2630,6 @@ les cases non bloquées du substrat, en `f64`, et rend `0.0` pour une cavité vi
 un point au temps présent, puis, tant que la colonie n'a pas atteint `jusqu_au_pas`, un `avancer` et un point, en
 l'avançant en place : une colonie déjà à son temps n'a qu'un point.
 
-Étape 26, vague a : le module est le contrat seul, ses corps sont `todo!()` ; le code vient à la vague b.
-
 ## La référence
 
 C'est le moule du plan (section « Le moule (étape 10, M1) », plus haut) : des formes données en cases, un
