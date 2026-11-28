@@ -2567,3 +2567,145 @@ nourriture restante ; à la fin de la scène, l'empreinte s'affiche et le verdic
   graines 1 à 20, de 0 % (graine 3) à 66,5 % (graine 17) des segments dont l'arrivée est au-delà du mur (`x ≥ 18`),
   7,4 % à la graine 1 ; scène de l'anastomose, graines 1 à 10, de 0 (graines 2 et 5) à 235 (graine 8) anastomoses, 86 à
   la graine 1. Ces nombres sont des mesures du pilote ; les tests ne fixent que la graine 1.
+
+# Le moule en volume (étape 26, marche 3 de la 3D)
+
+## Ce que fait le code
+
+Le module `src/moule3d.rs` est le portage en volume du moule du plan (section « Le moule (étape 10, M1) », plus
+haut). Un **moule** est un ensemble de cases libres du cube, la *cavité* ; tout le reste est un obstacle. Comme dans
+le plan, c'est un **préprocesseur de scénario** : une ligne `moule …` est remplacée, en texte, par les lignes
+`obstacle x0 y0 z0 x1 y1 z1` qui bloquent le complément de la cavité (`developper_3d`). Le noyau de la colonie en
+volume (étapes 20 à 24) et la lecture des scénarios ne sont pas touchés : ils lisent le texte développé, et un
+scénario de moule est pour eux un scénario ordinaire. Sans ligne `moule`, le texte est rendu octet pour octet. La
+ligne `moule` se lit mot à mot : forme inconnue, nombre de mots faux ou mot qui n'est pas un entier décimal non
+signé (`u64` pour la graine, `usize` pour le reste) donnent `LigneInvalide` avec son numéro ; une seconde ligne
+`moule`, `MoulesEnDouble` ; une ligne `moule` avant toute ligne `cube` bien formée, `CubeAbsent` — la dernière
+`cube` bien formée avant elle l'emporte. Les refus se lisent dans cet ordre, puis viennent ceux de `obstacles_3d`.
+Une ligne vide ou qui commence par `#` est ignorée et conservée dans le texte rendu.
+
+**Les formes** (`Forme3d`, `libres_3d`). Cinq, chacune avec sa ligne :
+
+- `moule pave x0 y0 z0 x1 y1 z1` : le pavé, bornes comprises ;
+- `moule coquille x0 y0 z0 x1 y1 z1 epaisseur` : une brique creuse, les cases du pavé à moins de `epaisseur` cases
+  d'une de ses six faces ; quand `2 · epaisseur` atteint le plus petit côté du pavé, c'est le pavé plein ;
+- `moule boule cx cy cz rayon` : les cases telles que `(x − cx)² + (y − cy)² + (z − cz)² ≤ rayon²` ;
+- `moule tore cx cy cz grand_rayon petit_rayon` : un tore d'axe `z`, les cases telles que
+  `(ρ − R)² + (z − cz)² ≤ r²`, avec `ρ² = (x − cx)² + (y − cy)²` ;
+- `moule labyrinthe colonnes rangees etages couloir graine` : un labyrinthe parfait en volume (plus bas).
+
+Tout se calcule **en entiers**, comme dans le plan : la boule par ses carrés, sans racine ; le tore avec
+`s = (x − cx)² + (y − cy)²`, `d = (z − cz)²` et `A = s + R² + d − r²` : la case est dans le tore si `A ≤ 0`, ou si
+`A > 0` et `A² ≤ 4 R² s` — c'est `(√s − R)² + d ≤ r²` élevé au carré, sans racine.
+
+Le **contrat des formes** : un pavé ou une coquille à l'envers, une épaisseur nulle, un tore de petit rayon au moins
+égal au grand, un labyrinthe dont un des quatre nombres vaut 0 donnent `FormeInvalide` ; une cavité qui sort du cube
+(une case au-delà d'une dimension, ou de coordonnée négative comme un `cx − rayon`), `HorsDuCube`. La forme
+invalide l'emporte sur le hors-cube, et un cube de dimension nulle ne contient aucune forme valide. Les contrôles se
+font avant toute allocation, sur des entiers qui ne débordent pas : des paramètres énormes donnent une erreur, pas
+une panique.
+
+**La découpe** (`obstacles_3d`). Le complément de la cavité est découpé en pavés, de la même façon que dans le plan,
+une dimension de plus : chaque tranche `z` est découpée comme la grille du plan, ligne par
+ligne, où les suites maximales de cases bloquées d'une ligne prolongent le rectangle de mêmes bornes de la ligne
+`y − 1` ; puis, de tranche en tranche, un rectangle de la tranche `z` prolonge le pavé de même rectangle qui
+finissait à `z − 1`, et un pavé non prolongé est fermé. Le résultat est trié par `(z0, y0, x0)` croissants ; les
+pavés sont dans le cube, deux à deux disjoints, d'union exactement le complément de la cavité ; une cavité qui est
+tout le cube donne une liste vide.
+
+**Le labyrinthe.** Pas `q = couloir + 1` ; la chambre `(c, r, e)` est le pavé `x ∈ [c q + 1, c q + couloir]`, de
+même en `y` et en `z`, et les murs sont les plans `x = c q`, `y = r q`, `z = e q`, le contour compris. Le labyrinthe
+occupe `colonnes q + 1` × `rangees q + 1` × `etages q + 1` cases dans le coin `(0, 0, 0)` du cube ; au-delà, tout
+est bloqué. Un passage entre deux chambres voisines ouvre, dans leur mur commun, les `couloir²` cases en face de la
+chambre. La génération est celle du plan, une direction de plus : une recherche en profondeur aléatoire, une pile
+qui part de la chambre `(0, 0, 0)`, et les voisines non visitées essayées dans un ordre fixe, `(c, r − 1, e)`,
+`(c + 1, r, e)`, `(c, r + 1, e)`, `(c − 1, r, e)`, `(c, r, e − 1)`, `(c, r, e + 1)` ; s'il y en a `n ≥ 1`, un tirage
+`Alea::suivant() % n` choisit la `i`-ième, même quand `n = 1` — sauter ce tirage décalerait toute la suite. Le
+résultat est **parfait au niveau des chambres** : un arbre couvrant de `N` chambres, `N − 1` passages, et
+`N couloir³ + (N − 1) couloir²` cases libres.
+
+**Le remplissage.** `cases_atteintes` donne les cases où **finit** au moins un segment de la colonie (son arrivée,
+règle du plancher ; une coordonnée sur la face haute compte dans la dernière case) ; `part_remplie` les divise par
+les cases non bloquées du substrat, en `f64`, et rend `0.0` pour une cavité vide ; `courbe_de_remplissage_3d` rend
+un point au temps présent, puis, tant que la colonie n'a pas atteint `jusqu_au_pas`, un `avancer` et un point, en
+l'avançant en place : une colonie déjà à son temps n'a qu'un point.
+
+Étape 26, vague a : le module est le contrat seul, ses corps sont `todo!()` ; le code vient à la vague b.
+
+## La référence
+
+C'est le moule du plan (section « Le moule (étape 10, M1) », plus haut) : des formes données en cases, un
+préprocesseur de scénario qui remplace une ligne par des lignes `obstacle`, une découpe en pavés au lieu de
+rectangles, et le même labyrinthe parfait engendré par une recherche en profondeur. Le pavé, la boule, le tore et
+le labyrinthe correspondent à la brique, au disque, à l'anneau et au labyrinthe du plan ; la coquille (une brique
+creuse) n'a pas d'équivalent en 2D, et le L du plan n'a pas d'équivalent en volume.
+
+Le dépôt ne cite **aucune source publiée** pour le moule, ni en 2D ni en 3D : aucune publication ne valide « la
+colonie remplit un moule de cette forme ». Le moule est un **choix** du dépôt, et son passage au volume est
+**dérivé** : les mêmes formules en entiers avec une coordonnée de plus, la même découpe tranche après tranche, la
+même recherche en profondeur ; rien ici ne le publie. Le module ne dit rien non plus de la raideur ni de la
+résistance d'un vrai matériau.
+
+## Ce que les tests vérifient
+
+Sept groupes, dans `tests/etape_26_moule3d.rs` :
+
+- les formes recalculées dans le test, case par case en `i128`, sur dix cas (la `boule` de rayon 0, 1 et 2 :
+  1, 7 et 33 cases ; le `tore` 2/1 : 36, le 3/2 : 216, le 10/0 : 12 ; la `coquille` d'épaisseur 1 et 2 : 56 et 64 ;
+  le `pavé` : 8 et 64), le tore de petit rayon 0 dont les douze cases sont écrites à la main, et les trois formes des
+  scènes dans 32³ avec leur nombre de cases et le `sha` de la cavité : la boule de rayon 14 (11 513 cases), le tore
+  10/4 (2 992) et la coquille d'épaisseur 3 (11 304, soit 28³ − 22³) ;
+- le contrat des formes : `FormeInvalide` sur chaque faute (pavé et coquille à l'envers sur chacun des trois axes,
+  épaisseur nulle, tore de petit rayon égal ou plus grand que le grand, labyrinthe dont un des quatre nombres vaut
+  0), `HorsDuCube` à chaque bord et sur chaque axe (boule, tore, pavé, labyrinthe trop grand d'une case),
+  `FormeInvalide` qui l'emporte sur `HorsDuCube`, les sept formes valides refusées dans sept boîtes de dimension
+  nulle, des paramètres énormes (`usize::MAX`) qui donnent une erreur sans panique, et la boule qui touche
+  exactement les six faces, acceptée ;
+- la découpe, sur dix-huit formes : chaque pavé est dans le cube et à l'endroit, deux pavés sont disjoints, leur
+  union est exactement le complément de la cavité, et la liste est triée par `(z0, y0, x0)` ; une cavité qui est
+  tout le cube donne une liste vide ; les nombres de pavés des formes des scènes et du labyrinthe (boule 14 : 570,
+  tore 10/4 : 291, coquille 3 : 7, labyrinthe 3 × 3 × 3 de couloir 4, graine 4 : 37) ; et le cas exact du pavé 1..=2
+  dans 4³, ses six pavés dans l'ordre ;
+- le labyrinthe, sur cinq cas : le nombre de cases libres vaut la formule `N couloir³ + (N − 1) couloir²` et le
+  nombre écrit (2 144 pour le 3 × 3 × 3 de couloir 4, 16 092 pour le 4 × 4 × 4 de couloir 6) ; chaque chambre est
+  libre en entier et `chambre_3d` la donne exactement, `centre_de_la_chambre_3d` aussi sur trois chambres ; chaque
+  mur commun est un passage entier ou un mur plein, il y a exactement `N − 1` passages, le graphe des chambres est
+  connexe (un arbre) et toutes les cases libres sont reliées par leurs six voisines ; deux `sha` de la cavité
+  (graines 1 et 4 du 3 × 3 × 3) et trois nombres de pavés (36, 37 et 79) ;
+- `developper_3d` : sans ligne `moule`, le texte est rendu tel quel (les cinq scènes et un texte à fins `\r\n`, à
+  commentaire, à lignes vides et sans saut de ligne final) ; avec une ligne, elle est remplacée en place par ses
+  lignes `obstacle` (le cas exact du pavé 1..=2 dans 4³, puis les quatre textes de la boule, du tore, de la coquille
+  et du labyrinthe, avec leur nombre de lignes — 571, 292, 8 et 38 — et le `sha` des octets) ; l'ordre des refus
+  (`LigneInvalide` à sa ligne pour une forme inconnue, un nombre de mots faux, un mot signé, un mot écrit avec un
+  point ou une graine au-delà de `u64` ; `MoulesEnDouble` ; `CubeAbsent` quand le `cube` manque, vient après ou est
+  mal formé ; puis `FormeInvalide` et `HorsDuCube`) ; et le scénario complet de la boule, développé, lu et construit,
+  la spore au centre dans la cavité, et la même spore hors de la cavité refusée par la lecture du texte développé
+  (`DansUnObstacle`) ;
+- le remplissage : `colonie-cube` à la fin de sa durée atteint 828 cases sur 32 768, et sa part vaut
+  0,0252685546875 ; le rejeu des arrivées de tous les segments redonne les cases atteintes pour trois scènes et pour
+  la boule (8 705 cases atteintes sur 11 513 libres à la fin) ; la courbe de la boule fait 101 points, ne décroît
+  jamais, et finit au pas 100 sur 8 705 atteintes et la part 0,756101797967515 ; le cas fait à la main « DROITE »
+  (une pointe droite de pas 0,5 dans un pavé de 64 cases, trois graines, les cases atteintes pas à pas écrites) ; et
+  une colonie déjà à son temps n'est pas avancée par la courbe ;
+- sans moule, rien ne change : les cinq scènes gardent l'empreinte de leur fichier de `references/`.
+
+## Ce qu'on voit
+
+Rien à l'écran : aucune scène de `scenarios/`, aucun aperçu et aucune page n'emploie encore le moule ; ce qu'on voit,
+ce sont les nombres du test. Le scénario de la boule y est écrit en clair (`cube 32 32 32`, `substrat 1.0 0.15`,
+`moule boule 16 16 16 14`, `spore 16 16 16`, `croissance 1.0 12 35 20`, `couplage 0.1 0.5`, `thigmotropisme 35`,
+`duree 100`) : développé, il porte 570 lignes `obstacle`, sa cavité fait 11 513 cases, et à la graine 1 la colonie en
+atteint 8 705 à la fin des 100 pas, soit 75,6 %. Le cas « DROITE » est le pavé 2..=5 dans 8³ : 64 cases libres, une
+pointe droite de pas 0,5, sans ramification ; les cases atteintes y valent 0, 1, 2, 2 puis 3 dès le pas 4 (graine 1),
+et 0, 1, 2 puis 2 dès le pas 3 (graines 2 et 3).
+
+## Les limites
+
+- une case est dite atteinte quand un segment y **finit** : un segment qui la traverse sans y finir ne la compte
+  pas, et la part remplie sous-estime ce que la colonie a occupé — c'est la règle du temps de sortie du plan ;
+- une boule ou un tore se découpent en des centaines de pavés : 570 pour la boule de rayon 14, 291 pour le tore
+  10/4, contre 7 pour la coquille d'épaisseur 3 ; un scénario développé porte donc des centaines de lignes
+  `obstacle` (571 lignes pour la boule, `cube` compris) ;
+- le moule est à l'échelle du cube de la colonie, pas d'un objet : les formes se comptent en cases d'un cube de 32
+  cases de côté, rien ne leur donne une taille physique, et les formes courbes sont des escaliers de cases ;
+- aucune scène ne l'emploie encore, et la page ne le montre pas : ce sera l'étape suivante.
