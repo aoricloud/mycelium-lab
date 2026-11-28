@@ -1,0 +1,16 @@
+# La colonie dans un labyrinthe en volume (étape 27).
+# Le moule est un labyrinthe parfait de 3 × 3 × 3 chambres cubiques de 4 cases de côté, tiré avec la graine 4 : les
+# chambres sont reliées par des passages de 4 × 4 cases, un seul chemin de chambre en chambre (voir src/moule3d.rs).
+# Il remplit un cube de 16 cases de côté. La spore est au centre de la première chambre (0, 0, 0) ; une goutte de
+# nourriture est au centre de la dernière (2, 2, 2), la sortie, et les pointes la sentent (le chimiotropisme de
+# colonie-chimio). Le coût est celui de colonie-boule.
+cube 16 16 16
+substrat 1.0 0.15
+moule labyrinthe 3 3 3 4 4
+nourriture 13 13 13 3000.0
+spore 3 3 3
+croissance 1.0 12 35 20
+couplage 0.1 0.5
+chimiotropisme 10
+thigmotropisme 35
+duree 120
