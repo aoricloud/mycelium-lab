@@ -2198,7 +2198,7 @@ pas une preuve ; les empreintes et les comptes sont ceux des tests.
 - la colonie qui atteint la goutte la mange et grandit beaucoup plus : à la graine 1, `colonie-chimio` finit avec 14 215
   segments et 2 321 ramifications, contre 3 439 et 603 pour `colonie-goutte` (les chiffres de l'étape 20) ;
 - le gradient ne voit que les six voisines de la case : une nourriture plus loin ne compte pas dans le virage d'un pas ;
-- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
+- la page de la colonie (`docs/colonie.html`) montre cette scène depuis l'étape 25.
 
 # Les obstacles et le thigmotropisme en volume (étape 23, marche 2 de la 3D)
 
@@ -2337,7 +2337,7 @@ les empreintes et les comptes sont ceux des tests.
 - d'une graine à l'autre, le passage par la fenêtre varie beaucoup : une graine peut ne pas passer du tout ; le test ne
   l'exige qu'à la graine 1 ;
 - les empreintes et les comptes sont ceux de la graine 1 ;
-- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
+- la page de la colonie (`docs/colonie.html`) montre cette scène depuis l'étape 25.
 
 # L'anastomose en volume (étape 24, marche 2 de la 3D)
 
@@ -2449,8 +2449,8 @@ deux hyphes se croisent bien plus rarement que dans le plan, et il faut une colo
 choix pour voir, pas une mesure.
 
 Les deux aperçus de l'étape 24, dans `apercus/`, donnent à voir la colonie de `colonie-anastomose` à la fin de ses
-50 pas, à la graine 1, chaque segment teinté selon sa profondeur, du bleu au jaune. Ce sont des images pour l'œil, pas
-une preuve ; les empreintes et les comptes sont ceux des tests.
+50 pas, à la graine 1, chaque segment teinté selon sa profondeur, du bleu au jaune ; chaque soudure y est un carré
+magenta. Ce sont des images pour l'œil, pas une preuve ; les empreintes et les comptes sont ceux des tests.
 
 ## Les limites
 
@@ -2461,4 +2461,109 @@ une preuve ; les empreintes et les comptes sont ceux des tests.
 - les empreintes et les comptes sont ceux de la graine 1 ;
 - l'index alloue une `Vec` par case du cube dès sa construction, vide ou non : pour `colonie-anastomose`, 33³ = 35 937
   listes ; c'est à l'appelant de borner le cube ;
-- la page ne montre pas encore cette scène : elle viendra avec celles des étapes suivantes.
+- la page de la colonie (`docs/colonie.html`) montre cette scène depuis l'étape 25.
+
+# Les scènes du volume sur la page (étape 25, marche 2 de la 3D)
+
+## Ce que fait le code
+
+La page de la colonie (`docs/colonie.html` et `docs/colonie.js`) passe à cinq scènes, et son module WebAssembly
+(`src/vitrine_colonie3d.rs`, embarqué dans `docs/mycelium.wasm` comme celui des autres pages) gagne quatre lectures.
+`mycelium_colonie_choisir` prend un numéro de 0 à 4 : 0 pour `colonie-cube` et 1 pour `colonie-goutte` (étape 20),
+2 pour `colonie-chimio` (étape 22), 3 pour `colonie-mur` (étape 23), 4 pour `colonie-anastomose` (étape 24). Ces
+numéros sont fixes ; choisir ne vaut que pour le démarrage suivant, et tient jusqu'à un autre choix ; ce démarrage
+relit le texte embarqué et reconstruit la colonie, soudures comprises, avec la graine donnée.
+
+Les quatre lectures nouvelles sont `mycelium_colonie_nb_obstacles` et `mycelium_colonie_obstacle(i, k)`, qui donnent
+les lignes `obstacle` du scénario (leurs deux coins `x0`, `y0`, `z0`, `x1`, `y1`, `z1`, bornes comprises), puis
+`mycelium_colonie_anastomoses` et `mycelium_colonie_soudure(i, k)`, qui donnent le nombre d'anastomoses et le lieu de
+chacune. Comme les autres, elles ne font que lire ; au-delà du dernier élément, et avant tout démarrage, elles rendent
+0 ou `NaN` selon qu'elles rendent un entier ou un flottant.
+
+Une **soudure** est le point où une pointe s'est anastomosée : l'arrivée du segment qu'elle a laissé pendant le pas de
+son anastomose. La colonie ne garde que leur nombre ; la vitrine les relève en avançant pas par pas, chaque pas à la
+fois (`avancer_n` est `n` appels à `avancer`). Après chaque pas, chaque segment laissé pendant ce pas, dans l'ordre des
+segments, dont l'apex est devenu inactif, donne une soudure à son arrivée. La règle est exacte : un apex laisse au plus
+un segment par pas ; il n'en laisse aucun quand il s'arrête contre un obstacle ; après son segment, seule l'anastomose
+peut le rendre inactif, et une pointe née pendant le pas n'agit qu'au suivant. Il y a donc toujours autant de soudures
+que d'anastomoses, dans l'ordre où elles sont arrivées.
+
+La page dessine chaque obstacle en pavé translucide, de la case `x0` à la case `x1` et de même en `y` et `z`, bornes
+comprises ; chaque soudure est un point magenta, qui ne paraît que quand le pas de son anastomose a fini de pousser ;
+et la mesure « Soudures » montre leur nombre. La légende du mur et celle de la soudure ne s'affichent que lorsque la
+scène en a.
+
+## La référence
+
+Aucune : c'est un affichage. Les scènes 2, 3 et 4 sont celles des étapes 22 à 24, inchangées ; les scènes 0 et 1,
+celles de l'étape 20, le sont aussi. La page ne calcule rien : elle lit le module et dessine.
+
+## Ce que les tests vérifient
+
+Quatre groupes, dans `tests/etape_25_artefact.rs` :
+
+- la forme du module : les quatre exportations nouvelles et leurs signatures (`u32` en `i32`, `f64` en `f64`), aucune
+  importation, et `memory` seule exportation qui ne soit pas une fonction ;
+- le module lu par Node pour les scènes 2, 3 et 4 : les quatre lectures d'avant tout démarrage, le refus de
+  `choisir(5)` et de `choisir(4294967295)` sans rien changer, puis, pour chaque scène, le départ et les morceaux
+  `1, 0, 9`, le reste de la durée, et l'état de chacun (temps, durée, comptes, SHA-256 des segments, obstacles,
+  SHA-256 des soudures, empreinte), comparés chaîne pour chaîne à `Colonie3d` construit sans passer par la vitrine ;
+- la fin de chaque scène : l'empreinte de `references/`, les quatre obstacles de `colonie-mur` dans l'ordre du
+  fichier, 86 anastomoses et 86 soudures pour la scène 4, aucune pour les scènes 2 et 3 ;
+- la vitrine native : mêmes lignes que `Colonie3d`, mêmes bords pour un obstacle ou une soudure au-delà du dernier, et
+  avancer d'un coup toute la durée donne les mêmes soudures que par morceaux.
+
+Cinq groupes, dans `tests/etape_25_page.rs` :
+
+- le `<select id="scene">` a cinq `<option>`, de valeurs `"0"` à `"4"`, dans l'ordre ;
+- `colonie.js` emploie les quatre fonctions nouvelles, et chaque nom `mycelium_…` qu'il emploie est une exportation du
+  module ;
+- les cinq empreintes écrites dans `colonie.js`, lues dans l'ordre du fichier, sont celles des cinq scènes dans
+  l'ordre de leurs numéros ;
+- `colonie.html` a les éléments d'ids « soudures », « legende-mur » et « legende-soudure », et `colonie.js` les
+  demande par `getElementById` ;
+- `colonie.js` est du JavaScript valide (`node --check`).
+
+Deux tests de l'étape 21 changent avec elle : dans `tests/etape_21_artefact.rs`, le numéro refusé passe de 2 à 5 ;
+dans `tests/etape_21_page.rs`, `colonie.js` écrit cinq empreintes au lieu de deux.
+
+## Ce qu'on voit
+
+La page ouvre sur la scène 0, « Nourriture partout » : la spore au centre d'un cube où la nourriture est partout la
+même ; rien n'oriente les filaments, qui marchent au hasard et se ramifient ; partis d'une seule pointe, ils s'ouvrent
+en éventail du côté où elle est partie et atteignent la paroi avant de s'ouvrir tout à fait. Ni pavé ni soudure : ni
+la légende du mur ni celle de la soudure ne paraissent.
+
+La scène 1, « Peu de nourriture, une goutte », a peu de nourriture partout et une goutte de 3 000 unités à 10 cases de
+la spore ; un filament avance d'autant moins qu'il a peu à manger, et la colonie s'étend du côté de la goutte. La
+scène 2, « La goutte, sentie par les pointes », garde la même goutte, mais les pointes la sentent : à chaque pas, une
+pointe se penche d'au plus 10 degrés vers le côté où il y a plus de nourriture, et la colonie file vers la goutte et
+s'y nourrit ; avec la graine 1, elle laisse quatre fois plus de filaments que sans.
+
+La scène 3, « Un mur percé d'une fenêtre », a un mur de deux cases d'épaisseur qui coupe le cube, percé en son centre
+d'une fenêtre de 4 × 4 cases ; la spore est d'un côté, une goutte de l'autre, qui ne diffuse que par la fenêtre ; une
+pointe qui touche le mur sous moins de 35 degrés le longe, plus de face elle s'arrête et jusqu'à deux pointes repartent
+le long du mur. Le mur est le pavé translucide — quatre pavés, en vérité, qui laissent la fenêtre ouverte — et sa
+légende paraît ; les soudures restent absentes.
+
+La scène 4, « Des filaments qui se soudent », a la nourriture partout et une règle de plus : une pointe qui arrive à
+une demi-case au plus d'un filament laissé par une autre pointe il y a 10 pas ou plus s'y soude et cesse de pousser
+(l'anastomose). En volume, deux filaments se croisent rarement : avec la graine 1, la première soudure vient au pas 43
+sur 50. Les points magenta paraissent alors, un par soudure, et la mesure « Soudures » les compte.
+
+Dans les cinq scènes, la caméra tourne autour du cube, les filaments sont teintés du bleu au jaune selon le pas de leur
+naissance, et le panneau des mesures donne le pas, les filaments, les pointes, les ramifications, les soudures et la
+nourriture restante ; à la fin de la scène, l'empreinte s'affiche et le verdict dit si c'est celle du fichier de
+`references/` de la scène, à la graine 1.
+
+## Les limites
+
+- le dessin lui-même n'est vérifié par aucun test : seuls les nombres que la page lit le sont ;
+- les soudures sont relevées par la vitrine en avançant pas par pas ; la colonie n'en garde que le nombre, pas le
+  lieu ;
+- à chaque démarrage, la page joue une fois la scène entière sans rien dessiner, pour réserver ses tampons à la taille
+  finale, puis repart du pas 0 avec la même graine, donc à l'identique ;
+- le passage par la fenêtre et les anastomoses dépendent beaucoup de la graine, mesuré par le pilote : scène du mur,
+  graines 1 à 20, de 0 % (graine 3) à 66,5 % (graine 17) des segments dont l'arrivée est au-delà du mur (`x ≥ 18`),
+  7,4 % à la graine 1 ; scène de l'anastomose, graines 1 à 10, de 0 (graines 2 et 5) à 235 (graine 8) anastomoses, 86 à
+  la graine 1. Ces nombres sont des mesures du pilote ; les tests ne fixent que la graine 1.
