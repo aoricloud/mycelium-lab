@@ -2706,7 +2706,7 @@ et 0, 1, 2 puis 2 dès le pas 3 (graines 2 et 3).
   `obstacle` (571 lignes pour la boule, `cube` compris) ;
 - le moule est à l'échelle du cube de la colonie, pas d'un objet : les formes se comptent en cases d'un cube de 32
   cases de côté, rien ne leur donne une taille physique, et les formes courbes sont des escaliers de cases ;
-- aucune scène ne l'emploie encore, et la page ne le montre pas : ce sera l'étape suivante.
+- les scènes de l'étape 27 l'emploient, et la page de la colonie (`docs/colonie.html`) le montre depuis l'étape 28.
 
 # Les formes en volume (étape 27, marche 3 de la 3D)
 
@@ -2817,4 +2817,106 @@ Ce sont des images pour l'œil, pas une preuve ; les empreintes et les comptes s
   ramifications (de 3 016 pour le tore à 4 730 pour la coquille, graine 1) ;
 - les empreintes de `references/` et les comptes sont ceux de la graine 1 ; les tests écrivent aussi l'empreinte de la
   fin des graines 2 et 3, sans leurs comptes ;
-- la page de la colonie (`docs/colonie.html`) ne montre pas encore ces scènes.
+- la page de la colonie (`docs/colonie.html`) montre ces scènes depuis l'étape 28.
+
+# Les moules sur la page (étape 28, marche 3 de la 3D)
+
+## Ce que fait le code
+
+La page de la colonie (`docs/colonie.html` et `docs/colonie.js`) passe à neuf scènes, et son module WebAssembly
+(`src/vitrine_colonie3d.rs`, embarqué dans `docs/mycelium.wasm` comme celui des autres pages) gagne une lecture.
+`mycelium_colonie_choisir` prend un numéro de 0 à 8 : 0 pour `colonie-cube` et 1 pour `colonie-goutte` (étape 20), 2
+pour `colonie-chimio` (étape 22), 3 pour `colonie-mur` (étape 23), 4 pour `colonie-anastomose` (étape 24), 5 pour
+`colonie-boule`, 6 pour `colonie-tore`, 7 pour `colonie-coquille` et 8 pour `colonie-labyrinthe` (étape 27). Le
+tableau de la doc du module les donne dans cet ordre, avec le fichier de `scenarios/` et l'étape qui l'a apporté. Ces
+numéros sont fixes ; choisir ne vaut que pour le démarrage suivant, et tient jusqu'à un autre choix ; ce démarrage
+développe la scène par `developper_3d` (sa ligne `moule`, s'il y en a une, devient des lignes `obstacle`), la lit par
+`lire_scenario_colonie3d` et la construit par `Colonie3d::nouvelle` avec la graine donnée.
+
+La lecture nouvelle est `mycelium_colonie_part_remplie`, qui rend `part_remplie` de la colonie en cours : les cases
+non bloquées où finit au moins un segment, divisées par les cases non bloquées, en `f64`. Comme les autres, elle ne
+fait que lire ; elle rend `NaN` avant tout démarrage, et la page la lit une fois par pas.
+
+La page dessine le moule par **sa surface**, d'un seul tenant, au lieu d'un pavé par obstacle. Pour chaque case libre
+et chacune de ses six voisines dans le cube qui est bloquée, elle pose un carré sur leur face commune, teinté selon
+l'orientation de la face (les `x` les plus clairs, les `z` les plus sombres) : deux triangles par face, dans un seul
+objet `Mesh`, sans lumière, la teinte seule donnant le relief. Les quatre scènes des moules sont marquées dans
+`colonie.js` (`MOULES`), et pour elles la page ne pose aucun pavé d'obstacle : la légende « la paroi du moule »
+paraît, celle du mur reste cachée. La mesure « Espace atteint » affiche la part en pourcentage, arrondie au dixième.
+Enfin, la caméra et le brouillard se règlent sur la taille du cube : l'échelle est le plus grand côté sur 32, et la
+distance de la caméra comme le brouillard la suivent.
+
+## La référence
+
+Aucune : c'est un affichage. Les neuf scènes sont celles des étapes 20 à 27, inchangées ; les quatre des moules sont
+celles de l'étape 27, avec leur ligne `moule`, leur texte développé et leurs empreintes. La page ne calcule rien :
+elle lit le module et dessine.
+
+## Ce que les tests vérifient
+
+Quatre groupes, dans `tests/etape_28_artefact.rs` :
+
+- la forme du module : l'exportation nouvelle `mycelium_colonie_part_remplie` et sa signature (aucun paramètre, `f64`
+  en résultat), aucune importation, et `memory` seule exportation qui ne soit pas une fonction ;
+- le module lu par Node pour les scènes 5, 6, 7 et 8 : la part d'avant tout démarrage (`NaN`), le refus de
+  `choisir(9)` et de `choisir(4294967295)` sans rien changer, puis, pour chaque scène, le départ et les morceaux
+  `1, 0, 9`, le reste de la durée, et l'état de chacun (temps, durée, dimensions, comptes, SHA-256 des obstacles, bits
+  de la part remplie, empreinte), comparés chaîne pour chaîne à `Colonie3d` construit sans passer par la vitrine ;
+- la fin de chaque scène : l'empreinte de `references/`, la part exacte (`8705 / 11513` pour la boule, `2455 / 2992`
+  pour le tore, `7662 / 11304` pour la coquille et `1587 / 2144` pour le labyrinthe), le nombre d'obstacles du fichier
+  et les dimensions du cube ;
+- la vitrine native : mêmes lignes que `Colonie3d` pour les scènes 5 à 8, et, pour les cinq scènes d'avant (0 à 4), à
+  la fin de leur durée, la part lue dans la vitrine est celle de la colonie native (828 cases sur 32 768 pour
+  `colonie-cube`) ; un refus ne change ni la part ni l'empreinte de la scène en cours.
+
+Cinq groupes, dans `tests/etape_28_page.rs` :
+
+- les quatre dernières `<option>` du `<select id="scene">` ont les valeurs `"5"` à `"8"`, dans l'ordre, et leurs textes
+  nomment la boule, l'anneau, la brique creuse et le labyrinthe ;
+- `colonie.js` emploie `mycelium_colonie_part_remplie`, et chaque nom `mycelium_…` qu'il emploie est une exportation du
+  module ;
+- les neuf empreintes écrites dans `colonie.js`, lues dans l'ordre du fichier, sont celles des neuf scènes dans l'ordre
+  de leurs numéros ;
+- `colonie.html` a les éléments d'ids « part » et « legende-moule », et `colonie.js` les demande par `getElementById` ;
+- `colonie.js` est du JavaScript valide (`node --check`).
+
+Quatre tests des étapes 21 et 25 changent avec elle : dans `tests/etape_21_artefact.rs` et `tests/etape_25_artefact.rs`,
+le numéro refusé passe de 5 à 9 ; dans `tests/etape_21_page.rs`, `colonie.js` écrit neuf empreintes ; et dans
+`tests/etape_25_page.rs`, le `<select>` a neuf `<option>` au lieu de cinq.
+
+## Ce qu'on voit
+
+La page ouvre sur la scène 0, « Nourriture partout », comme avant ; les quatre scènes des moules se choisissent dans le
+`<select>`.
+
+La scène 5, « Le moule : une boule », a la colonie dans un moule en boule de 14 cases de rayon, tout le reste du cube
+bloqué : partie du centre, elle atteint la paroi et la longe ; avec la graine 1, elle atteint les trois quarts de la
+boule en 100 pas. Le moule se voit comme une paroi teintée en escalier autour de la cavité, à la place des pavés.
+
+La scène 6, « Le moule : un anneau », est un anneau couché, de 10 cases de rayon et de section ronde ; la spore est dans
+l'anneau, d'un côté : la colonie part dans les deux sens et en fait le tour ; avec la graine 1, elle atteint 82 % de
+l'anneau en 130 pas, jusqu'au côté opposé.
+
+La scène 7, « Le moule : une brique creuse », n'a de libres que les parois, de 3 cases d'épaisseur ; le cœur et le
+dehors sont bloqués. Partie d'une paroi, la colonie gagne les cinq autres par les arêtes.
+
+La scène 8, « Le moule : un labyrinthe », est un labyrinthe de 3 × 3 × 3 chambres reliées par des passages, un seul
+chemin d'une chambre à l'autre, dans un cube de 16 cases de côté. La spore est dans la première chambre, une goutte de
+nourriture dans la dernière, que les pointes sentent : avec la graine 1, la colonie atteint la dernière chambre au pas
+70.
+
+Dans les neuf scènes, la caméra tourne autour du cube, les filaments sont teintés du bleu au jaune selon le pas de leur
+naissance, et le panneau des mesures donne le pas, les filaments, les pointes, les ramifications, les soudures, la
+nourriture restante et l'espace atteint ; à la fin de la scène, l'empreinte s'affiche et le verdict dit si c'est celle
+du fichier de `references/` de la scène, à la graine 1. Pour les scènes des moules, la légende « la paroi du moule »
+paraît, et il n'y a ni pavé d'obstacle ni légende du mur.
+
+## Les limites
+
+- le dessin lui-même — la surface du moule, sa teinte, d'un seul tenant — n'est vérifié par aucun test : seuls les
+  nombres que la page lit le sont ;
+- l'espace atteint compte les cases où un filament **finit** (la règle de l'étape 26) : un segment qui traverse une
+  case sans y finir ne la compte pas, et la part sous-estime ce que la colonie a occupé ;
+- les quatre scènes des moules ont des dizaines de milliers de filaments à la fin — 29 560 pour la boule, 22 914 pour
+  le tore, 35 835 pour la coquille et 31 080 pour le labyrinthe, à la graine 1 —, plus lourds à dessiner que ceux des
+  cinq scènes d'avant.
