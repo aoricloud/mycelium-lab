@@ -2,13 +2,13 @@
 //!
 //! Ils font pour les scènes 2, 3 et 4 ce que `etape_21_page.rs` fait pour les deux premières :
 //!
-//! 1. le `<select id="scene">` de `colonie.html` a exactement cinq `<option>`, de valeurs `"0"`, `"1"`, `"2"`, `"3"`
+//! 1. le `<select id="scene">` de `colonie.html` a exactement neuf `<option>`, de valeurs `"0"`, `"1"`, `"2"`, `"3"`
 //!    et `"4"`, dans cet ordre ;
 //! 2. `colonie.js` emploie les quatre fonctions nouvelles (`mycelium_colonie_nb_obstacles`,
 //!    `mycelium_colonie_obstacle`, `mycelium_colonie_anastomoses`, `mycelium_colonie_soudure`), et chaque nom
 //!    `mycelium_…` qu'il emploie est une exportation de `docs/mycelium.wasm` ;
 //! 3. les empreintes écrites dans `colonie.js` (chaque suite de 64 chiffres hexadécimaux), lues dans l'ordre du
-//!    fichier, sont celles des cinq scènes dans l'ordre de leurs numéros : `colonie-cube`, `colonie-goutte`,
+//!    fichier, sont celles des neuf scènes dans l'ordre de leurs numéros : `colonie-cube`, `colonie-goutte`,
 //!    `colonie-chimio`, `colonie-mur`, `colonie-anastomose` (la page prend l'empreinte de référence par le numéro de
 //!    la scène) ;
 //! 4. `colonie.html` a des éléments d'ids « soudures », « legende-mur » et « legende-soudure », et `colonie.js` les
@@ -30,14 +30,18 @@ const FONCTIONS_NOUVELLES: [&str; 4] = [
     "mycelium_colonie_soudure",
 ];
 
-/// Les cinq empreintes de référence, dans l'ordre des numéros de scène (0 à 4) : la page prend la sienne par le
+/// Les neuf empreintes de référence, dans l'ordre des numéros de scène (0 à 8) : la page prend la sienne par le
 /// numéro de la scène.
-const REFERENCES_DES_SCENES: [&str; 5] = [
+const REFERENCES_DES_SCENES: [&str; 9] = [
     "colonie-cube.empreinte",
     "colonie-goutte.empreinte",
     "colonie-chimio.empreinte",
     "colonie-mur.empreinte",
     "colonie-anastomose.empreinte",
+    "colonie-boule.empreinte",
+    "colonie-tore.empreinte",
+    "colonie-coquille.empreinte",
+    "colonie-labyrinthe.empreinte",
 ];
 
 /// Les éléments que la page demande pour le mur et les soudures.
@@ -301,18 +305,18 @@ fn node_est_la() -> bool {
 // Les tests.
 // ---------------------------------------------------------------------------------------------------------------
 
-/// 1. Le `<select id="scene">` de `colonie.html` a exactement cinq `<option>`, de valeurs `"0"`, `"1"`, `"2"`,
+/// 1. Le `<select id="scene">` de `colonie.html` a exactement neuf `<option>`, de valeurs `"0"`, `"1"`, `"2"`,
 ///    `"3"` et `"4"`, dans cet ordre.
 #[test]
 #[cfg_attr(not(feature = "etape-25"), ignore)]
-fn le_select_de_la_page_a_les_cinq_scenes_dans_l_ordre() {
+fn le_select_de_la_page_a_les_neuf_scenes_dans_l_ordre() {
     let html = lire_page("colonie.html");
     let options = options_du_select(&html, "scene");
-    assert_eq!(options.len(), 5, "le <select id=\"scene\"> n'a pas cinq <option> : {options:?}");
+    assert_eq!(options.len(), 9, "le <select id=\"scene\"> n'a pas neuf <option> : {options:?}");
 
     let valeurs: Vec<String> = options.iter().filter_map(|balise| valeur_attribut(balise, "value")).collect();
     assert_eq!(valeurs.len(), options.len(), "un <option> du <select id=\"scene\"> n'a pas de valeur");
-    let attendues: Vec<String> = (0..5).map(|numero| numero.to_string()).collect();
+    let attendues: Vec<String> = (0..9).map(|numero| numero.to_string()).collect();
     assert_eq!(valeurs, attendues, "les valeurs des <option> du <select id=\"scene\">, dans l'ordre");
 }
 
@@ -334,22 +338,22 @@ fn colonie_js_emploie_les_quatre_fonctions_nouvelles_et_les_exportations_du_modu
     }
 }
 
-/// 3. Les empreintes écrites dans `colonie.js`, lues dans l'ordre du fichier, sont celles des cinq scènes dans
+/// 3. Les empreintes écrites dans `colonie.js`, lues dans l'ordre du fichier, sont celles des neuf scènes dans
 ///    l'ordre de leurs numéros : `colonie-cube`, `colonie-goutte`, `colonie-chimio`, `colonie-mur`,
 ///    `colonie-anastomose`.
 #[test]
 #[cfg_attr(not(feature = "etape-25"), ignore)]
-fn colonie_js_ecrit_les_empreintes_des_cinq_scenes_dans_l_ordre() {
+fn colonie_js_ecrit_les_empreintes_des_neuf_scenes_dans_l_ordre() {
     let ecrites = empreintes_dans_l_ordre(&lire_le_code_de_colonie_js());
     assert_eq!(
         ecrites.len(),
         REFERENCES_DES_SCENES.len(),
-        "colonie.js n'écrit pas cinq empreintes, dans l'ordre : {ecrites:?}"
+        "colonie.js n'écrit pas neuf empreintes, dans l'ordre : {ecrites:?}"
     );
     let attendues: Vec<String> = REFERENCES_DES_SCENES.iter().map(|nom| lire_empreinte_de_reference(nom)).collect();
     assert_eq!(
         ecrites, attendues,
-        "les empreintes écrites dans colonie.js, dans l'ordre, ne sont pas celles des cinq scènes"
+        "les empreintes écrites dans colonie.js, dans l'ordre, ne sont pas celles des neuf scènes"
     );
 }
 

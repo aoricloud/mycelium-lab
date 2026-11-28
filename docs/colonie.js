@@ -18,7 +18,7 @@
 
 import * as THREE from "./bibliotheques/three/three.module.min.js";
 
-// Une description par scène, dans l'ordre des numéros du module (0 à 4).
+// Une description par scène, dans l'ordre des numéros du module (0 à 8).
 const DESCRIPTIONS = [
   "La spore au centre d'un cube où la nourriture est partout la même. Rien n'oriente les filaments : ils marchent " +
     "au hasard et se ramifient. Partie d'une seule pointe, la colonie s'ouvre en éventail du côté où celle-ci est " +
@@ -35,7 +35,21 @@ const DESCRIPTIONS = [
   "La nourriture partout, et une règle de plus : une pointe qui arrive à une demi-case au plus d'un filament laissé " +
     "par une autre pointe il y a 10 pas ou plus s'y soude et cesse de pousser (l'anastomose). En volume, deux " +
     "filaments se croisent rarement : avec la graine 1, la première soudure vient au pas 43 sur 50.",
+  "La colonie dans un moule en boule de 14 cases de rayon : tout le reste du cube est bloqué. Partie du centre, " +
+    "elle atteint la paroi et la longe ; avec la graine 1, elle atteint les trois quarts de la boule en 100 pas.",
+  "Le moule est un anneau couché, de 10 cases de rayon et de section ronde. La spore est dans l'anneau, d'un " +
+    "côté : la colonie part dans les deux sens et en fait le tour ; avec la graine 1, elle atteint 82 % de " +
+    "l'anneau en 130 pas, jusqu'au côté opposé.",
+  "Une brique creuse : seules les parois, de 3 cases d'épaisseur, sont libres ; le cœur et le dehors sont bloqués. " +
+    "Partie d'une paroi, la colonie gagne les cinq autres par les arêtes.",
+  "Un labyrinthe de 3 × 3 × 3 chambres reliées par des passages, un seul chemin d'une chambre à l'autre, dans un " +
+    "cube de 16 cases de côté. La spore est dans la première chambre, une goutte de nourriture dans la dernière, " +
+    "que les pointes sentent : avec la graine 1, la colonie atteint la dernière chambre au pas 70.",
 ];
+
+// Les scènes dont les obstacles viennent d'un moule (une ligne `moule` du scénario) : leur moule se dessine par sa
+// surface, d'un seul tenant, au lieu d'un pavé par obstacle.
+const MOULES = [false, false, false, false, false, true, true, true, true];
 
 // Les empreintes de la fin de chaque scène avec la graine 1, celles du moteur natif (`references/colonie-*.empreinte`),
 // dans l'ordre des scènes.
@@ -45,6 +59,10 @@ const REFERENCES = [
   "1c09aab224ddb44605c0bb297ea200d337f217d35a2e90e54c94cae24aee6cc4",
   "2cdee7029ee7d132ebbac4dad5a495f93110e1f5f663625c6846e5d48fbbca80",
   "eea0dcebb30da120d56dbb18fa2fda4d3cd412d3d9a17c6f8cf67bfa04f72f09",
+  "f9e4d0d2375ff8799794cb48d98fc8b5d42dfab78afced65d9e5392ed063a7ad",
+  "b70ef3b46813057f3e9fc647cef2397c1d2b709878f85327ec38b78090b3e55b",
+  "36e4488ae709728b7cec8b0abd2a774cea667481f1da82008e976334ac683b9a",
+  "38a3112219c69761060f93f0de2c721efcbf472f36dc671040b16c094cb06883",
 ];
 const GRAINE_DE_REFERENCE = 1;
 const GRAINE_MAX = 4294967295;
@@ -88,6 +106,8 @@ const champGraine = document.getElementById("graine");
 const legendeGoutte = document.getElementById("legende-goutte");
 const legendeMur = document.getElementById("legende-mur");
 const legendeSoudure = document.getElementById("legende-soudure");
+const legendeMoule = document.getElementById("legende-moule");
+const sortiePart = document.getElementById("part");
 const sortiePas = document.getElementById("pas");
 const sortieFilaments = document.getElementById("filaments");
 const sortiePointes = document.getElementById("pointes");
@@ -100,6 +120,8 @@ const verdict = document.getElementById("verdict");
 const vue = {
   module: null,
   dimensions: [32, 32, 32],
+  // Le plus grand côté du cube, sur 32 : la caméra et le brouillard s'éloignent d'autant.
+  echelle: 1,
   graine: GRAINE_DE_REFERENCE,
   enLecture: true,
   cadence: 6,
@@ -156,6 +178,20 @@ const matiereMur = new THREE.MeshBasicMaterial({
 });
 const matiereAretesMur = new THREE.LineBasicMaterial({ color: 0xa9bfcc, transparent: true, opacity: 0.6 });
 scene.add(mur);
+// Le moule : la surface entre ses cases libres et ses cases bloquées, d'un seul objet. Chaque face a une teinte selon
+// son orientation (sans lumière, c'est ce qui donne le relief).
+const moule = new THREE.Mesh(
+  new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }),
+);
+moule.visible = false;
+scene.add(moule);
 const colonie = new THREE.LineSegments(
   new THREE.BufferGeometry(),
   new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false }),
@@ -251,13 +287,67 @@ function poserAretes() {
   });
 }
 
+// Le moule d'une scène qui en a un : les cases bloquées sont relues dans les pavés d'obstacle du module ; pour chaque
+// case libre et chacune de ses six voisines dans le cube qui est bloquée, un carré sur leur face commune.
+function poserMoule(numero) {
+  const m = vue.module;
+  moule.geometry.dispose();
+  moule.geometry = new THREE.BufferGeometry();
+  moule.visible = MOULES[numero];
+  legendeMoule.hidden = !moule.visible;
+  if (!moule.visible) return;
+  const [l, h, p] = vue.dimensions;
+  const bloquee = new Uint8Array(l * h * p);
+  const n = m.mycelium_colonie_nb_obstacles();
+  for (let i = 0; i < n; i++) {
+    const [x0, y0, z0, x1, y1, z1] = [0, 1, 2, 3, 4, 5].map((k) => m.mycelium_colonie_obstacle(i, k));
+    for (let z = z0; z <= z1; z++) {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) bloquee[(z * h + y) * l + x] = 1;
+      }
+    }
+  }
+  const estBloquee = (x, y, z) =>
+    x >= 0 && y >= 0 && z >= 0 && x < l && y < h && z < p && bloquee[(z * h + y) * l + x] === 1;
+  // Les six faces d'une case : la direction de la voisine, les quatre coins de la face commune (en cases) et la teinte.
+  const faces = [
+    [1, 0, 0, [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], 0.95],
+    [-1, 0, 0, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], 0.95],
+    [0, 1, 0, [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], 0.7],
+    [0, -1, 0, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], 0.7],
+    [0, 0, 1, [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], 0.5],
+    [0, 0, -1, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], 0.5],
+  ];
+  const positions = [];
+  const couleurs = [];
+  const coin = new Float32Array(3);
+  for (let z = 0; z < p; z++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < l; x++) {
+        if (bloquee[(z * h + y) * l + x] === 1) continue;
+        for (const [dx, dy, dz, coins, t] of faces) {
+          if (!estBloquee(x + dx, y + dy, z + dz)) continue;
+          // Deux triangles : les coins 0, 1, 2 puis 0, 2, 3.
+          for (const k of [0, 1, 2, 0, 2, 3]) {
+            versScene(x + coins[k][0], y + coins[k][1], z + coins[k][2], coin, 0);
+            positions.push(coin[0], coin[1], coin[2]);
+            couleurs.push(0.62 * t, 0.78 * t, 0.86 * t);
+          }
+        }
+      }
+    }
+  }
+  moule.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  moule.geometry.setAttribute("color", new THREE.Float32BufferAttribute(couleurs, 3));
+}
+
 // Les obstacles du scénario : chaque pavé va de la case (x0, y0, z0) à la case (x1, y1, z1), bornes comprises, donc
-// de x0 à x1 + 1 en cases, et de même en y et z.
-function poserMur() {
+// de x0 à x1 + 1 en cases, et de même en y et z. Une scène qui a un moule le dessine par `poserMoule`.
+function poserMur(numero) {
   const m = vue.module;
   for (const objet of mur.children) objet.geometry.dispose();
   mur.clear();
-  const n = m.mycelium_colonie_nb_obstacles();
+  const n = MOULES[numero] ? 0 : m.mycelium_colonie_nb_obstacles();
   const centre = new Float32Array(3);
   for (let i = 0; i < n; i++) {
     const [x0, y0, z0, x1, y1, z1] = [0, 1, 2, 3, 4, 5].map((k) => m.mycelium_colonie_obstacle(i, k));
@@ -390,8 +480,10 @@ function demarrer(pasDeDepart = 0) {
   const places = m.mycelium_colonie_anastomoses();
   m.mycelium_colonie_demarrer(vue.graine);
   vue.dimensions = [0, 1, 2].map((k) => m.mycelium_colonie_dimension(k));
+  vue.echelle = Math.max(...vue.dimensions) / 32;
   poserAretes();
-  poserMur();
+  poserMur(numero);
+  poserMoule(numero);
   reserver(capacite, places);
   poserGoutte();
   description.textContent = DESCRIPTIONS[numero];
@@ -439,6 +531,7 @@ function mettreAJourMesures() {
   sortieRamifications.textContent = String(m.mycelium_colonie_ramifications());
   sortieSoudures.textContent = String(m.mycelium_colonie_anastomoses());
   sortieMasse.textContent = m.mycelium_colonie_nourriture_masse().toFixed(1);
+  sortiePart.textContent = `${(100 * m.mycelium_colonie_part_remplie()).toFixed(1)} %`;
   if (fini && !vue.empreinteLue) {
     vue.empreinteLue = true;
     const e = empreinte();
@@ -509,14 +602,11 @@ function dessiner() {
     rendu.setSize(largeur, largeur, false);
   }
   const ct = Math.cos(vue.tangage);
-  camera.position.set(
-    vue.distance * ct * Math.sin(vue.lacet),
-    vue.distance * Math.sin(vue.tangage),
-    vue.distance * ct * Math.cos(vue.lacet),
-  );
+  const d = vue.distance * vue.echelle;
+  camera.position.set(d * ct * Math.sin(vue.lacet), d * Math.sin(vue.tangage), d * ct * Math.cos(vue.lacet));
   camera.lookAt(0, 0, 0);
-  scene.fog.near = vue.distance;
-  scene.fog.far = vue.distance + 70;
+  scene.fog.near = d;
+  scene.fog.far = d + 70 * vue.echelle;
   rendu.render(scene, camera);
 }
 
@@ -598,7 +688,7 @@ champGraine.addEventListener("change", () => {
   demarrer();
 });
 
-// L'adresse peut choisir la scène (de 0 à 4), le pas de départ et la graine : `colonie.html?scene=3&pas=100&graine=1`
+// L'adresse peut choisir la scène (de 0 à 8), le pas de départ et la graine : `colonie.html?scene=3&pas=100&graine=1`
 // ouvre la fin de la scène du mur.
 const adresse = new URLSearchParams(window.location.search);
 const sceneDemandee = Number(adresse.get("scene"));

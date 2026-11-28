@@ -53,9 +53,9 @@
 //!   en échelle logarithmique — l'étape 17 (M4) : une couche à part, elle ne change rien au noyau de la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle) ;
-//! - [`vitrine_colonie3d`] : la colonie en volume pilotée par des nombres seulement (choix de la scène parmi cinq,
-//!   démarrage, pas, segments, nourriture, obstacles, soudures, empreinte), pour la page des étapes 21 et 25 — une
-//!   couche à part, elle ne change rien au plan 2D ;
+//! - [`vitrine_colonie3d`] : la colonie en volume pilotée par des nombres seulement (choix de la scène parmi neuf,
+//!   démarrage, pas, segments, nourriture, obstacles, soudures, part remplie, empreinte), pour la page des étapes 21,
+//!   25 et 28 — une couche à part, elle ne change rien au plan 2D ;
 //! - [`vitrine_cube`] : le cube de l'étape 18 piloté par des nombres seulement (choix de la scène, démarrage, pas,
 //!   cases, masse et empreinte), pour la page — une couche à part, elle ne change rien au plan 2D.
 
