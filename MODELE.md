@@ -2707,3 +2707,114 @@ et 0, 1, 2 puis 2 dès le pas 3 (graines 2 et 3).
 - le moule est à l'échelle du cube de la colonie, pas d'un objet : les formes se comptent en cases d'un cube de 32
   cases de côté, rien ne leur donne une taille physique, et les formes courbes sont des escaliers de cases ;
 - aucune scène ne l'emploie encore, et la page ne le montre pas : ce sera l'étape suivante.
+
+# Les formes en volume (étape 27, marche 3 de la 3D)
+
+## Ce que fait le code
+
+Rien de neuf dans `src/` : l'étape 27 emploie le moule en volume de l'étape 26 et le noyau de la colonie en volume
+(étapes 20 à 24) tels quels. Chacune des quatre scènes de `scenarios/` porte une ligne `moule`, que `developper_3d`
+remplace par ses lignes `obstacle` avant la lecture ; le scénario lu par le noyau est un scénario ordinaire. Ce sont
+`colonie-boule.txt` (`moule boule 16 16 16 14`, la spore au centre d'un cube de 32), `colonie-coquille.txt`
+(`moule coquille 2 2 2 29 29 29 3`, une brique creuse aux parois de 3 cases, la spore dans la paroi `x = 2`),
+`colonie-tore.txt` (`moule tore 16 16 16 10 4`, l'anneau d'axe `z`, la spore dans l'anneau à 10 cases du centre sur
+l'axe `x`) et `colonie-labyrinthe.txt` (`moule labyrinthe 3 3 3 4 4`, le labyrinthe de graine 4 dans un cube de 16, la
+spore au centre de la première chambre et une goutte au centre de la dernière, la sortie).
+
+Les réglages de croissance sont ceux de `colonie-cube`, sauf deux pris à `colonie-mur` : le pas d'une case (au lieu de
+0,4) et la ramification tous les 12 pas en moyenne (au lieu de 6), pour que la colonie gagne la paroi avant la fin de sa
+durée avec moins de filaments ; `thigmotropisme 35`, le seuil de `colonie-mur` (ligne absente de `colonie-cube`), fait
+longer une paroi ou s'y partager une pointe qui la touche. La coquille et le tore reprennent les réglages de la boule, avec leurs durées propres (95 et
+130 pas, contre 100 pour la boule). Le labyrinthe change de cube (16 au lieu de 32), prend à `colonie-chimio` sa goutte
+de 3 000 et son `chimiotropisme 10`, qui mène les pointes vers la sortie, et dure 120 pas. Ces réglages sont un
+**choix pour voir**, pas un calage.
+
+## La référence
+
+Aucune publication ne valide « la colonie remplit un moule de cette forme » : c'est un **choix** du dépôt, pour le
+moule du plan comme pour son passage au volume (section « Le moule en volume (étape 26, marche 3 de la 3D) », plus
+haut). Les deux mécanismes que ces scènes mettent en jeu ont, eux, leur source : le seuil de 35° du thigmotropisme est
+celui de M. Held, O. Kašpar, C. Edwards et D. V. Nicolau, « Intracellular mechanisms of fungal space searching in
+microenvironments », *PNAS* 116(27):13543–13552 (2019) (section « Les obstacles et le thigmotropisme en volume (étape
+23, marche 2 de la 3D) »), et la force de 10 du chimiotropisme est celle de `colonie-chimio` (D. Turrà, M. El Ghalid,
+F. Rossi et A. Di Pietro, *Nature* 527:521–524 (2015) ; S. Hopkins et G. P. Boswell, *Fungal Ecology* 5:124–136
+(2012)), section « Le chimiotropisme en volume (étape 22, marche 2 de la 3D) », plus haut. Leur emploi dans ces quatre
+formes, les réglages de croissance et les durées ne viennent d'aucune mesure : ce sont des choix de scène.
+
+## Ce que les tests vérifient
+
+La boule (`tests/etape_27_boule.rs`) : les empreintes de la graine 1 au temps 0, après 1 et après 10 pas, puis celle de
+`references/colonie-boule.empreinte` à la fin, et l'empreinte de la fin des graines 2 et 3 ; les comptes de la fin,
+29 560 segments, 4 241 ramifications, 2 874 pointes actives et 4 242 apex ; les 570 lignes `obstacle` du texte
+développé, aucune ligne `moule`, 570 pavés lus, la spore au centre dans une case libre et aucune nourriture ; la cavité
+respectée aux graines 1 à 3, chaque segment `Libre` pour `traverser_3d` et ses deux bouts dans le cube ; le remplissage,
+11 513 cases libres, 8 705 cases atteintes à la fin de la graine 1 et la part 0,756101797967515, 8 612 et 9 042 cases
+aux graines 2 et 3, et le rejeu des arrivées qui redonne 8 705 ; et la propriété de la forme, toute arrivée à moins de
+15,5 cases du centre de la case de la spore, aux trois graines.
+
+La coquille (`tests/etape_27_coquille.rs`) : les mêmes empreintes, celles de `references/colonie-coquille.empreinte` à
+la fin, et les comptes de la fin, 35 835 segments, 4 730 ramifications, 3 785 pointes et 4 731 apex ; les 7 lignes
+`obstacle`, la spore `(3, 16, 16)` et la cavité respectée aux trois graines ; le remplissage, 11 304 cases libres
+(28³ − 22³), 7 662 cases atteintes à la fin de la graine 1 et la part 0,6778131634819533, 7 809 et 6 906 aux graines 2
+et 3, le rejeu qui redonne 7 662 ; et la propriété de la forme, chacune des six parois avec plus de 1 000 cases
+atteintes aux trois graines, et pour la graine 1 les six valeurs [1 593, 1 704, 1 413, 1 858, 1 414, 1 860] dans
+l'ordre `x ≤ 4`, `x ≥ 27`, `y ≤ 4`, `y ≥ 27`, `z ≤ 4`, `z ≥ 27`.
+
+Le tore (`tests/etape_27_tore.rs`) : les mêmes empreintes, celle de `references/colonie-tore.empreinte` à la fin, et
+les comptes, 22 914 segments, 3 016 ramifications, 2 185 pointes et 3 017 apex ; les 291 lignes `obstacle`, les 2 992
+cases libres de la cavité, la spore `(26, 16, 16)` et la cavité respectée aux trois graines ; le remplissage, 2 455
+cases atteintes à la fin de la graine 1 et la part 0,8205213903743316, 2 557 et 2 510 aux graines 2 et 3, le rejeu qui
+redonne les mêmes cases ; et la propriété de la forme, plus de 500 cases atteintes dans chacun des quatre quarts du plan
+de dessus aux trois graines, et la case `(6, 16, 16)`, à l'opposé de la spore, atteinte aux graines 1 et 3.
+
+Le labyrinthe (`tests/etape_27_labyrinthe.rs`) : les mêmes empreintes, celle de `references/colonie-labyrinthe.empreinte`
+à la fin, et les comptes, 31 080 segments, 4 591 ramifications, 3 349 pointes et 4 592 apex ; les 37 lignes `obstacle`,
+la spore et la goutte dans une case libre, et la cavité respectée aux trois graines ; le remplissage, 2 144 cases
+libres, 1 587 cases atteintes à la fin de la graine 1 et la part 0,7402052238805971, 1 236 et 1 240 aux graines 2 et 3,
+et le rejeu qui redonne les cases atteintes ; et la propriété de la forme, la chambre de sortie (`chambre_3d(4, 2, 2,
+2)` : les cases 11 à 14 sur chaque axe) atteinte pour la première fois au pas 70 à la graine 1, au pas 94 à la graine 2
+et au pas 92 à la graine 3, sans aucune arrivée dans cette chambre avant ces pas.
+
+Les quatre ont en commun : les empreintes au temps 0, après 1 et après 10 pas, celle de `references/` à la fin et celle
+de la fin des graines 2 et 3 ; le texte développé avec le nombre dit de lignes `obstacle` et plus aucune ligne `moule`,
+et la spore comme chaque nourriture dans une case libre (aucune nourriture pour la boule et le tore) ; la cavité
+respectée aux graines 1 à 3 ; la courbe de remplissage, un point par pas jusqu'à la durée, le même nombre de cases
+libres à chaque point, des cases atteintes qui ne décroissent jamais, et un dernier point que le rejeu des arrivées
+redonne (la boule et la coquille vérifient aussi le rejeu aux graines 2 et 3) ; et les invariants, à chaque graine : un
+apex pour la spore plus un par ramification, la masse du départ moins `cout · longueur()` des segments égale la masse
+finale à 1e-9 près en relatif, `avancer_n(n)` et `n` appels à `avancer` donnent les mêmes octets, une même graine donne
+les mêmes octets, et les graines 1 et 2 diffèrent.
+
+## Ce qu'on voit
+
+Les huit aperçus de l'étape 27, dans `apercus/`, donnent à voir chaque scène à la graine 1 et à la fin de sa durée, en
+deux vues de 256 × 256 pixels : de dessus (`x` en largeur, `y` en hauteur) et de côté (`x` en largeur, `z` en hauteur,
+`z = 0` en haut), à 8 pixels par case (16 pour le cube de 16 du labyrinthe). Une case de la vue dont toute la profondeur
+est bloquée est en gris ardoise, une case dont une partie seulement l'est en gris plus sombre ; la couleur de chaque
+segment dit sa profondeur, `t = z_milieu / profondeur`, du bleu au jaune, et un carré blanc entoure la goutte quand il y
+en a une.
+
+La boule montre, de dessus, un disque en escalier empli de segments bleus et jaunes sur le gris ardoise du dehors, et,
+de côté, le même disque avec le bleu en haut et le jaune en bas. La coquille montre un cadre gris ardoise (les parois de
+la brique creuse) et, à l'intérieur, des filaments bleus et jaunes jusque sur les bords ; de côté, le même cadre, avec le
+bleu en haut et le jaune en bas. Le tore montre, de dessus, un anneau en escalier autour d'un trou sombre, empli de
+filaments bleus et jaunes ; de côté, une bande horizontale bleu-vert semée de points sombres, sur le gris ardoise du
+dehors. Le labyrinthe montre, dans les deux vues, un quadrillage de murs gris autour de neuf chambres remplies de
+filaments bleus et jaunes, et le carré blanc de la goutte dans la chambre du bas à droite.
+
+Ce sont des images pour l'œil, pas une preuve ; les empreintes et les comptes sont ceux des tests.
+
+## Les limites
+
+- la part atteinte plafonne sous 1 : 0,756 pour la boule, 0,678 pour la coquille, 0,821 pour le tore et 0,740 pour le
+  labyrinthe à la graine 1, et au mieux 0,855 (le tore à la graine 2). Une case est dite atteinte quand un segment y
+  finit, et une case contre une paroi en reçoit rarement l'arrivée : la part sous-estime ce que la colonie a occupé, et
+  ne peut guère approcher 1 ;
+- d'une graine à l'autre, elle varie : sur les graines 1 à 3, de 0,748 à 0,785 pour la boule (8 612 à 9 042 cases), de
+  0,611 à 0,691 pour la coquille (6 906 à 7 809), de 0,821 à 0,855 pour le tore (2 455 à 2 557) et de 0,576 à 0,740
+  pour le labyrinthe (1 236 à 1 587) ;
+- la colonie part d'une seule pointe : la spore est le seul apex du départ, et les formes ne se remplissent que par les
+  ramifications (de 3 016 pour le tore à 4 730 pour la coquille, graine 1) ;
+- les empreintes de `references/` et les comptes sont ceux de la graine 1 ; les tests écrivent aussi l'empreinte de la
+  fin des graines 2 et 3, sans leurs comptes ;
+- la page de la colonie (`docs/colonie.html`) ne montre pas encore ces scènes.
