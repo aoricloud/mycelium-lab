@@ -35,6 +35,9 @@
 //! - [`moule`] : donner une forme à l'espace libre (brique, L, disque, anneau, labyrinthe), la développer en lignes
 //!   `obstacle` d'un scénario, et mesurer comment la colonie remplit ce moule et en sort — l'étape M1 : elle ne change rien au
 //!   noyau de la simulation ;
+//! - [`moule3d`] : le moule en volume (pavé, coquille, boule, tore, labyrinthe), développé en lignes `obstacle` d'un
+//!   scénario de colonie, et la part de la cavité que la colonie atteint — l'étape 26, la troisième marche de la 3D :
+//!   elle ne change rien au noyau de la colonie ;
 //! - [`piece`] : mesurer la pièce que la colonie remplit (carte de densité, bilan de nourriture, plus grand morceau
 //!   connecté, traversée d'un bord à l'autre) — l'étape M0 : elle mesure, elle ne change rien à la simulation ;
 //! - [`systeme`] : le solveur linéaire du calcul de raideur (Cholesky d'une matrice pleine, mise à l'échelle par la
@@ -70,6 +73,7 @@ pub mod grille;
 pub mod image;
 pub mod mesures;
 pub mod moule;
+pub mod moule3d;
 pub mod nuage;
 pub mod piece;
 pub mod poutres;
