@@ -1,0 +1,12 @@
+# La colonie dans un moule en brique creuse (étape 27).
+# Le moule est une coquille : les parois, de 3 cases d'épaisseur, d'une boîte de (2, 2, 2) à (29, 29, 29) ; le cœur
+# de la boîte et le dehors sont bloqués. La spore est dans la paroi du côté x = 2 : la colonie doit gagner les cinq
+# autres faces par les arêtes. Les réglages sont ceux de colonie-boule.
+cube 32 32 32
+substrat 1.0 0.15
+moule coquille 2 2 2 29 29 29 3
+spore 3 16 16
+croissance 1.0 12 35 20
+couplage 0.1 0.5
+thigmotropisme 35
+duree 95

@@ -1,0 +1,14 @@
+# La colonie dans un moule en boule (étape 27).
+# Le moule est une boule de 14 cases de rayon au centre du cube : tout le reste est bloqué (la ligne `moule` se
+# développe en lignes `obstacle`, voir src/moule3d.rs). La spore est au centre, la nourriture partout la même.
+# Les réglages sont ceux de colonie-cube, sauf le pas, de 1 case au plus, et la ramification, tous les 12 pas en moyenne
+# (ceux de colonie-mur) : la colonie atteint la paroi plus vite, avec moins de filaments. Avec `thigmotropisme 35`
+# (le seuil de colonie-mur), une pointe qui touche la paroi la longe ou s'y partage.
+cube 32 32 32
+substrat 1.0 0.15
+moule boule 16 16 16 14
+spore 16 16 16
+croissance 1.0 12 35 20
+couplage 0.1 0.5
+thigmotropisme 35
+duree 100
