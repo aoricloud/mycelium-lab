@@ -3,7 +3,7 @@
 // Usage : node colonie-wasm.mjs <fichier.wasm>
 //
 // Le script charge le module (sans aucune importation), lit d'abord ce qu'il rend avant tout démarrage, vérifie que
-// `mycelium_colonie_choisir(5)` rend 0 sans rien changer, puis fait tourner les deux scènes, la 0 puis la 1, à la
+// `mycelium_colonie_choisir(9)` rend 0 sans rien changer, puis fait tourner les deux scènes, la 0 puis la 1, à la
 // graine 1 : pour chacune, il choisit (`mycelium_colonie_choisir` doit rendre 1), démarre
 // (`mycelium_colonie_demarrer`), puis avance par morceaux : 1, 0, 9 pas, puis le reste de la durée lue
 // (`mycelium_colonie_duree`). Il écrit sur la sortie standard, une par ligne, `clé=valeur`, dans cet ordre :
@@ -14,7 +14,7 @@
 //                            `ramifications`, `nourriture(0, 0, 0)`, `nourriture_maximum`, `nourriture_masse`,
 //                            `nb_depots`, `depot(0, 0)`, `depot(0, 3)`, `empreinte_mot(0)`, `empreinte_mot(8)`
 //                            (`0,0,0,0,0,0,0,NaN,NaN,0,0,0,NaN,NaN,NaN,0,NaN,NaN,0,0` attendu) ;
-//   apres_choix_refuse     : les mêmes vingt valeurs, relues après `mycelium_colonie_choisir(5)`, qui rend 0 et ne
+//   apres_choix_refuse     : les mêmes vingt valeurs, relues après `mycelium_colonie_choisir(9)`, qui rend 0 et ne
 //                            change rien ;
 //   scenario_<n>_depart    : pour chaque scène `n` (0 puis 1), l'état juste après le démarrage, avant tout pas ;
 //   scenario_<n>_<i>       : l'état après le morceau `i` (de 0) avancé ; les morceaux sont `1,0,9,duree-10` ;
@@ -126,12 +126,12 @@ async function principal() {
   const avant = etatAvant();
   lignes.push(`avant=${avant}`);
 
-  if (m.mycelium_colonie_choisir(5) >>> 0 !== 0) {
-    throw new Error("le module accepte le numéro de scène 5");
+  if (m.mycelium_colonie_choisir(9) >>> 0 !== 0) {
+    throw new Error("le module accepte le numéro de scène 9");
   }
   const apresChoixRefuse = etatAvant();
   if (apresChoixRefuse !== avant) {
-    throw new Error("choisir(5) a changé l'état alors qu'il devait rendre 0 sans rien changer");
+    throw new Error("choisir(9) a changé l'état alors qu'il devait rendre 0 sans rien changer");
   }
   lignes.push(`apres_choix_refuse=${apresChoixRefuse}`);
 

@@ -1,4 +1,5 @@
-//! La colonie en volume pilotée par des nombres seulement, pour une page web : la deuxième marche de la 3D.
+//! La colonie en volume pilotée par des nombres seulement, pour une page web : la deuxième et la troisième marche de
+//! la 3D.
 //!
 //! Ce module suit [`crate::vitrine_cube`] : il est compilé en natif (les tests appellent ses fonctions comme
 //! n'importe quelle fonction Rust) et en WebAssembly (`wasm32-unknown-unknown`, module sans importation). Chaque
@@ -18,9 +19,9 @@
 //! la scène choisie, au temps 0, avec la graine donnée. Le verrou garde avec elle les soudures relevées depuis le
 //! démarrage, et le numéro de la scène que construira le prochain démarrage.
 //!
-//! # Les cinq scènes
+//! # Les neuf scènes
 //!
-//! Les cinq fichiers de `scenarios/` que montre la page sont embarqués dans le module par `include_str!`, et
+//! Les neuf fichiers de `scenarios/` que montre la page sont embarqués dans le module par `include_str!`, et
 //! [`mycelium_colonie_choisir`] en désigne un par son numéro :
 //!
 //! | numéro | fichier                            | l'étape qui l'a apportée               |
@@ -30,14 +31,19 @@
 //! | 2      | `scenarios/colonie-chimio.txt`     | 22, le chimiotropisme                  |
 //! | 3      | `scenarios/colonie-mur.txt`        | 23, les obstacles et le thigmotropisme |
 //! | 4      | `scenarios/colonie-anastomose.txt` | 24, l'anastomose                       |
+//! | 5      | `scenarios/colonie-boule.txt`      | 27, les formes : une boule             |
+//! | 6      | `scenarios/colonie-tore.txt`       | 27, les formes : un anneau             |
+//! | 7      | `scenarios/colonie-coquille.txt`   | 27, les formes : une brique creuse     |
+//! | 8      | `scenarios/colonie-labyrinthe.txt` | 27, les formes : un labyrinthe         |
 //!
 //! Ces numéros sont fixes : la page et les tests les emploient. Avant tout choix, la scène est la 0. Choisir n'agit
 //! pas sur la colonie en cours : le choix ne vaut que pour le **prochain** [`mycelium_colonie_demarrer`], et il tient
 //! pour tous les démarrages suivants jusqu'à un autre choix.
 //!
-//! Chaque scène est lue par [`lire_scenario_colonie3d`] et construite par [`Colonie3d::nouvelle`] avec la graine
-//! donnée (en `u64`) : c'est la même colonie, octet pour octet, que celle des tests natifs de même scène et de même
-//! graine. La graine 1 est celle des empreintes de référence.
+//! Chaque scène est développée par [`developper_3d`] (sa ligne `moule`, s'il y en a une, devient des lignes
+//! `obstacle` ; un texte sans `moule` reste tel quel), lue par [`lire_scenario_colonie3d`] et construite par
+//! [`Colonie3d::nouvelle`] avec la graine donnée (en `u64`) : c'est la même colonie, octet pour octet, que celle des
+//! tests natifs de même scène et de même graine. La graine 1 est celle des empreintes de référence.
 //!
 //! # Les lectures de la page
 //!
@@ -48,8 +54,9 @@
 //! [`mycelium_colonie_nourriture`], [`mycelium_colonie_nourriture_maximum`] et [`mycelium_colonie_nourriture_masse`]
 //! son substrat ; [`mycelium_colonie_nb_depots`] et [`mycelium_colonie_depot`] les nourritures de son scénario ;
 //! [`mycelium_colonie_nb_obstacles`] et [`mycelium_colonie_obstacle`] ses obstacles ; [`mycelium_colonie_soudure`]
-//! le lieu de chaque anastomose ; [`mycelium_colonie_empreinte_mot`] l'empreinte de l'état, mot par mot. Elles ne
-//! font que lire : aucune ne change la colonie.
+//! le lieu de chaque anastomose ; [`mycelium_colonie_part_remplie`] la part de la cavité que la colonie a atteinte
+//! ([`part_remplie`]) ; [`mycelium_colonie_empreinte_mot`] l'empreinte de l'état, mot par mot. Elles ne font que
+//! lire : aucune ne change la colonie.
 //!
 //! # Les soudures
 //!
@@ -77,29 +84,34 @@
 //! [`mycelium_colonie_obstacle`] rend `NaN` pour un obstacle qui n'existe pas ou un `k > 5`,
 //! [`mycelium_colonie_soudure`] rend `NaN` pour une soudure qui n'existe pas ou un `k > 2`, et
 //! [`mycelium_colonie_empreinte_mot`] rend 0 pour un mot d'indice 8 ou plus. [`mycelium_colonie_choisir`] rend 0,
-//! sans rien changer, pour un numéro qui n'est pas de 0 à 4.
+//! sans rien changer, pour un numéro qui n'est pas de 0 à 8.
 //!
 //! # Aucune panique
 //!
 //! Une panique dans une fonction `extern "C"` fait avorter le processus (le binaire de test, ou le module). Aucune
 //! fonction `mycelium_colonie_*` ne doit donc en provoquer : chaque coordonnée est contrôlée avant l'appel à
 //! [`Substrat3d::valeur`](crate::substrat3d::Substrat3d::valeur), qui panique hors du volume, chaque indice passe par
-//! `get`, et la lecture d'une scène embarquée ne rend jamais d'erreur (ces textes sont fixes et valides). Si elle en
-//! rendait une, [`mycelium_colonie_demarrer`] ne changerait rien.
+//! `get`, et le développement et la lecture d'une scène embarquée ne rendent jamais d'erreur (ces textes sont fixes et
+//! valides). S'ils en rendaient une, [`mycelium_colonie_demarrer`] ne changerait rien.
 
 use std::sync::{Mutex, MutexGuard};
 
 use crate::colonie3d::{Colonie3d, lire_scenario_colonie3d};
+use crate::moule3d::{developper_3d, part_remplie};
 
-/// Les cinq scènes de la page, dans l'ordre de leurs numéros (0 à 4), embarquées dans le module.
+/// Les neuf scènes de la page, dans l'ordre de leurs numéros (0 à 8), embarquées dans le module.
 ///
 /// L'ordre est celui du tableau de la doc du module : le numéro `n` désigne `SCENARIOS[n]`.
-const SCENARIOS: [&str; 5] = [
+const SCENARIOS: [&str; 9] = [
     include_str!("../scenarios/colonie-cube.txt"),
     include_str!("../scenarios/colonie-goutte.txt"),
     include_str!("../scenarios/colonie-chimio.txt"),
     include_str!("../scenarios/colonie-mur.txt"),
     include_str!("../scenarios/colonie-anastomose.txt"),
+    include_str!("../scenarios/colonie-boule.txt"),
+    include_str!("../scenarios/colonie-tore.txt"),
+    include_str!("../scenarios/colonie-coquille.txt"),
+    include_str!("../scenarios/colonie-labyrinthe.txt"),
 ];
 
 /// Ce que la page retient entre deux appels : la colonie en cours, ses soudures et la scène du prochain démarrage.
@@ -123,9 +135,9 @@ fn verrou() -> MutexGuard<'static, VitrineColonie3d> {
     VITRINE_COLONIE3D.lock().unwrap_or_else(|empoisonne| empoisonne.into_inner())
 }
 
-/// Fixe la scène que construira le **prochain** [`mycelium_colonie_demarrer`] : de 0 à 4, voir la doc du module.
+/// Fixe la scène que construira le **prochain** [`mycelium_colonie_demarrer`] : de 0 à 8, voir la doc du module.
 ///
-/// Rend 1 si `numero` vaut de 0 à 4. Sinon rend 0 et ne change rien : le choix d'avant reste. N'agit pas sur la
+/// Rend 1 si `numero` vaut de 0 à 8. Sinon rend 0 et ne change rien : le choix d'avant reste. N'agit pas sur la
 /// colonie en cours, qui n'est pas redémarrée ni ne change de scène.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_colonie_choisir(numero: u32) -> u32 {
@@ -141,12 +153,15 @@ pub extern "C" fn mycelium_colonie_choisir(numero: u32) -> u32 {
 ///
 /// Remplace entièrement l'état précédent, soudures comprises : rappelée après des pas, elle repart de zéro. La scène
 /// est celle que [`mycelium_colonie_choisir`] a fixée en dernier (la 0 si rien n'a été choisi) ; elle reste choisie
-/// pour les démarrages suivants. Une scène embarquée invalide ne peut pas arriver : si elle arrivait, rien ne
-/// changerait.
+/// pour les démarrages suivants. Son texte est développé par [`developper_3d`], puis lu. Une scène embarquée invalide
+/// ne peut pas arriver : si elle arrivait, rien ne changerait.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_colonie_demarrer(graine: u32) {
     let mut vitrine = verrou();
-    let Ok(scenario) = lire_scenario_colonie3d(SCENARIOS[vitrine.choix]) else {
+    let Ok(texte) = developper_3d(SCENARIOS[vitrine.choix]) else {
+        return;
+    };
+    let Ok(scenario) = lire_scenario_colonie3d(&texte) else {
         return;
     };
     let Ok(colonie) = Colonie3d::nouvelle(&scenario, u64::from(graine)) else {
@@ -393,6 +408,16 @@ pub extern "C" fn mycelium_colonie_obstacle(i: u32, k: u32) -> f64 {
         5 => f64::from(obstacle.z1),
         _ => f64::NAN,
     }
+}
+
+/// La part de la cavité que la colonie en cours a atteinte : [`part_remplie`] (les cases non bloquées où finit au
+/// moins un segment, sur les cases non bloquées), de 0 à 1 ; sans moule, la cavité est tout le cube. `NaN` avant tout
+/// démarrage.
+///
+/// Chaque appel recompte les cases : la page la lit une fois par pas.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_colonie_part_remplie() -> f64 {
+    verrou().colonie.as_ref().map_or(f64::NAN, part_remplie)
 }
 
 /// Le `i`-ième mot (0 à 7) de 32 bits, en gros-boutiste, du SHA-256 de l'écriture canonique de la colonie.
