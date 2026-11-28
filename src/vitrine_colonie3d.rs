@@ -15,18 +15,21 @@
 //!
 //! La colonie en cours est un `static` protégé par un [`std::sync::Mutex`] : la cible WebAssembly n'a pas de fil
 //! d'exécution, et en natif le verrou sérialise les appels des tests. [`mycelium_colonie_demarrer`] la construit sur
-//! la scène choisie, au temps 0, avec la graine donnée. Le verrou garde avec lui le numéro de la scène que construira
-//! le prochain démarrage.
+//! la scène choisie, au temps 0, avec la graine donnée. Le verrou garde avec elle les soudures relevées depuis le
+//! démarrage, et le numéro de la scène que construira le prochain démarrage.
 //!
-//! # Les deux scènes
+//! # Les cinq scènes
 //!
-//! Les deux fichiers de `scenarios/` que montre la page sont embarqués dans le module par `include_str!`, et
+//! Les cinq fichiers de `scenarios/` que montre la page sont embarqués dans le module par `include_str!`, et
 //! [`mycelium_colonie_choisir`] en désigne un par son numéro :
 //!
-//! | numéro | fichier                       |
-//! |--------|-------------------------------|
-//! | 0      | `scenarios/colonie-cube.txt`   |
-//! | 1      | `scenarios/colonie-goutte.txt` |
+//! | numéro | fichier                            | l'étape qui l'a apportée               |
+//! |--------|------------------------------------|----------------------------------------|
+//! | 0      | `scenarios/colonie-cube.txt`       | 20, la colonie                         |
+//! | 1      | `scenarios/colonie-goutte.txt`     | 20, la colonie                         |
+//! | 2      | `scenarios/colonie-chimio.txt`     | 22, le chimiotropisme                  |
+//! | 3      | `scenarios/colonie-mur.txt`        | 23, les obstacles et le thigmotropisme |
+//! | 4      | `scenarios/colonie-anastomose.txt` | 24, l'anastomose                       |
 //!
 //! Ces numéros sont fixes : la page et les tests les emploient. Avant tout choix, la scène est la 0. Choisir n'agit
 //! pas sur la colonie en cours : le choix ne vaut que pour le **prochain** [`mycelium_colonie_demarrer`], et il tient
@@ -40,12 +43,25 @@
 //!
 //! [`mycelium_colonie_temps`] et [`mycelium_colonie_duree`] donnent l'horloge et la durée de la colonie en cours ;
 //! [`mycelium_colonie_dimension`] ses trois dimensions ; [`mycelium_colonie_nb_segments`],
-//! [`mycelium_colonie_segment`] et [`mycelium_colonie_segment_temps`] ses filaments ; [`mycelium_colonie_pointes`]
-//! et [`mycelium_colonie_ramifications`] ses comptes ; [`mycelium_colonie_nourriture`],
-//! [`mycelium_colonie_nourriture_maximum`] et [`mycelium_colonie_nourriture_masse`] son substrat ;
-//! [`mycelium_colonie_nb_depots`] et [`mycelium_colonie_depot`] les nourritures de son scénario ;
-//! [`mycelium_colonie_empreinte_mot`] l'empreinte de l'état, mot par mot. Elles ne font que lire : aucune ne change
-//! la colonie.
+//! [`mycelium_colonie_segment`] et [`mycelium_colonie_segment_temps`] ses filaments ; [`mycelium_colonie_pointes`],
+//! [`mycelium_colonie_ramifications`] et [`mycelium_colonie_anastomoses`] ses comptes ;
+//! [`mycelium_colonie_nourriture`], [`mycelium_colonie_nourriture_maximum`] et [`mycelium_colonie_nourriture_masse`]
+//! son substrat ; [`mycelium_colonie_nb_depots`] et [`mycelium_colonie_depot`] les nourritures de son scénario ;
+//! [`mycelium_colonie_nb_obstacles`] et [`mycelium_colonie_obstacle`] ses obstacles ; [`mycelium_colonie_soudure`]
+//! le lieu de chaque anastomose ; [`mycelium_colonie_empreinte_mot`] l'empreinte de l'état, mot par mot. Elles ne
+//! font que lire : aucune ne change la colonie.
+//!
+//! # Les soudures
+//!
+//! Une **soudure** est le point où une pointe s'est anastomosée : l'arrivée du segment qu'elle a laissé pendant le pas
+//! de son anastomose (étapes 9 et 10 de [`Colonie3d::avancer`]). La colonie ne garde que leur nombre ; la vitrine en
+//! relève le lieu en avançant pas par pas ([`Colonie3d::avancer_n`] est la même chose que `n` appels à
+//! [`Colonie3d::avancer`]). Après chaque pas, chaque segment laissé pendant ce pas, dans l'ordre des segments, dont
+//! l'apex est devenu inactif, donne une soudure à son arrivée `(x1, y1, z1)`. La règle est exacte : un apex laisse au
+//! plus un segment par pas ; il n'en laisse aucun quand il s'arrête contre un obstacle (étape 8) ; après son segment,
+//! seule l'anastomose (étape 10) peut le rendre inactif, et une pointe née pendant le pas n'agit qu'au suivant. Il y a
+//! donc toujours autant de soudures que [`Colonie3d::nb_anastomoses`], dans l'ordre où elles sont arrivées (par pas,
+//! puis par identifiant d'apex).
 //!
 //! # Avant tout démarrage
 //!
@@ -57,9 +73,11 @@
 //! [`mycelium_colonie_segment`] rend `NaN` pour un segment qui n'existe pas ou un `k > 5`,
 //! [`mycelium_colonie_segment_temps`] rend 0 pour un segment qui n'existe pas (un segment réel naît au pas 1 au
 //! plus tôt), [`mycelium_colonie_nourriture`] rend `NaN` hors du volume, [`mycelium_colonie_dimension`] rend 0 pour
-//! un `k` autre que 0, 1 ou 2, [`mycelium_colonie_depot`] rend `NaN` pour un dépôt qui n'existe pas ou un `k > 3`, et
+//! un `k` autre que 0, 1 ou 2, [`mycelium_colonie_depot`] rend `NaN` pour un dépôt qui n'existe pas ou un `k > 3`,
+//! [`mycelium_colonie_obstacle`] rend `NaN` pour un obstacle qui n'existe pas ou un `k > 5`,
+//! [`mycelium_colonie_soudure`] rend `NaN` pour une soudure qui n'existe pas ou un `k > 2`, et
 //! [`mycelium_colonie_empreinte_mot`] rend 0 pour un mot d'indice 8 ou plus. [`mycelium_colonie_choisir`] rend 0,
-//! sans rien changer, pour un numéro qui n'est ni 0 ni 1.
+//! sans rien changer, pour un numéro qui n'est pas de 0 à 4.
 //!
 //! # Aucune panique
 //!
@@ -73,33 +91,42 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::colonie3d::{Colonie3d, lire_scenario_colonie3d};
 
-/// Les deux scènes de la page, dans l'ordre de leurs numéros (0 et 1), embarquées dans le module.
+/// Les cinq scènes de la page, dans l'ordre de leurs numéros (0 à 4), embarquées dans le module.
 ///
 /// L'ordre est celui du tableau de la doc du module : le numéro `n` désigne `SCENARIOS[n]`.
-const SCENARIOS: [&str; 2] =
-    [include_str!("../scenarios/colonie-cube.txt"), include_str!("../scenarios/colonie-goutte.txt")];
+const SCENARIOS: [&str; 5] = [
+    include_str!("../scenarios/colonie-cube.txt"),
+    include_str!("../scenarios/colonie-goutte.txt"),
+    include_str!("../scenarios/colonie-chimio.txt"),
+    include_str!("../scenarios/colonie-mur.txt"),
+    include_str!("../scenarios/colonie-anastomose.txt"),
+];
 
-/// Ce que la page retient entre deux appels : la colonie en cours et la scène du prochain démarrage.
+/// Ce que la page retient entre deux appels : la colonie en cours, ses soudures et la scène du prochain démarrage.
 struct VitrineColonie3d {
     /// La colonie en cours, ou `None` tant que [`mycelium_colonie_demarrer`] n'a pas été appelé.
     colonie: Option<Colonie3d>,
+    /// Le lieu `(x, y, z)` de chaque anastomose de la colonie en cours, dans l'ordre où elles sont arrivées (voir
+    /// « Les soudures » dans la doc du module) ; vide au démarrage.
+    soudures: Vec<(f64, f64, f64)>,
     /// L'indice, dans [`SCENARIOS`], de la scène que construira le prochain [`mycelium_colonie_demarrer`] ; 0 au
     /// départ.
     choix: usize,
 }
 
 /// L'état global de la vitrine de la colonie en volume.
-static VITRINE_COLONIE3D: Mutex<VitrineColonie3d> = Mutex::new(VitrineColonie3d { colonie: None, choix: 0 });
+static VITRINE_COLONIE3D: Mutex<VitrineColonie3d> =
+    Mutex::new(VitrineColonie3d { colonie: None, soudures: Vec::new(), choix: 0 });
 
 /// Prend le verrou de l'état global ; un appel qui a paniqué en le tenant ne bloque pas les suivants.
 fn verrou() -> MutexGuard<'static, VitrineColonie3d> {
     VITRINE_COLONIE3D.lock().unwrap_or_else(|empoisonne| empoisonne.into_inner())
 }
 
-/// Fixe la scène que construira le **prochain** [`mycelium_colonie_demarrer`] : 0 ou 1, voir la doc du module.
+/// Fixe la scène que construira le **prochain** [`mycelium_colonie_demarrer`] : de 0 à 4, voir la doc du module.
 ///
-/// Rend 1 si `numero` vaut 0 ou 1. Sinon rend 0 et ne change rien : le choix d'avant reste. N'agit pas sur la colonie
-/// en cours, qui n'est pas redémarrée ni ne change de scène.
+/// Rend 1 si `numero` vaut de 0 à 4. Sinon rend 0 et ne change rien : le choix d'avant reste. N'agit pas sur la
+/// colonie en cours, qui n'est pas redémarrée ni ne change de scène.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_colonie_choisir(numero: u32) -> u32 {
     if (numero as usize) < SCENARIOS.len() {
@@ -112,9 +139,10 @@ pub extern "C" fn mycelium_colonie_choisir(numero: u32) -> u32 {
 
 /// (Re)construit la colonie de la scène choisie avec la graine `graine` (prise en `u64`) ; le temps vaut 0.
 ///
-/// Remplace entièrement l'état précédent : rappelée après des pas, elle repart de zéro. La scène est celle que
-/// [`mycelium_colonie_choisir`] a fixée en dernier (la 0 si rien n'a été choisi) ; elle reste choisie pour les
-/// démarrages suivants. Une scène embarquée invalide ne peut pas arriver : si elle arrivait, rien ne changerait.
+/// Remplace entièrement l'état précédent, soudures comprises : rappelée après des pas, elle repart de zéro. La scène
+/// est celle que [`mycelium_colonie_choisir`] a fixée en dernier (la 0 si rien n'a été choisi) ; elle reste choisie
+/// pour les démarrages suivants. Une scène embarquée invalide ne peut pas arriver : si elle arrivait, rien ne
+/// changerait.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_colonie_demarrer(graine: u32) {
     let mut vitrine = verrou();
@@ -125,13 +153,35 @@ pub extern "C" fn mycelium_colonie_demarrer(graine: u32) {
         return;
     };
     vitrine.colonie = Some(colonie);
+    vitrine.soudures.clear();
 }
 
-/// Avance la colonie de `n` pas de temps ; sans effet si `n` vaut 0 ou si rien n'est démarré.
+/// Avance la colonie de `n` pas de temps, un pas à la fois, en relevant les soudures de chaque pas ; sans effet si
+/// `n` vaut 0 ou si rien n'est démarré.
+///
+/// La colonie obtenue est celle de [`Colonie3d::avancer_n`] avec le même `n` : relever les soudures ne fait que lire.
 #[unsafe(no_mangle)]
 pub extern "C" fn mycelium_colonie_avancer(n: u32) {
-    if let Some(colonie) = verrou().colonie.as_mut() {
-        colonie.avancer_n(n);
+    let mut vitrine = verrou();
+    let VitrineColonie3d { colonie, soudures, .. } = &mut *vitrine;
+    let Some(colonie) = colonie.as_mut() else {
+        return;
+    };
+    for _ in 0..n {
+        let avant = colonie.segments().len();
+        colonie.avancer();
+        relever_soudures(colonie, avant, soudures);
+    }
+}
+
+/// Ajoute à `soudures` celles du pas qui vient d'être joué : chaque segment laissé depuis le segment `avant` dont
+/// l'apex est devenu inactif, à son arrivée, dans l'ordre des segments (voir « Les soudures » dans la doc du module).
+fn relever_soudures(colonie: &Colonie3d, avant: usize, soudures: &mut Vec<(f64, f64, f64)>) {
+    let apex = colonie.apex();
+    for segment in colonie.segments().get(avant..).unwrap_or(&[]) {
+        if apex.get(segment.apex as usize).is_some_and(|a| !a.actif) {
+            soudures.push((segment.x1, segment.y1, segment.z1));
+        }
     }
 }
 
@@ -215,6 +265,36 @@ pub extern "C" fn mycelium_colonie_ramifications() -> u32 {
     verrou().colonie.as_ref().map_or(0, |colonie| u32::try_from(colonie.nb_ramifications()).unwrap_or(u32::MAX))
 }
 
+/// Le nombre cumulé d'anastomoses ([`Colonie3d::nb_anastomoses`]), ramené à `u32::MAX` s'il le dépasse ; 0 avant
+/// tout démarrage, et toujours 0 pour une scène sans ligne `anastomose`.
+///
+/// C'est aussi le nombre de soudures que lit [`mycelium_colonie_soudure`].
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_colonie_anastomoses() -> u32 {
+    verrou().colonie.as_ref().map_or(0, |colonie| u32::try_from(colonie.nb_anastomoses()).unwrap_or(u32::MAX))
+}
+
+/// Une coordonnée de la soudure `i`, la `i`-ième anastomose depuis le démarrage (de 0) : `k` vaut 0, 1 ou 2 pour
+/// `x`, `y` ou `z`, en cases. C'est l'arrivée du segment que la pointe a laissé pendant le pas de son anastomose.
+///
+/// Rend `NaN` si `i >= mycelium_colonie_anastomoses()` ou si `k > 2`, et avant tout démarrage.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_colonie_soudure(i: u32, k: u32) -> f64 {
+    let verrou = verrou();
+    if verrou.colonie.is_none() {
+        return f64::NAN;
+    }
+    let Some(&(x, y, z)) = verrou.soudures.get(i as usize) else {
+        return f64::NAN;
+    };
+    match k {
+        0 => x,
+        1 => y,
+        2 => z,
+        _ => f64::NAN,
+    }
+}
+
 /// La quantité de substrat (de nourriture) dans la case `(x, y, z)`.
 ///
 /// Rend `NaN` si la case est hors du volume, et avant tout démarrage.
@@ -282,6 +362,35 @@ pub extern "C" fn mycelium_colonie_depot(i: u32, k: u32) -> f64 {
         1 => f64::from(depot.y),
         2 => f64::from(depot.z),
         3 => depot.quantite,
+        _ => f64::NAN,
+    }
+}
+
+/// Le nombre de lignes `obstacle` du scénario de la colonie en cours ; 0 avant tout démarrage.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_colonie_nb_obstacles() -> u32 {
+    verrou().colonie.as_ref().map_or(0, |colonie| colonie.scenario().obstacles.len() as u32)
+}
+
+/// Un champ de l'obstacle `i`, dans l'ordre du texte du scénario : `k` vaut 0 à 5 pour `x0`, `y0`, `z0`, `x1`, `y1`
+/// ou `z1`, les cases de ses deux coins, bornes comprises (le pavé bloqué va de la case `x0` à la case `x1`, et de
+/// même en `y` et `z`).
+///
+/// Rend `NaN` si `i >= mycelium_colonie_nb_obstacles()` ou si `k > 5`, et avant tout démarrage.
+#[unsafe(no_mangle)]
+pub extern "C" fn mycelium_colonie_obstacle(i: u32, k: u32) -> f64 {
+    let verrou = verrou();
+    let Some(obstacle) = verrou.colonie.as_ref().and_then(|colonie| colonie.scenario().obstacles.get(i as usize))
+    else {
+        return f64::NAN;
+    };
+    match k {
+        0 => f64::from(obstacle.x0),
+        1 => f64::from(obstacle.y0),
+        2 => f64::from(obstacle.z0),
+        3 => f64::from(obstacle.x1),
+        4 => f64::from(obstacle.y1),
+        5 => f64::from(obstacle.z1),
         _ => f64::NAN,
     }
 }
