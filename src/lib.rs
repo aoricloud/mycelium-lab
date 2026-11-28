@@ -18,6 +18,8 @@
 //!   substrat — l'étape 20 : une couche à part, elle ne change rien au plan 2D ;
 //! - [`contact3d`] : le contact d'un segment avec un obstacle en volume (parcours des cases d'Amanatides et Woo en
 //!   3D, première case bloquée touchée et face franchie) — l'étape 23 ;
+//! - [`anastomose`] : l'anastomose du plan (la fusion de deux hyphes qui se rencontrent : l'index des segments et la
+//!   recherche du segment d'un autre apex le plus proche) ;
 //! - [`anastomose3d`] : l'anastomose en volume (la distance d'un point à un segment, l'index des segments en cases de
 //!   côté 1 et la recherche du segment d'un autre apex le plus proche) — l'étape 24 ;
 //! - [`croissance`] : apex, marche persistante, ramification ;
@@ -48,9 +50,9 @@
 //!   en échelle logarithmique — l'étape 17 (M4) : une couche à part, elle ne change rien au noyau de la simulation ;
 //! - [`tropisme`] : le chimiotropisme (un virage de la pointe vers le côté où il y a plus de nutriments) et le
 //!   thigmotropisme (ce qu'une pointe fait à son contact avec un obstacle) ;
-//! - [`vitrine_colonie3d`] : la colonie de l'étape 20 pilotée par des nombres seulement (choix de la scène,
-//!   démarrage, pas, segments, nourriture, empreinte), pour la page de l'étape 21 — une couche à part,
-//!   elle ne change rien au plan 2D ;
+//! - [`vitrine_colonie3d`] : la colonie en volume pilotée par des nombres seulement (choix de la scène parmi cinq,
+//!   démarrage, pas, segments, nourriture, obstacles, soudures, empreinte), pour la page des étapes 21 et 25 — une
+//!   couche à part, elle ne change rien au plan 2D ;
 //! - [`vitrine_cube`] : le cube de l'étape 18 piloté par des nombres seulement (choix de la scène, démarrage, pas,
 //!   cases, masse et empreinte), pour la page — une couche à part, elle ne change rien au plan 2D.
 
