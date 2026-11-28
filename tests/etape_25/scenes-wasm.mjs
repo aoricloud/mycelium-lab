@@ -4,7 +4,7 @@
 //
 // Le script charge le module (sans aucune importation), lit les quatre fonctions nouvelles avant tout démarrage
 // (`nb_obstacles` 0, `obstacle(0, 0)` NaN, `anastomoses` 0, `soudure(0, 0)` NaN), vérifie que
-// `mycelium_colonie_choisir(5)` et `mycelium_colonie_choisir(4294967295)` rendent 0 sans rien changer, puis fait
+// `mycelium_colonie_choisir(9)` et `mycelium_colonie_choisir(4294967295)` rendent 0 sans rien changer, puis fait
 // tourner les scènes 2, 3 et 4, à la graine 1 : pour chacune, il choisit (`mycelium_colonie_choisir` doit rendre 1),
 // démarre (`mycelium_colonie_demarrer`), puis avance par morceaux : 1, 0, 9 pas, puis le reste de la durée lue
 // (`mycelium_colonie_duree`). Il écrit sur la sortie standard, une par ligne, `clé=valeur`, dans cet ordre :
@@ -86,7 +86,7 @@ async function principal() {
   lignes.push(`avant=${avant}`);
 
   // Les deux numéros refusés rendent 0 et ne changent rien.
-  for (const numero of [5, MAX_U32]) {
+  for (const numero of [9, MAX_U32]) {
     if (m.mycelium_colonie_choisir(numero) >>> 0 !== 0) {
       throw new Error(`le module accepte le numéro de scène ${numero}`);
     }

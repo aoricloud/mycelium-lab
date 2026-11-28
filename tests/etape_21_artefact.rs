@@ -11,7 +11,7 @@
 //!
 //! 1. la forme du module : ses dix-sept exportations `mycelium_colonie_*` et leurs signatures (les trente-trois
 //!    d'avant gardent la leur, ce que disent les tests des étapes 4, 8, 11, 16 et 18 sur ce même module) ;
-//! 2. le résultat du module, lu par Node : ce qu'il rend avant tout démarrage, le refus de `choisir(5)`, puis, pour
+//! 2. le résultat du module, lu par Node : ce qu'il rend avant tout démarrage, le refus de `choisir(9)`, puis, pour
 //!    chaque scène (le cube puis la goutte), les morceaux `1, 0, 9`, le reste de la durée, et l'état de chacun ;
 //! 3. à la fin de chaque scène, l'empreinte lue dans le module est celle de `references/` ;
 //! 4. hors du volume, `nourriture` rend `NaN`, et au-delà du dernier segment `segment` aussi ; les fonctions natives
@@ -388,7 +388,7 @@ fn ligne_colonie(nom: &str, colonie: &Colonie3d) -> String {
     )
 }
 
-/// Ce que `colonie-wasm.mjs` doit écrire : les lectures d'avant tout démarrage, celles d'après le refus du numéro 5,
+/// Ce que `colonie-wasm.mjs` doit écrire : les lectures d'avant tout démarrage, celles d'après le refus du numéro 9,
 /// puis, pour chaque scène, le départ et les morceaux `1, 0, 9, duree - 10`, puis l'empreinte de la scène 0 à la
 /// graine 2.
 fn lignes_attendues() -> String {
@@ -411,7 +411,7 @@ fn lignes_attendues() -> String {
 
 /// 2. Le module, chargé par Node (`WebAssembly.instantiate`, importations vides), donne pour **chacune des deux
 ///    scènes** les mêmes lignes que `Colonie3d` construit sur le texte du disque : les vingt lectures d'un module
-///    neuf (`0` ou `NaN`), le refus de `choisir(5)` sans changement, puis le départ et chaque morceau `1, 0, 9,
+///    neuf (`0` ou `NaN`), le refus de `choisir(9)` sans changement, puis le départ et chaque morceau `1, 0, 9,
 ///    duree - 10` (temps, durée, dimensions, comptes, bits de la masse et du maximum, SHA-256 des segments et de
 ///    leurs temps, dépôts et empreinte), puis l'empreinte de la scène 0 à la graine 2. Le script vérifie aussi, à
 ///    chaque état, les bords du volume et du dernier segment sur le module. Si le code change sans que le module
@@ -609,14 +609,14 @@ fn ligne_native(nom: &str) -> String {
     )
 }
 
-/// Les lignes que rendent les fonctions natives de `vitrine_colonie3d` : l'état neuf, le refus de `choisir(5)`, les
+/// Les lignes que rendent les fonctions natives de `vitrine_colonie3d` : l'état neuf, le refus de `choisir(9)`, les
 /// deux scènes avec les mêmes morceaux que le script, puis l'empreinte de la scène 0 à la graine 2.
 fn sequence_native() -> String {
     let avant = etat_natif_avant();
     let mut texte = format!("avant={avant}\n");
-    assert_eq!(mycelium_colonie_choisir(5), 0, "la colonie natif accepte le numéro de scène 5");
+    assert_eq!(mycelium_colonie_choisir(9), 0, "la colonie natif accepte le numéro de scène 9");
     let apres = etat_natif_avant();
-    assert_eq!(apres, avant, "choisir(5) a changé l'état alors qu'il devait rendre 0 sans rien changer");
+    assert_eq!(apres, avant, "choisir(9) a changé l'état alors qu'il devait rendre 0 sans rien changer");
     texte.push_str(&format!("apres_choix_refuse={apres}\n"));
 
     for scene in &SCENES {
@@ -640,7 +640,7 @@ fn sequence_native() -> String {
 
 /// 4. La colonie native de `vitrine_colonie3d.rs` rend les mêmes lignes que `Colonie3d` (par `src/colonie3d.rs`),
 ///    et hors du volume `nourriture` rend `NaN`, au-delà du dernier segment `segment` aussi, avant comme après un
-///    pas : l'état neuf rend 0 ou `NaN`, `choisir(5)` rend 0 sans rien changer, et les bords sont ceux du script.
+///    pas : l'état neuf rend 0 ou `NaN`, `choisir(9)` rend 0 sans rien changer, et les bords sont ceux du script.
 ///    Le verrou rend fiable le « avant tout démarrage » : aucun autre test de ce fichier ne touche à l'état global.
 #[test]
 #[cfg_attr(not(feature = "etape-21"), ignore)]

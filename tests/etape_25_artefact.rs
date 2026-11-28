@@ -10,7 +10,7 @@
 //! (le texte de la scène est lu sur le disque).
 //!
 //! 1. la forme du module : les quatre exportations nouvelles et leurs signatures (`u32` en `i32`, `f64` en `f64`) ;
-//! 2. le résultat du module, lu par Node : les quatre lectures d'avant tout démarrage, le refus de `choisir(5)` et de
+//! 2. le résultat du module, lu par Node : les quatre lectures d'avant tout démarrage, le refus de `choisir(9)` et de
 //!    `choisir(4294967295)`, puis, pour chaque scène (2, 3 et 4), le départ et les morceaux `1, 0, 9`, le reste de la
 //!    durée, et l'état de chacun ;
 //! 3. à la fin de chaque scène, l'empreinte lue dans le module est celle de `references/`, la scène 4 finit avec 86
@@ -66,8 +66,8 @@ const SCENES: [Scene; 3] = [
 /// La graine des empreintes de référence.
 const GRAINE: u32 = 1;
 
-/// Les deux numéros que `mycelium_colonie_choisir` doit refuser maintenant que les scènes vont de 0 à 4.
-const NUMEROS_REFUSES: [u32; 2] = [5, u32::MAX];
+/// Les deux numéros que `mycelium_colonie_choisir` doit refuser maintenant que les scènes vont de 0 à 8.
+const NUMEROS_REFUSES: [u32; 2] = [9, u32::MAX];
 
 /// Les types de valeurs WebAssembly qui servent ici, tels que le format binaire les code.
 const I32: u8 = 0x7F;
@@ -425,7 +425,7 @@ fn lignes_attendues() -> String {
 
 /// 2. Le module, chargé par Node (`WebAssembly.instantiate`, importations vides), donne pour **chacune des scènes 2,
 ///    3 et 4** les mêmes lignes que `Colonie3d` construit sur le texte du disque et joué un pas à la fois : les
-///    quatre lectures d'un module neuf (`0` ou `NaN`), le refus de `choisir(5)` et de `choisir(4294967295)` sans
+///    quatre lectures d'un module neuf (`0` ou `NaN`), le refus de `choisir(9)` et de `choisir(4294967295)` sans
 ///    changement, puis le départ et chaque morceau `1, 0, 9, duree - 10` (temps, durée, comptes, SHA-256 des
 ///    segments, obstacles, SHA-256 des soudures et empreinte). Le script vérifie aussi, à chaque état, les bords des
 ///    obstacles et des soudures. Si le code change sans que le module soit reconstruit, ce test échoue.
@@ -652,7 +652,7 @@ fn sequence_native() -> String {
 }
 
 /// 4. La colonie native de `vitrine_colonie3d.rs` rend les mêmes lignes que `Colonie3d` (par `src/colonie3d.rs`), avec
-///    les mêmes bords avant comme après un pas : l'état neuf rend `0` ou `NaN`, `choisir(5)` et `choisir(4294967295)`
+///    les mêmes bords avant comme après un pas : l'état neuf rend `0` ou `NaN`, `choisir(9)` et `choisir(4294967295)`
 ///    rendent 0 sans rien changer, et les bords des obstacles et des soudures sont ceux du script. Avancer d'un coup
 ///    toute la durée donne les mêmes soudures que par morceaux. Le verrou rend fiable le « avant tout démarrage » :
 ///    aucun autre test de ce fichier ne touche à l'état global.
