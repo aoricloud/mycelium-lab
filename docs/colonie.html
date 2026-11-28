@@ -156,6 +156,13 @@
     background: rgba(111, 135, 150, 0.45);
   }
 
+  .paroi {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+    background: linear-gradient(135deg, rgba(158, 200, 220, 0.55), rgba(79, 100, 110, 0.4));
+  }
+
   .soudure {
     width: 0.7rem;
     height: 0.7rem;
@@ -299,13 +306,14 @@
 <body>
 <main class="page">
   <a class="retour" href="index.html">← La colonie en 2D</a>
-  <p class="surtitre">Mycelium Lab · la 3D, deuxième marche</p>
+  <p class="surtitre">Mycelium Lab · la 3D, deuxième et troisième marches</p>
   <h1>La colonie dans le cube</h1>
   <p class="chapeau">Le vrai moteur de Mycelium, en volume : une colonie pousse dans un cube de 32 cases de côté.
     Chaque filament est tracé tel que le moteur l'a laissé, calculé ici par le même code que les tests, au bit près.
     La nourriture y diffuse comme dans <a href="cube.html">le cube de nourriture</a>. Cinq scènes : la nourriture
     partout, une goutte, une goutte que les pointes sentent, un mur percé d'une fenêtre, et des filaments qui se
-    soudent. Faites tourner le cube à la souris ou au doigt.</p>
+    soudent. Puis quatre moules, que la colonie remplit en partie : une boule, un anneau, une brique creuse et un
+    labyrinthe. Faites tourner le cube à la souris ou au doigt.</p>
 
   <div class="atelier">
     <figure class="cadre">
@@ -316,6 +324,7 @@
         <span id="legende-goutte" hidden><i class="pastille"></i>la case de la goutte</span>
         <span id="legende-mur" hidden><i class="pave"></i>le mur</span>
         <span id="legende-soudure" hidden><i class="soudure"></i>une soudure (anastomose)</span>
+        <span id="legende-moule" hidden><i class="paroi"></i>la paroi du moule</span>
       </div>
     </figure>
 
@@ -329,6 +338,10 @@
             <option value="2">La goutte, sentie par les pointes</option>
             <option value="3">Un mur percé d'une fenêtre</option>
             <option value="4">Des filaments qui se soudent</option>
+            <option value="5">Le moule : une boule</option>
+            <option value="6">Le moule : un anneau</option>
+            <option value="7">Le moule : une brique creuse</option>
+            <option value="8">Le moule : un labyrinthe</option>
           </select>
         </label>
         <p class="description" id="description"></p>
@@ -356,12 +369,14 @@
           <div><dt>Ramifications</dt><dd><output id="ramifications">—</output></dd></div>
           <div><dt>Soudures</dt><dd><output id="soudures">—</output></dd></div>
           <div><dt>Nourriture restante</dt><dd><output id="masse">—</output></dd></div>
+          <div><dt>Espace atteint</dt><dd><output id="part">—</output></dd></div>
           <div class="large"><dt>Empreinte</dt><dd><output id="empreinte">—</output>
             <span id="verdict">Elle s'affiche à la fin de la scène.</span></dd></div>
         </dl>
         <p class="note">Un filament est un segment laissé par une pointe pendant un pas ; une ramification fait naître
-          une pointe ; une soudure (une anastomose) l'arrête contre un autre filament. L'empreinte résume l'état au bit
-          près.</p>
+          une pointe ; une soudure (une anastomose) l'arrête contre un autre filament. L'espace atteint est la part des
+          cases libres (le cube moins ses obstacles) où finit au moins un filament. L'empreinte résume l'état au
+          bit près.</p>
       </section>
     </div>
   </div>

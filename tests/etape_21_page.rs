@@ -409,7 +409,7 @@ fn colonie_js_ne_demande_que_des_elements_de_la_page() {
     );
 }
 
-/// 6. Les cinq empreintes de référence écrites dans `colonie.js` sont celles du dépôt : les 64 caractères de
+/// 6. Les neuf empreintes de référence écrites dans `colonie.js` sont celles du dépôt : les 64 caractères de
 ///    `references/colonie-cube.empreinte` et de `references/colonie-goutte.empreinte`, et aucune autre.
 #[test]
 #[cfg_attr(not(feature = "etape-21"), ignore)]
@@ -421,6 +421,10 @@ fn colonie_js_ecrit_les_empreintes_de_reference() {
         "colonie-chimio.empreinte",
         "colonie-mur.empreinte",
         "colonie-anastomose.empreinte",
+        "colonie-boule.empreinte",
+        "colonie-tore.empreinte",
+        "colonie-coquille.empreinte",
+        "colonie-labyrinthe.empreinte",
     ] {
         let texte = std::fs::read_to_string(racine().join("references").join(nom))
             .unwrap_or_else(|erreur| panic!("references/{nom} se lit : {erreur}"));
